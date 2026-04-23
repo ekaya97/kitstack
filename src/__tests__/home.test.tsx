@@ -3,15 +3,13 @@ import { describe, it, expect } from "vitest";
 import Home from "@/app/page";
 
 describe("Home page", () => {
-  it("renders the heading", () => {
+  it("renders the hero heading", () => {
     render(<Home />);
-    expect(screen.getByText("KitStack")).toBeInTheDocument();
+    expect(screen.getByText(/Cancel the SaaS/)).toBeInTheDocument();
   });
 
-  it("renders the tagline", () => {
+  it("renders the skills CTA", () => {
     render(<Home />);
-    expect(
-      screen.getByText("AI Skills Marketplace for Claude & ChatGPT")
-    ).toBeInTheDocument();
+    expect(screen.getByText(/Browse 6 free skills/)).toBeInTheDocument();
   });
 });

@@ -1,0 +1,50 @@
+"use client";
+
+import Link from "next/link";
+import type { Kit } from "@/data/kits";
+import { CatMark } from "@/components/ui/cat-mark";
+import { PipelineKanban } from "@/components/mcp-apps/pipeline-kanban";
+import { ExpenseTable } from "@/components/mcp-apps/expense-table";
+import { SequenceBuilder } from "@/components/mcp-apps/sequence-builder";
+import { ActionTracker } from "@/components/mcp-apps/action-tracker";
+
+const demos: Record<string, React.ReactNode> = {
+  "crm-kit": <PipelineKanban compact />,
+  "expense-kit": <ExpenseTable rows={4} />,
+  "outreach-kit": <SequenceBuilder />,
+  "meeting-kit": <ActionTracker />,
+};
+
+export function KitPreviewCard({ kit }: { kit: Kit }) {
+  return (
+    <div className="ks-card p-5 flex flex-col">
+      <div className="flex justify-between items-center mb-2.5">
+        <div className="flex items-center gap-2">
+          <CatMark cat={kit.cat} />
+          <div className="font-serif text-2xl tracking-tight">{kit.name}</div>
+        </div>
+        <div className="font-sans text-xs text-ks-accent">
+          replaces &euro;{kit.replacesValue}/mo &darr;
+        </div>
+      </div>
+      <div className="font-sans text-[13px] text-ks-muted mb-3.5">
+        {kit.tagline}
+      </div>
+      <div className="bg-ks-paper-warm rounded-lg p-3 border border-ks-hair">
+        <div className="font-mono text-[9px] text-ks-muted tracking-wide mb-2">
+          &#9635; MCP APP &middot; {kit.uiComponents[0]}
+        </div>
+        {demos[kit.slug]}
+      </div>
+      <div className="flex justify-between items-center mt-3.5">
+        <div className="font-mono text-[11px] text-ks-muted">
+          {kit.tools.length} tools &middot; {kit.schema.length} tables &middot;{" "}
+          {kit.uiComponents.length} UI views
+        </div>
+        <Link href={`/kits/${kit.slug}`} className="ks-btn !text-xs !py-1.5 !px-3">
+          Open kit &rarr;
+        </Link>
+      </div>
+    </div>
+  );
+}
