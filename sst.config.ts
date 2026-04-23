@@ -11,6 +11,7 @@ export default $config({
   async run() {
     await import("./infra/storage");
     const { web } = await import("./infra/web");
+    await import("./infra/mcp");
 
     return {
       url: web.url,
