@@ -50,7 +50,7 @@ export async function POST(request: NextRequest) {
   }
 
   try {
-    const review = await createReview({
+    await createReview({
       targetType,
       targetSlug,
       userId: session.user.id,
@@ -60,11 +60,11 @@ export async function POST(request: NextRequest) {
       text,
     });
 
-    return NextResponse.json({ review }, { status: 201 });
+    return NextResponse.json({ ok: true }, { status: 201 });
   } catch {
     return NextResponse.json(
-      { error: "Could not create review. You may have already reviewed this item." },
-      { status: 409 }
+      { error: "Could not save review. Please try again." },
+      { status: 500 }
     );
   }
 }

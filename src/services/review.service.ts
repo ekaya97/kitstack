@@ -65,16 +65,42 @@ export async function createReview(data: {
   rating: number;
   text: string;
 }) {
-  await db.insert(reviews).values({
-    id: nanoid(),
-    targetType: data.targetType as "skill" | "kit",
-    targetSlug: data.targetSlug,
-    userId: data.userId,
-    userName: data.userName,
-    userRole: data.userRole ?? null,
-    rating: data.rating,
-    text: data.text,
-  });
+  // Check if user already has a review for this target
+  const existing = await db
+    .select()
+    .from(reviews)
+    .where(
+      and(
+        eq(reviews.userId, data.userId),
+        eq(reviews.targetType, data.targetType as "skill" | "kit"),
+        eq(reviews.targetSlug, data.targetSlug),
+      ),
+    )
+    .limit(1);
+
+  if (existing.length > 0) {
+    // Update existing review (e.g. adding text to a quick-rate)
+    await db
+      .update(reviews)
+      .set({
+        rating: data.rating,
+        text: data.text,
+        userName: data.userName,
+        updatedAt: new Date(),
+      })
+      .where(eq(reviews.id, existing[0].id));
+  } else {
+    await db.insert(reviews).values({
+      id: nanoid(),
+      targetType: data.targetType as "skill" | "kit",
+      targetSlug: data.targetSlug,
+      userId: data.userId,
+      userName: data.userName,
+      userRole: data.userRole ?? null,
+      rating: data.rating,
+      text: data.text,
+    });
+  }
 
   await recalculateRatings(data.targetType, data.targetSlug);
 }
