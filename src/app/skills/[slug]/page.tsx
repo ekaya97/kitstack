@@ -16,6 +16,7 @@ import { getReviewsByTarget, getRatingDistribution } from "@/services/review.ser
 import { ScrollTabs } from "@/components/shared/scroll-tabs";
 import { HeaderRating } from "@/components/reviews/header-rating";
 import { ReviewSection } from "@/components/reviews/review-section";
+import { DownloadButton } from "@/components/shared/download-button";
 
 export async function generateStaticParams() {
   const skills = await getAllSkillCards();
@@ -137,7 +138,7 @@ export default async function SkillDetailPage({
           <span className="text-ks-ink font-medium">{skill.name}</span>
         </div>
 
-        <div className="grid grid-cols-[1fr_360px] gap-12 items-start">
+        <div className="grid grid-cols-[1fr_360px] gap-12 items-end">
           {/* Left column */}
           <div>
             {/* Category + free chip */}
@@ -162,14 +163,14 @@ export default async function SkillDetailPage({
             </p>
 
             {/* Author row + Rating inline */}
-            <div className="flex items-center gap-4 flex-wrap">
-              <div className="flex items-center gap-2.5">
+            <div className="flex items-center gap-4 flex-wrap mb-6">
+              <Link href={`/authors/${skill.author}`} className="flex items-center gap-2.5 group">
                 <Avatar name={skill.author} size={28} tone="#3b7a3b" />
-                <span className="font-sans text-[13px] text-ks-ink">
+                <span className="font-sans text-[13px] text-ks-ink group-hover:text-ks-accent">
                   by <b>{skill.author}</b>{" "}
                   <span className="text-green-700">&#10003;</span>
                 </span>
-              </div>
+              </Link>
               <div className="w-px h-5 bg-ks-hair" />
               <HeaderRating
                 targetType="skill"
@@ -183,6 +184,28 @@ export default async function SkillDetailPage({
               <span className="font-sans text-[12px] text-ks-muted">
                 {skill.files} files &middot; {skill.size}
               </span>
+            </div>
+
+            {/* Includes */}
+            <div className="flex flex-col gap-1.5">
+              <div className="font-mono text-[10px] text-ks-muted tracking-wider mb-0.5">
+                INCLUDES
+              </div>
+              {[
+                "System prompt with expert persona",
+                `${skill.files} structured templates`,
+                "Example input/output pairs",
+                "Works in Claude, ChatGPT, VS Code",
+                "No account, no server, no API key",
+              ].map((f) => (
+                <div
+                  key={f}
+                  className="font-sans text-[12.5px] text-ks-ink flex items-center gap-2"
+                >
+                  <span className="text-green-700 text-xs">&#10003;</span>
+                  {f}
+                </div>
+              ))}
             </div>
           </div>
 
@@ -204,15 +227,27 @@ export default async function SkillDetailPage({
                 .zip &middot; {skill.files} files &middot; {skill.size}
               </div>
 
-              <button className="ks-btn ks-btn-primary w-full justify-center !py-3 !text-[14px] mb-2">
+              <DownloadButton
+                slug={slug}
+                className="ks-btn ks-btn-primary w-full justify-center !py-3 !text-[14px] mb-2"
+              >
                 Download free &darr;
-              </button>
-              <button className="ks-btn w-full justify-center !py-2.5 !text-[13px] mb-4">
-                Try it first &middot; 1 free/day
-              </button>
+              </DownloadButton>
+              {upgradeKit ? (
+                <Link
+                  href={`/kits/${upgradeKit.slug}`}
+                  className="ks-btn ks-btn-accent w-full justify-center !py-2.5 !text-[13px] mb-4"
+                >
+                  Try {upgradeKit.name} &rarr;
+                </Link>
+              ) : (
+                <button className="ks-btn w-full justify-center !py-2.5 !text-[13px] mb-4">
+                  Try it first &middot; 1 free/day
+                </button>
+              )}
 
               {/* Action row */}
-              <div className="flex justify-between border-t border-ks-hair pt-3 mb-4">
+              <div className="flex justify-between border-t border-ks-hair pt-3">
                 <button className="font-sans text-xs text-ks-muted hover:text-ks-ink cursor-pointer">
                   &#9825; Wishlist
                 </button>
@@ -223,50 +258,7 @@ export default async function SkillDetailPage({
                   &#8599; Share
                 </button>
               </div>
-
-              {/* Features list */}
-              <div className="border-t border-ks-hair pt-3 flex flex-col gap-1.5">
-                <div className="font-mono text-[10px] text-ks-muted tracking-wider mb-0.5">
-                  INCLUDES
-                </div>
-                {[
-                  "System prompt with expert persona",
-                  `${skill.files} structured templates`,
-                  "Example input/output pairs",
-                  "Works in Claude, ChatGPT, VS Code",
-                  "No account, no server, no API key",
-                ].map((f) => (
-                  <div
-                    key={f}
-                    className="font-sans text-[12.5px] text-ks-ink flex items-center gap-2"
-                  >
-                    <span className="text-green-700 text-xs">&#10003;</span>
-                    {f}
-                  </div>
-                ))}
-              </div>
             </div>
-
-            {/* Upgrade card */}
-            {upgradeKit && (
-              <div className="ks-card-ink p-5">
-                <div className="font-mono text-[10px] text-ks-accent tracking-wider mb-1.5">
-                  UPGRADE AVAILABLE
-                </div>
-                <div className="font-serif text-[20px] text-ks-paper leading-tight mb-1.5">
-                  {upgradeKit.name}
-                </div>
-                <div className="font-sans text-[12.5px] text-ks-paper-deep leading-relaxed mb-3">
-                  {skill.upgradeHook}
-                </div>
-                <Link
-                  href={`/kits/${upgradeKit.slug}`}
-                  className="ks-btn ks-btn-accent w-full justify-center !py-2 !text-[13px]"
-                >
-                  See the kit &rarr;
-                </Link>
-              </div>
-            )}
           </div>
         </div>
       </section>
@@ -388,11 +380,10 @@ export default async function SkillDetailPage({
                   )}
                 </span>
                 <span
-                  className={`font-mono text-[12px] ${
-                    f.icon === "dir"
+                  className={`font-mono text-[12px] ${f.icon === "dir"
                       ? "text-ks-paper font-medium"
                       : "text-ks-paper-deep"
-                  }`}
+                    }`}
                 >
                   {f.name}
                 </span>
@@ -513,9 +504,8 @@ export default async function SkillDetailPage({
                   ].map((item) => (
                     <div
                       key={item.label}
-                      className={`font-sans text-[12.5px] flex items-center gap-2 ${
-                        item.ok ? "text-ks-paper-deep" : "text-ks-faint"
-                      }`}
+                      className={`font-sans text-[12.5px] flex items-center gap-2 ${item.ok ? "text-ks-paper-deep" : "text-ks-faint"
+                        }`}
                     >
                       <span className={item.ok ? "text-green-400" : "text-ks-faint"}>
                         {item.ok ? "\u2713" : "\u2014"}

@@ -1,6 +1,11 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getSkillBySlug, incrementDownloadCount } from "@/services/skill.service";
 import { getDownloadUrl } from "@/services/storage.service";
+import { auth } from "@/lib/auth";
+import { headers } from "next/headers";
+import { db } from "@/lib/db";
+import { skillDownloads } from "@/db/schema";
+import { nanoid } from "nanoid";
 
 export async function GET(
   _request: NextRequest,
@@ -22,6 +27,21 @@ export async function GET(
 
   const downloadUrl = await getDownloadUrl(skill.s3Key);
   await incrementDownloadCount(slug);
+
+  // Record download — userId is null for anonymous
+  let userId: string | null = null;
+  try {
+    const session = await auth.api.getSession({ headers: await headers() });
+    userId = session?.user?.id ?? null;
+  } catch {
+    // Not logged in
+  }
+
+  await db.insert(skillDownloads).values({
+    id: nanoid(),
+    userId,
+    skillSlug: slug,
+  });
 
   return NextResponse.json({ downloadUrl });
 }
