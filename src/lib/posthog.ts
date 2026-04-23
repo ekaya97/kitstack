@@ -9,7 +9,8 @@ export function initPostHog() {
   if (!key) return;
 
   posthog.init(key, {
-    api_host: host || "https://us.i.posthog.com",
+    api_host: "/ingest",
+    ui_host: "https://eu.posthog.com",
     person_profiles: "identified_only",
     capture_pageview: false, // we capture manually to handle SPA route changes
   });

@@ -25,7 +25,7 @@ export default function Landing() {
               For Claude &middot; ChatGPT &middot; VS Code
             </span>
             <span className="font-mono text-[11px] text-ks-muted">
-              v0.5 &middot; 6 skills &middot; 4 kits
+              v0.5
             </span>
           </div>
           <h1 className="font-serif text-[80px] leading-[0.98] tracking-[-2px] text-ks-ink">
@@ -44,7 +44,7 @@ export default function Landing() {
               href="/skills"
               className="ks-btn ks-btn-primary !py-3.5 !px-[22px] !text-[15px]"
             >
-              Browse 6 free skills &darr;
+              Browse free skills &darr;
             </Link>
             <Link
               href="/kits"
@@ -188,9 +188,9 @@ export default function Landing() {
               </div>
             </div>
             <div className="font-sans text-[14.5px] text-ks-ink2 leading-relaxed mb-[18px]">
-              Full apps delivered via one MCP connector. Each kit has its own
-              database, interactive UI that renders inside the chat, and tools
-              Claude can call.{" "}
+              Full apps that live inside your chat. Each kit saves your data
+              between sessions, shows interactive dashboards inline, and lets
+              Claude do the work for you.{" "}
               <b>
                 Your data. Your stack. Replaces &euro;50&ndash;200/mo of SaaS.
               </b>
@@ -199,12 +199,12 @@ export default function Landing() {
               WHAT YOU GET
             </div>
             <ul className="m-0 pl-4 font-sans text-[13px] text-ks-ink2 leading-[1.7]">
-              <li>Per-user Turso database, Frankfurt-hosted</li>
-              <li>MCP App UI &mdash; kanban, tables, dashboards, inline</li>
+              <li>Your data, saved between sessions</li>
+              <li>Dashboards, tables, and kanban boards &mdash; right in the chat</li>
               <li>Data survives sessions, syncs across devices</li>
             </ul>
             <Link href="/kits" className="ks-btn ks-btn-accent mt-5 !text-[13px]">
-              See the 4 kits &rarr;
+              See all kits &rarr;
             </Link>
           </div>
         </div>
@@ -228,7 +228,7 @@ export default function Landing() {
         <div className="flex justify-between items-end mb-7">
           <div>
             <div className="font-mono text-[11px] text-ks-muted tracking-[1px] mb-2">
-              THE 4 KITS &middot; LIVE
+              KITS &middot; LIVE
             </div>
             <h2 className="font-serif text-[52px] tracking-tight">
               A UI,{" "}
@@ -260,8 +260,8 @@ export default function Landing() {
               SaaS.
             </h2>
             <div className="font-sans text-[15px] text-ks-paper-deep mt-[22px] leading-relaxed max-w-[420px]">
-              Starter subscription unlocks every kit. Your databases stay yours
-              &mdash; exportable anytime, Frankfurt-hosted, GDPR-first.
+              Starter subscription unlocks every kit. Your data stays yours
+              &mdash; exportable anytime.
             </div>
           </div>
 
@@ -315,7 +315,7 @@ export default function Landing() {
                 <span className="text-lg">/mo</span>
               </div>
               <div className="font-sans text-xs text-ks-paper-deep">
-                Starter &middot; all 4 kits &middot; cancel anytime
+                Starter &middot; all kits &middot; cancel anytime
               </div>
             </div>
           </div>
@@ -326,7 +326,7 @@ export default function Landing() {
       <section className="px-16 py-[72px]">
         <div className="mb-[30px]">
           <div className="font-mono text-[11px] text-ks-muted tracking-[1px] mb-2">
-            SETUP &middot; ONE CONNECTOR
+            SETUP &middot; ONE STEP
           </div>
           <h2 className="font-serif text-5xl tracking-tight">
             Add it once.{" "}
@@ -338,18 +338,16 @@ export default function Landing() {
             [
               [
                 "01",
-                "Add the connector",
+                "Paste one URL",
                 <>
-                  In Claude &rarr; Settings &rarr; Connectors &rarr; paste{" "}
-                  <code className="font-mono bg-ks-paper-warm px-1.5 py-0.5 rounded text-[11px]">
-                    mcp.kitstack.co/mcp
-                  </code>
+                  In Claude &rarr; Settings &rarr; Connectors &rarr; paste the
+                  link from your dashboard. Done.
                 </>,
               ],
               [
                 "02",
-                "Sign in with OAuth",
-                "One-click auth. Your subscription unlocks kits as MCP tools and apps inside Claude.",
+                "Sign in with one click",
+                "One-click auth. Your subscription unlocks your kits inside Claude.",
               ],
               [
                 "03",

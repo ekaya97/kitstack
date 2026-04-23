@@ -27,19 +27,19 @@ const config: Config = {
       },
       fontFamily: {
         serif: [
-          '"Instrument Serif"',
+          "var(--font-serif)",
           '"Cormorant Garamond"',
           "Georgia",
           "serif",
         ],
-        sans: ['"Inter"', "system-ui", "-apple-system", "sans-serif"],
+        sans: ["var(--font-inter)", "system-ui", "-apple-system", "sans-serif"],
         mono: [
-          '"JetBrains Mono"',
+          "var(--font-mono)",
           '"IBM Plex Mono"',
           "ui-monospace",
           "monospace",
         ],
-        hand: ['"Caveat"', '"Kalam"', "cursive"],
+        hand: ["var(--font-hand)", '"Kalam"', "cursive"],
       },
     },
   },

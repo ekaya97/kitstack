@@ -15,6 +15,7 @@ import {
 } from "@/components/claude-chat/claude-chat";
 import { PipelineKanban } from "@/components/mcp-apps/pipeline-kanban";
 import { KITS, findKit, findSkill } from "@/data/kits";
+import { ScrollTabs } from "@/components/shared/scroll-tabs";
 
 export async function generateStaticParams() {
   return KITS.map((k) => ({ slug: k.slug }));
@@ -137,7 +138,7 @@ export default async function KitDetailPage({
               </div>
               <div>
                 <div className="font-mono text-[10px] text-ks-muted tracking-wider mb-1.5">
-                  DB TABLES
+                  DATA TYPES
                 </div>
                 <div className="font-serif text-2xl text-ks-ink">
                   {kit.schema.length}
@@ -145,7 +146,7 @@ export default async function KitDetailPage({
               </div>
               <div>
                 <div className="font-mono text-[10px] text-ks-muted tracking-wider mb-1.5">
-                  MCP TOOLS
+                  ACTIONS
                 </div>
                 <div className="font-serif text-2xl text-ks-ink">
                   {kit.tools.length}
@@ -192,12 +193,12 @@ export default async function KitDetailPage({
                 INCLUDES
               </div>
               {[
-                "Per-user Turso database",
-                `${kit.tools.length} MCP tools`,
-                `${kit.uiComponents.length} interactive UI components`,
-                `${kit.schema.length} database tables`,
+                "Your own private database",
+                `${kit.tools.length} built-in actions`,
+                `${kit.uiComponents.length} interactive views`,
+                `${kit.schema.length} data types`,
                 "Data export anytime",
-                "Frankfurt-hosted, GDPR-first",
+                "EU-hosted, your data stays private",
               ].map((f) => (
                 <div
                   key={f}
@@ -225,27 +226,14 @@ export default async function KitDetailPage({
       </section>
 
       {/* ── STICKY TAB BAR ── */}
-      <div className="sticky top-0 z-20 bg-ks-paper border-b border-ks-hair">
-        <div className="px-12 flex gap-1.5 py-3">
-          {[
-            "See it work",
-            "What's inside",
-            "Setup",
-            `Reviews (${kit.reviews})`,
-          ].map((tab, i) => (
-            <span
-              key={tab}
-              className={`font-sans text-[13px] font-medium px-4 py-2 rounded-full cursor-pointer transition-colors ${
-                i === 0
-                  ? "bg-ks-ink text-ks-paper"
-                  : "text-ks-muted hover:bg-ks-paper-warm"
-              }`}
-            >
-              {tab}
-            </span>
-          ))}
-        </div>
-      </div>
+      <ScrollTabs
+        tabs={[
+          { id: "see-it-work", label: "See it work" },
+          { id: "whats-inside", label: "What's inside" },
+          { id: "setup", label: "Setup" },
+          { id: "reviews", label: `Reviews (${kit.reviews})` },
+        ]}
+      />
 
       {/* ── SEE IT WORK ── */}
       <section className="px-12 py-16" id="see-it-work">
@@ -266,7 +254,7 @@ export default async function KitDetailPage({
 
             <div className="ks-card p-5">
               <div className="font-mono text-[10px] text-ks-muted tracking-wider mb-3">
-                {kit.tools.length} MCP TOOLS
+                {kit.tools.length} BUILT-IN ACTIONS
               </div>
               <div className="flex flex-wrap gap-1.5">
                 {kit.tools.map((t) => (
@@ -327,21 +315,21 @@ export default async function KitDetailPage({
           WHAT&apos;S INSIDE
         </div>
         <h2 className="font-serif text-[48px] tracking-tight mb-10">
-          The three layers.
+          How it works.
         </h2>
 
         <div className="grid grid-cols-3 gap-5">
-          {/* Database layer */}
+          {/* Your data layer */}
           <div className="ks-card overflow-hidden">
             <div className="bg-blue-600 px-5 py-3">
               <span className="font-mono text-[10px] text-white/80 tracking-wider">
                 LAYER 1
               </span>
               <div className="font-serif text-[22px] text-white mt-0.5">
-                Database
+                Your data
               </div>
               <div className="font-sans text-[12px] text-white/70">
-                Per-user Turso &middot; Frankfurt
+                Private to you
               </div>
             </div>
             <div className="p-5 flex flex-col gap-2">
@@ -356,17 +344,17 @@ export default async function KitDetailPage({
             </div>
           </div>
 
-          {/* MCP Tools layer */}
+          {/* What it can do layer */}
           <div className="ks-card overflow-hidden">
             <div className="bg-ks-accent px-5 py-3">
               <span className="font-mono text-[10px] text-white/80 tracking-wider">
                 LAYER 2
               </span>
               <div className="font-serif text-[22px] text-white mt-0.5">
-                MCP Tools
+                What it can do
               </div>
               <div className="font-sans text-[12px] text-white/70">
-                Claude calls these on your behalf
+                Claude handles these on your behalf
               </div>
             </div>
             <div className="p-5 flex flex-col gap-2">
@@ -381,17 +369,17 @@ export default async function KitDetailPage({
             </div>
           </div>
 
-          {/* MCP App UI layer */}
+          {/* What you see layer */}
           <div className="ks-card overflow-hidden">
             <div className="bg-green-700 px-5 py-3">
               <span className="font-mono text-[10px] text-white/80 tracking-wider">
                 LAYER 3
               </span>
               <div className="font-serif text-[22px] text-white mt-0.5">
-                MCP App UI
+                What you see
               </div>
               <div className="font-sans text-[12px] text-white/70">
-                Interactive components in chat
+                Interactive views in chat
               </div>
             </div>
             <div className="p-5 flex flex-col gap-2">

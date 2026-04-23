@@ -35,12 +35,18 @@ export function Nav({ active }: { active?: string }) {
       </div>
 
       <div className="flex gap-2.5 items-center">
-        <span className="font-sans text-[13px] text-ks-muted cursor-pointer hover:text-ks-ink">
+        <Link
+          href="/login"
+          className="font-sans text-[13px] text-ks-muted hover:text-ks-ink"
+        >
           Sign in
-        </span>
-        <button className="ks-btn ks-btn-primary !py-2 !px-3.5 !text-[13px]">
-          Connect to Claude &rarr;
-        </button>
+        </Link>
+        <Link
+          href="/login"
+          className="ks-btn ks-btn-primary !py-2 !px-3.5 !text-[13px]"
+        >
+          Get started &rarr;
+        </Link>
       </div>
     </div>
   );

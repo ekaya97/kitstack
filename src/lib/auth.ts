@@ -7,6 +7,16 @@ export const auth = betterAuth({
     provider: "sqlite",
   }),
   emailAndPassword: {
-    enabled: false, // v1: no signup, completely public
+    enabled: true,
+  },
+  socialProviders: {
+    google: {
+      clientId: process.env.GOOGLE_CLIENT_ID!,
+      clientSecret: process.env.GOOGLE_CLIENT_SECRET!,
+    },
+    github: {
+      clientId: process.env.GITHUB_CLIENT_ID!,
+      clientSecret: process.env.GITHUB_CLIENT_SECRET!,
+    },
   },
 });
