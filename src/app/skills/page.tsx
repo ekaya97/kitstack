@@ -19,6 +19,7 @@ const categories = [
 
 export default function SkillsPage() {
   const [skills, setSkills] = useState<SkillCardData[]>([]);
+  const [loading, setLoading] = useState(true);
   const [activeCat, setActiveCat] = useState("All");
   const [searchOpen, setSearchOpen] = useState(false);
   const [query, setQuery] = useState("");
@@ -26,7 +27,8 @@ export default function SkillsPage() {
   useEffect(() => {
     fetch("/api/skills")
       .then((r) => r.json())
-      .then((d) => setSkills(d.skills));
+      .then((d) => setSkills(d.skills))
+      .finally(() => setLoading(false));
   }, []);
 
   const filtered = useMemo(() => {
@@ -150,7 +152,26 @@ export default function SkillsPage() {
 
       {/* SKILLS GRID */}
       <section className="px-16 pb-[72px]">
-        {filtered.length === 0 ? (
+        {loading ? (
+          <div className="grid grid-cols-3 gap-[18px]">
+            {[1, 2, 3, 4, 5, 6].map((i) => (
+              <div key={i} className="ks-card p-5 animate-pulse">
+                <div className="flex justify-between mb-3">
+                  <div className="h-5 w-20 bg-ks-hair rounded-full" />
+                  <div className="h-5 w-12 bg-ks-hair rounded-full" />
+                </div>
+                <div className="h-6 w-3/4 bg-ks-hair rounded mb-3" />
+                <div className="h-4 w-full bg-ks-hair/60 rounded mb-1.5" />
+                <div className="h-4 w-2/3 bg-ks-hair/60 rounded mb-6" />
+                <div className="h-3 w-1/2 bg-ks-hair/40 rounded mb-4" />
+                <div className="flex gap-2.5 mt-auto">
+                  <div className="h-9 flex-1 bg-ks-hair rounded-full" />
+                  <div className="h-9 w-20 bg-ks-hair/60 rounded-full" />
+                </div>
+              </div>
+            ))}
+          </div>
+        ) : filtered.length === 0 ? (
           <div className="text-center py-20">
             <div className="font-serif text-3xl text-ks-muted mb-2">
               No skills found

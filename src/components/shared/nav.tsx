@@ -1,5 +1,6 @@
 import Link from "next/link";
 import { Logo } from "@/components/ui/logo";
+import { NavAuth } from "./nav-auth";
 
 const items = [
   { label: "Skills", href: "/skills" },
@@ -33,20 +34,7 @@ export function Nav({ active }: { active?: string }) {
         ))}
       </div>
 
-      <div className="flex gap-2.5 items-center">
-        <Link
-          href="/login"
-          className="font-sans text-[13px] text-ks-muted hover:text-ks-ink"
-        >
-          Sign in
-        </Link>
-        <Link
-          href="/login"
-          className="ks-btn ks-btn-primary !py-1.5 !px-3 !text-[13px]"
-        >
-          Get started &rarr;
-        </Link>
-      </div>
+      <NavAuth />
     </nav>
   );
 }

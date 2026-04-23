@@ -119,6 +119,20 @@ export const wishlists = sqliteTable("wishlists", {
   uniqueIndex("wishlists_unique_idx").on(table.userId, table.targetType, table.targetSlug),
 ]);
 
+// ── BetterAuth tables ──
+export { user, session, account, verification } from "./auth-schema";
+
+// Kit activations (tracks which kits a user has activated)
+export const kitActivations = sqliteTable("kit_activations", {
+  id: text("id").primaryKey(),
+  userId: text("user_id").notNull(),
+  kitSlug: text("kit_slug").notNull(),
+  status: text("status", { enum: ["active", "deactivated"] }).notNull().default("active"),
+  createdAt: integer("created_at", { mode: "timestamp" }).$defaultFn(() => new Date()),
+}, (table) => [
+  uniqueIndex("kit_activations_unique_idx").on(table.userId, table.kitSlug),
+]);
+
 // Skill download history
 export const skillDownloads = sqliteTable("skill_downloads", {
   id: text("id").primaryKey(),

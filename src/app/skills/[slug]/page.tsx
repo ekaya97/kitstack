@@ -5,7 +5,6 @@ import { Nav } from "@/components/shared/nav";
 import { Footer } from "@/components/shared/footer";
 import { CatMark } from "@/components/ui/cat-mark";
 import { Avatar } from "@/components/ui/avatar";
-import { Stars } from "@/components/ui/stars";
 import {
   ClaudeChat,
   ChatUser,
@@ -15,6 +14,8 @@ import { getAllSkillCards, getSkillCardBySlug, getSkillBySlug } from "@/services
 import { getKitCardBySlug } from "@/services/kit.service";
 import { getReviewsByTarget, getRatingDistribution } from "@/services/review.service";
 import { ScrollTabs } from "@/components/shared/scroll-tabs";
+import { HeaderRating } from "@/components/reviews/header-rating";
+import { ReviewSection } from "@/components/reviews/review-section";
 
 export async function generateStaticParams() {
   const skills = await getAllSkillCards();
@@ -33,25 +34,6 @@ export async function generateMetadata({
     title: `${skill.name} — KitStack`,
     description: skill.desc,
   };
-}
-
-function formatTimeAgo(date: string | Date | null): string {
-  if (!date) return "";
-  const now = new Date();
-  const then = new Date(date);
-  const diffMs = now.getTime() - then.getTime();
-  const diffMinutes = Math.floor(diffMs / 60000);
-  const diffHours = Math.floor(diffMinutes / 60);
-  const diffDays = Math.floor(diffHours / 24);
-  const diffWeeks = Math.floor(diffDays / 7);
-  const diffMonths = Math.floor(diffDays / 30);
-
-  if (diffMinutes < 1) return "just now";
-  if (diffMinutes < 60) return `${diffMinutes}m ago`;
-  if (diffHours < 24) return `${diffHours}h ago`;
-  if (diffDays < 7) return `${diffDays}d ago`;
-  if (diffWeeks < 5) return `${diffWeeks}w ago`;
-  return `${diffMonths}mo ago`;
 }
 
 function buildFileTree(whatsInside: { file: string; description: string }[]) {
@@ -189,7 +171,12 @@ export default async function SkillDetailPage({
                 </span>
               </div>
               <div className="w-px h-5 bg-ks-hair" />
-              <Stars v={skill.rating} size={13} />
+              <HeaderRating
+                targetType="skill"
+                targetSlug={slug}
+                rating={skill.rating}
+                count={skill.reviews}
+              />
               <span className="font-sans text-[12px] text-ks-muted">
                 {skill.downloads.toLocaleString()} downloads
               </span>
@@ -479,59 +466,14 @@ export default async function SkillDetailPage({
       </section>
 
       {/* ── REVIEWS ── */}
-      <section className="px-16 py-16 border-t border-ks-hair" id="reviews">
-        <div className="font-mono text-[11px] text-ks-muted tracking-[1px] mb-2">
-          REVIEWS
-        </div>
-        <div className="grid grid-cols-[280px_1fr] gap-10">
-          <div>
-            <h2 className="font-serif text-[44px] tracking-tight mb-4">
-              {skill.rating}<span className="text-lg text-ks-muted">/5</span>
-            </h2>
-            <Stars v={skill.rating} size={16} showValue={false} />
-            <div className="font-sans text-xs text-ks-muted mt-2">
-              {skill.reviews} ratings
-            </div>
-            <div className="mt-4 flex flex-col gap-1">
-              {distribution.map((d) => (
-                  <div key={d.stars} className="grid grid-cols-[18px_1fr_30px] gap-2 items-center">
-                    <span className="font-mono text-[10px] text-ks-muted">{d.stars}&#9733;</span>
-                    <div className="h-[5px] bg-ks-hair rounded-full">
-                      <div className="h-full bg-ks-accent rounded-full" style={{ width: `${d.pct}%` }} />
-                    </div>
-                    <span className="font-mono text-[9px] text-ks-muted text-right">{d.pct}%</span>
-                  </div>
-              ))}
-            </div>
-          </div>
-          <div className="flex flex-col gap-3">
-            {reviewsList.map((r) => {
-              const ago = formatTimeAgo(r.createdAt);
-              return (
-                <div key={r.id} className="ks-card p-4">
-                  <div className="flex items-center gap-2.5 mb-2">
-                    <Avatar name={r.userName} size={26} tone="#3b7a3b" />
-                    <div className="flex-1">
-                      <div className="font-sans text-[12.5px] font-semibold">
-                        {r.userName}{" "}
-                        {r.verified && (
-                          <span className="ks-chip !text-[9px] !py-0 !px-1.5 !ml-1">verified</span>
-                        )}
-                      </div>
-                      <div className="font-sans text-[10.5px] text-ks-muted">{r.userRole} &middot; {ago}</div>
-                    </div>
-                    <Stars v={r.rating} size={11} showValue={false} />
-                  </div>
-                  <div className="font-sans text-[13px] leading-relaxed text-ks-ink2">{r.text}</div>
-                  <div className="font-sans text-[11px] text-ks-muted mt-2.5">
-                    &#128077; Helpful ({r.helpfulCount}) &middot; &#128172; Reply
-                  </div>
-                </div>
-              );
-            })}
-          </div>
-        </div>
-      </section>
+      <ReviewSection
+        targetType="skill"
+        targetSlug={slug}
+        initialReviews={reviewsList}
+        initialDistribution={distribution}
+        initialRating={skill.rating}
+        initialCount={skill.reviews}
+      />
 
       {/* ── UPGRADE PATH ── */}
       {upgradeKit && (

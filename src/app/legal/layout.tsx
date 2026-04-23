@@ -9,10 +9,8 @@ export default function LegalLayout({
   return (
     <div className="bg-ks-paper min-h-screen">
       <Nav />
-      <main className="max-w-3xl mx-auto px-6 py-16">
-        <div className="prose prose-sm max-w-none prose-headings:font-serif prose-headings:text-ks-ink prose-p:text-ks-ink2 prose-p:leading-relaxed prose-li:text-ks-ink2 prose-a:text-ks-accent prose-a:no-underline hover:prose-a:underline prose-strong:text-ks-ink">
-          {children}
-        </div>
+      <main className="max-w-2xl mx-auto px-6 pt-20 pb-24">
+        <div className="legal-content">{children}</div>
       </main>
       <Footer />
     </div>

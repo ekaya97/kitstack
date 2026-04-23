@@ -65,6 +65,49 @@
   .ks-kbd {
     @apply font-mono text-[11px] font-medium px-1.5 py-[3px] border border-ks-hair rounded bg-white text-ks-ink;
   }
+
+  /* Legal pages */
+  .legal-content h1 {
+    @apply font-serif text-[42px] tracking-tight text-ks-ink mb-2 leading-tight;
+  }
+  .legal-content h2 {
+    @apply font-serif text-xl text-ks-ink mt-10 mb-3;
+  }
+  .legal-content h3 {
+    @apply font-sans text-[15px] font-semibold text-ks-ink mt-6 mb-2;
+  }
+  .legal-content p {
+    @apply font-sans text-[14px] text-ks-ink2 leading-[1.75] mb-4;
+  }
+  .legal-content ul {
+    @apply list-none pl-0 mb-4;
+  }
+  .legal-content ul li {
+    @apply font-sans text-[14px] text-ks-ink2 leading-[1.75] pl-4 relative mb-1;
+  }
+  .legal-content ul li::before {
+    content: "—";
+    @apply absolute left-0 text-ks-faint;
+  }
+  .legal-content a {
+    @apply text-ks-accent no-underline;
+  }
+  .legal-content a:hover {
+    @apply underline;
+  }
+  .legal-content strong {
+    @apply text-ks-ink font-medium;
+  }
+  .legal-content table {
+    @apply w-full text-[13px] mb-6 border-collapse;
+  }
+  .legal-content th {
+    @apply text-left font-sans font-medium text-[11px] uppercase tracking-wider text-ks-muted
+           px-3 py-2 bg-ks-paper-warm border-b border-ks-hair;
+  }
+  .legal-content td {
+    @apply font-sans text-ks-ink2 px-3 py-2 border-b border-ks-hair/50;
+  }
 }
 
 @keyframes slideIn {

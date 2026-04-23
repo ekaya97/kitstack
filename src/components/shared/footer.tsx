@@ -25,9 +25,9 @@ const columns: { heading: string; links: FooterLink[] }[] = [
   {
     heading: "Legal",
     links: [
-      { label: "Privacy", href: "/privacy" },
-      { label: "Terms", href: "/terms" },
-      { label: "Impressum", href: "/impressum" },
+      { label: "Privacy", href: "/legal/privacy" },
+      { label: "Terms", href: "/legal/terms" },
+      { label: "Impressum", href: "/legal/imprint" },
       {
         label: "support@kitstack.co",
         href: "mailto:support@kitstack.co",

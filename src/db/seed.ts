@@ -1,7 +1,7 @@
 import { createClient } from "@libsql/client";
 import { drizzle } from "drizzle-orm/libsql";
-import { skills, kits, reviews } from "./schema";
-import { seedSkills, seedKits, seedReviews } from "./seed-data";
+import { skills, kits } from "./schema";
+import { seedSkills, seedKits } from "./seed-data";
 
 async function seed() {
   const client = createClient({
@@ -66,14 +66,6 @@ async function seed() {
           updatedAt: new Date(),
         },
       });
-  }
-
-  console.log(`Seeding ${seedReviews.length} reviews...`);
-  for (const review of seedReviews) {
-    await db
-      .insert(reviews)
-      .values(review)
-      .onConflictDoNothing();
   }
 
   console.log("Done.");

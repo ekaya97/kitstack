@@ -35,6 +35,10 @@ declare module "sst" {
       "name": string
       "type": "sst.aws.Dynamo"
     }
+    "McpDomain": {
+      "type": "sst.aws.Router"
+      "url": string
+    }
     "McpRouter": {
       "name": string
       "type": "sst.aws.Function"

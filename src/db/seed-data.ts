@@ -1,4 +1,4 @@
-import type { NewSkill, NewKit, NewReview } from "./schema";
+import type { NewSkill, NewKit } from "./schema";
 
 const baseCompatibility = ["claude.ai", "Claude Desktop", "Cowork", "Claude Code"];
 
@@ -33,8 +33,8 @@ export const seedSkills: NewSkill[] = [
     author: "kitstack",
     fileSize: "18 KB",
     correspondingKitSlug: "crm-kit",
-    avgRating: 4.9,
-    reviewCount: 142,
+    avgRating: 0,
+    reviewCount: 0,
     downloadCount: 3280,
   },
   {
@@ -65,8 +65,8 @@ export const seedSkills: NewSkill[] = [
     author: "kitstack",
     fileSize: "22 KB",
     correspondingKitSlug: null,
-    avgRating: 4.8,
-    reviewCount: 98,
+    avgRating: 0,
+    reviewCount: 0,
     downloadCount: 1940,
   },
   {
@@ -97,8 +97,8 @@ export const seedSkills: NewSkill[] = [
     author: "kitstack",
     fileSize: "16 KB",
     correspondingKitSlug: "cold-outreach-kit",
-    avgRating: 4.8,
-    reviewCount: 120,
+    avgRating: 0,
+    reviewCount: 0,
     downloadCount: 2610,
   },
   {
@@ -130,8 +130,8 @@ export const seedSkills: NewSkill[] = [
     author: "kitstack",
     fileSize: "24 KB",
     correspondingKitSlug: null,
-    avgRating: 4.9,
-    reviewCount: 210,
+    avgRating: 0,
+    reviewCount: 0,
     downloadCount: 4120,
   },
   {
@@ -159,8 +159,8 @@ export const seedSkills: NewSkill[] = [
     author: "kitstack",
     fileSize: "10 KB",
     correspondingKitSlug: "meeting-action-tracker-kit",
-    avgRating: 4.7,
-    reviewCount: 315,
+    avgRating: 0,
+    reviewCount: 0,
     downloadCount: 5340,
   },
   {
@@ -190,8 +190,8 @@ export const seedSkills: NewSkill[] = [
     author: "kitstack",
     fileSize: "20 KB",
     correspondingKitSlug: "expense-tax-prep-kit",
-    avgRating: 4.7,
-    reviewCount: 74,
+    avgRating: 0,
+    reviewCount: 0,
     downloadCount: 1520,
   },
 ];
@@ -234,8 +234,8 @@ export const seedKits: NewKit[] = [
     author: "kitstack",
     status: "live",
     subscriberCount: 420,
-    avgRating: 4.8,
-    reviewCount: 64,
+    avgRating: 0,
+    reviewCount: 0,
   },
   {
     id: "kit-expense",
@@ -267,8 +267,8 @@ export const seedKits: NewKit[] = [
     author: "kitstack",
     status: "live",
     subscriberCount: 280,
-    avgRating: 4.9,
-    reviewCount: 38,
+    avgRating: 0,
+    reviewCount: 0,
   },
   {
     id: "kit-outreach",
@@ -299,8 +299,8 @@ export const seedKits: NewKit[] = [
     author: "kitstack",
     status: "live",
     subscriberCount: 190,
-    avgRating: 4.7,
-    reviewCount: 24,
+    avgRating: 0,
+    reviewCount: 0,
   },
   {
     id: "kit-meeting",
@@ -330,80 +330,8 @@ export const seedKits: NewKit[] = [
     author: "kitstack",
     status: "live",
     subscriberCount: 340,
-    avgRating: 4.8,
-    reviewCount: 52,
+    avgRating: 0,
+    reviewCount: 0,
   },
 ];
 
-// --- Seed Reviews ---
-
-export const seedReviews: NewReview[] = [
-  // Skill reviews: client-proposal-skill
-  {
-    id: "review-skill-proposal-1",
-    targetType: "skill",
-    targetSlug: "client-proposal-skill",
-    userId: "seed-user-1",
-    userName: "Lena K.",
-    userRole: "Brand consultant",
-    rating: 5,
-    text: "Saved me 2 hours on my last proposal. The structure is spot-on and the tone matched my voice.",
-    verified: true,
-  },
-  {
-    id: "review-skill-proposal-2",
-    targetType: "skill",
-    targetSlug: "client-proposal-skill",
-    userId: "seed-user-2",
-    userName: "Marco S.",
-    userRole: "Solo dev",
-    rating: 5,
-    text: "I used to spend forever scoping projects. Now I paste 4 lines and get a full proposal back.",
-    verified: true,
-  },
-  {
-    id: "review-skill-proposal-3",
-    targetType: "skill",
-    targetSlug: "client-proposal-skill",
-    userId: "seed-user-3",
-    userName: "Dana A.",
-    userRole: "Agency owner",
-    rating: 4,
-    text: "Great for the basics. Would love a few more industry-specific templates, but the framework is solid.",
-    verified: true,
-  },
-  // Kit reviews: crm-kit
-  {
-    id: "review-kit-crm-1",
-    targetType: "kit",
-    targetSlug: "crm-kit",
-    userId: "seed-user-4",
-    userName: "Mira S.",
-    userRole: "Freelance Designer",
-    rating: 5,
-    text: `Replaced Pipedrive entirely. I just say "log that call" and it's in the CRM. The pipeline kanban inside Claude is wild.`,
-    verified: true,
-  },
-  {
-    id: "review-kit-crm-2",
-    targetType: "kit",
-    targetSlug: "crm-kit",
-    userId: "seed-user-5",
-    userName: "Jan P.",
-    userRole: "Agency Founder",
-    rating: 5,
-    text: `The proposal generator alone is worth it. But having it connected to a real contact database? That's the upgrade that sticks.`,
-    verified: true,
-  },
-  {
-    id: "review-kit-crm-3",
-    targetType: "kit",
-    targetSlug: "crm-kit",
-    userId: "seed-user-6",
-    userName: "Anja K.",
-    userRole: "Ops Manager",
-    rating: 4,
-    text: "Solid kit. Wish it had calendar integration, but the team says it's coming. Database export works perfectly.",
-    verified: true,
-  },
-];

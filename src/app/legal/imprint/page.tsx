@@ -7,15 +7,20 @@ export const metadata: Metadata = {
 export default function ImprintPage() {
   return (
     <>
-      <h1>Impressum</h1>
+      <div className="mb-10">
+        <div className="font-mono text-[11px] text-ks-muted tracking-wider uppercase mb-3">
+          Legal
+        </div>
+        <h1>Impressum</h1>
+      </div>
 
-      <h2>Angaben gemäß § 5 TMG</h2>
+      <h2>Angaben gem&auml;&szlig; &sect; 5 TMG</h2>
       <p>
         enka Consulting
         <br />
         Enes Kaya
         <br />
-        [Straße und Hausnummer]
+        [Stra&szlig;e und Hausnummer]
         <br />
         [PLZ Ort]
         <br />
@@ -24,17 +29,19 @@ export default function ImprintPage() {
 
       <h2>Kontakt</h2>
       <p>
-        E-Mail: hello@kitstack.co
+        E-Mail:{" "}
+        <a href="mailto:hello@kitstack.co">hello@kitstack.co</a>
       </p>
 
       <h2>Umsatzsteuer-Identifikationsnummer</h2>
       <p>
-        Umsatzsteuer-Identifikationsnummer gemäß § 27 a Umsatzsteuergesetz:
+        Umsatzsteuer-Identifikationsnummer gem&auml;&szlig; &sect; 27 a
+        Umsatzsteuergesetz:
         <br />
         [USt-IdNr.]
       </p>
 
-      <h2>Verantwortlich für den Inhalt nach § 55 Abs. 2 RStV</h2>
+      <h2>Verantwortlich f&uuml;r den Inhalt nach &sect; 55 Abs. 2 RStV</h2>
       <p>
         Enes Kaya
         <br />
@@ -43,29 +50,33 @@ export default function ImprintPage() {
 
       <h2>EU-Streitschlichtung</h2>
       <p>
-        Die Europäische Kommission stellt eine Plattform zur
+        Die Europ&auml;ische Kommission stellt eine Plattform zur
         Online-Streitbeilegung (OS) bereit:{" "}
         <a
           href="https://ec.europa.eu/consumers/odr/"
           target="_blank"
           rel="noopener noreferrer"
         >
-          https://ec.europa.eu/consumers/odr/
+          ec.europa.eu/consumers/odr
         </a>
         . Unsere E-Mail-Adresse finden Sie oben im Impressum.
       </p>
 
-      <h2>Verbraucherstreitbeilegung / Universalschlichtungsstelle</h2>
+      <h2>
+        Verbraucherstreitbeilegung / Universalschlichtungsstelle
+      </h2>
       <p>
         Wir sind nicht bereit oder verpflichtet, an
         Streitbeilegungsverfahren vor einer Verbraucherschlichtungsstelle
         teilzunehmen.
       </p>
 
-      <p className="text-ks-muted text-xs mt-12">
-        Bitte ersetzen Sie die Platzhalter [in eckigen Klammern] durch Ihre
-        tatsächlichen Angaben vor der Veröffentlichung.
-      </p>
+      <div className="mt-16 pt-6 border-t border-ks-hair">
+        <p className="!text-ks-faint !text-xs">
+          Bitte ersetzen Sie die Platzhalter [in eckigen Klammern] durch Ihre
+          tats&auml;chlichen Angaben vor der Ver&ouml;ffentlichung.
+        </p>
+      </div>
     </>
   );
 }
