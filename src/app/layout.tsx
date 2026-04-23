@@ -4,11 +4,11 @@ import "./globals.css";
 
 export const metadata: Metadata = {
   title: {
-    default: "KitStack — AI Skills Marketplace",
+    default: "KitStack — Cancel the SaaS. Keep the work.",
     template: "%s | KitStack",
   },
   description:
-    "Discover and share AI skills, prompts, and workflows for Claude and ChatGPT.",
+    "Free Skills turn Claude into a specialist. Subscription Kits add a database, interactive UI, and memory that survives sessions.",
   openGraph: {
     type: "website",
     locale: "en_US",

@@ -1,3 +1,70 @@
+@import url("https://fonts.googleapis.com/css2?family=Instrument+Serif:ital@0;1&family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500;600&family=Caveat:wght@400;600;700&display=swap");
+
 @tailwind base;
 @tailwind components;
 @tailwind utilities;
+
+@layer base {
+  body {
+    @apply bg-ks-paper text-ks-ink font-sans antialiased;
+  }
+}
+
+@layer components {
+  /* Buttons */
+  .ks-btn {
+    @apply font-sans text-sm font-medium px-[18px] py-[10px] rounded-full
+           border-[1.5px] border-ks-line bg-ks-paper text-ks-ink
+           cursor-pointer inline-flex items-center gap-2
+           transition-transform duration-75 hover:-translate-y-px;
+  }
+  .ks-btn-primary {
+    @apply bg-ks-ink text-ks-paper border-ks-ink;
+  }
+  .ks-btn-accent {
+    @apply bg-ks-accent text-white border-ks-accent;
+  }
+
+  /* Chips */
+  .ks-chip {
+    @apply inline-flex items-center gap-1 px-[10px] py-[3px]
+           font-sans text-[11px] font-medium leading-snug tracking-wide uppercase
+           border border-ks-line rounded-full text-ks-ink bg-transparent;
+  }
+  .ks-chip-solid {
+    @apply bg-ks-ink text-ks-paper border-ks-ink;
+  }
+  .ks-chip-soft {
+    @apply bg-ks-accent-soft text-ks-accent-deep border-transparent;
+  }
+
+  /* Cards */
+  .ks-card {
+    @apply bg-white border border-ks-hair rounded-xl;
+  }
+  .ks-card-ink {
+    @apply bg-ks-ink text-ks-paper rounded-xl;
+  }
+
+  /* Typography accents */
+  .ks-strike {
+    @apply line-through decoration-ks-accent decoration-[1.5px];
+  }
+  .ks-hi {
+    padding: 0 2px;
+    background: linear-gradient(
+      transparent 62%,
+      #ffe45c 62% 92%,
+      transparent 92%
+    );
+  }
+  .ks-note {
+    @apply font-hand text-ks-accent text-lg leading-none;
+  }
+  .ks-divider {
+    @apply border-t border-ks-hair;
+  }
+  .ks-kbd {
+    @apply font-mono text-[11px] font-medium px-1.5 py-[3px] border border-ks-hair rounded bg-white text-ks-ink;
+  }
+}
