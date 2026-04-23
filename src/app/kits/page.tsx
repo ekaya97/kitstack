@@ -27,7 +27,7 @@ export default function KitsPage() {
       <section className="px-16 pt-[72px] pb-12 grid grid-cols-[1.1fr_1fr] gap-[60px] items-center">
         <div>
           <div className="font-mono text-[11px] text-ks-muted tracking-[1px] mb-[18px]">
-            {KITS.length} KITS &middot; &euro;5/MO STARTER &middot; ALL INCLUDED
+            KITS &middot; &euro;5/MO STARTER &middot; ALL INCLUDED
           </div>
           <h1 className="font-serif text-[68px] leading-[0.98] tracking-[-2px] text-ks-ink">
             Kits.{" "}
@@ -36,9 +36,9 @@ export default function KitsPage() {
             in your chat.
           </h1>
           <p className="font-sans text-[17px] text-ks-muted mt-[22px] max-w-[500px] leading-relaxed">
-            Each kit is a full app delivered via one MCP connector. Database, UI,
-            and tools &mdash; Claude calls them for you. Your data persists
-            across sessions.
+            Each kit is a full app that lives inside your chat. Your data
+            persists across sessions, with interactive dashboards and tables
+            built right in.
           </p>
         </div>
 

@@ -49,7 +49,7 @@ export default function SkillsPage() {
       <section className="px-16 pt-[72px] pb-12 grid grid-cols-[1.1fr_1fr] gap-[60px] items-center">
         <div>
           <div className="font-mono text-[11px] text-ks-muted tracking-[1px] mb-[18px]">
-            FREE &middot; {SKILLS.length} SKILLS &middot; NO SIGNUP
+            FREE SKILLS &middot; NO SIGNUP
           </div>
           <h1 className="font-serif text-[72px] leading-[0.98] tracking-[-2px] text-ks-ink">
             Skills.{" "}

@@ -414,25 +414,18 @@ export default async function KitDetailPage({
             },
             {
               n: "02",
-              title: "Add connector",
-              desc: (
-                <>
-                  In Claude &rarr; Settings &rarr; Connectors &rarr; paste{" "}
-                  <code className="font-mono bg-ks-paper-warm px-1.5 py-0.5 rounded text-[11px]">
-                    mcp.kitstack.co/mcp
-                  </code>
-                </>
-              ),
+              title: "Add to Claude",
+              desc: "Open Claude, go to Settings, and add KitStack as a connector. Takes 10 seconds.",
             },
             {
               n: "03",
-              title: "OAuth sign in",
-              desc: "One-click auth. Your subscription and database are linked automatically.",
+              title: "Sign in",
+              desc: "One-click sign in. Your subscription and data are linked automatically.",
             },
             {
               n: "04",
               title: "Start a chat",
-              desc: `"Show my pipeline." "Add this expense." Claude invokes ${kit.name} tools.`,
+              desc: `"Show my pipeline." "Add this expense." Claude uses ${kit.name} on your behalf.`,
             },
           ].map((step) => (
             <div key={step.n} className="ks-card p-6">

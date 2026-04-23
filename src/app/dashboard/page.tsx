@@ -10,8 +10,8 @@ const activeKits = [
     cat: "Revenue",
     price: 5,
     lastUsed: "2 hours ago",
-    toolCalls: 342,
-    dbRows: 1284,
+    actions: 342,
+    itemsSaved: 1284,
     status: "Healthy",
   },
   {
@@ -20,8 +20,8 @@ const activeKits = [
     cat: "Finance",
     price: 5,
     lastUsed: "Yesterday",
-    toolCalls: 128,
-    dbRows: 467,
+    actions: 128,
+    itemsSaved: 467,
     status: "Healthy",
   },
 ];
@@ -93,12 +93,8 @@ export default function DashboardPage() {
 
               {/* Connection status */}
               <div className="flex items-center gap-2 mb-4 font-mono text-[11px] text-ks-muted">
-                <span className="text-[#3b7a3b] font-semibold">Connected</span>
-                <span>&middot;</span>
-                <span>mcp.kitstack.co/{kit.slug}</span>
-                <span>&middot;</span>
-                <span className="inline-flex items-center gap-1 text-[#3b7a3b]">
-                  <span className="text-[8px]">&#9679;</span> live
+                <span className="inline-flex items-center gap-1 text-[#3b7a3b] font-semibold">
+                  <span className="text-[8px]">&#9679;</span> Connected
                 </span>
               </div>
 
@@ -107,10 +103,10 @@ export default function DashboardPage() {
                 {[
                   { label: "Last used", value: kit.lastUsed },
                   {
-                    label: "Tool calls",
-                    value: kit.toolCalls.toLocaleString(),
+                    label: "Actions",
+                    value: kit.actions.toLocaleString(),
                   },
-                  { label: "DB rows", value: kit.dbRows.toLocaleString() },
+                  { label: "Items saved", value: kit.itemsSaved.toLocaleString() },
                   { label: "Status", value: kit.status },
                 ].map((s) => (
                   <div
@@ -149,12 +145,12 @@ export default function DashboardPage() {
           <div className="bg-ks-accent-soft border border-ks-accent/20 rounded-xl p-5 flex items-center justify-between">
             <div>
               <div className="font-serif text-[22px] tracking-tight text-ks-ink">
-                Upgrade to Pro &mdash; all 4 kits for{" "}
+                Upgrade to Pro &mdash; every kit for{" "}
                 <span className="italic text-ks-accent">&euro;19/mo</span>
               </div>
               <div className="font-sans text-[13px] text-ks-muted mt-1">
                 You&apos;re paying &euro;{totalPrice}/mo for {activeKits.length}{" "}
-                kits. Pro gives you all 4 + priority support.
+                kits. Pro gives you every kit + priority support.
               </div>
             </div>
             <button className="ks-btn ks-btn-accent !py-2.5 !px-5 !text-[13px] shrink-0">
@@ -168,7 +164,7 @@ export default function DashboardPage() {
           {/* Connector card */}
           <div className="ks-card p-5">
             <div className="font-mono text-[10px] text-ks-muted tracking-wider mb-2.5">
-              YOUR CONNECTOR
+              YOUR CONNECTION URL
             </div>
             <div className="flex items-center gap-2 bg-ks-ink rounded-lg px-3.5 py-2.5 mb-3">
               <code className="font-mono text-[12px] text-ks-paper flex-1 truncate">
@@ -242,10 +238,9 @@ export default function DashboardPage() {
           {/* Data ownership note */}
           <div className="bg-ks-paper-warm border border-ks-hair rounded-xl p-4">
             <div className="font-sans text-[12px] text-ks-muted leading-relaxed">
-              <span className="font-semibold text-ks-ink">Your data.</span> All
-              databases are hosted in Frankfurt, GDPR-compliant. Export anytime
-              as JSON or CSV. If you cancel, your data stays downloadable for 90
-              days.
+              <span className="font-semibold text-ks-ink">Your data.</span> Your
+              data is private and exportable anytime as JSON or CSV. If you
+              cancel, your data stays downloadable for 90 days.
             </div>
           </div>
         </div>
