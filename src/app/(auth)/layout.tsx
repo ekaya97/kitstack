@@ -25,7 +25,7 @@ export default function AuthLayout({
 
       {/* Minimal footer */}
       <div className="px-12 py-4 border-t border-ks-hair text-center font-mono text-[11px] text-ks-muted">
-        &copy; 2026 kitstack &mdash; shipped from Berlin
+        &copy; 2026 kitstack &mdash; shipped from Germany
       </div>
     </div>
   );

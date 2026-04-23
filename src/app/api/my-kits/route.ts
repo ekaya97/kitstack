@@ -19,6 +19,9 @@ export async function GET() {
       kitDescription: kits.description,
       kitReplaces: kits.replaces,
       kitSavingsPerMonth: kits.savingsPerMonth,
+      kitMcpTools: kits.mcpTools,
+      kitMcpApps: kits.mcpApps,
+      kitDbSchema: kits.dbSchema,
     })
     .from(kitActivations)
     .leftJoin(kits, eq(kitActivations.kitSlug, kits.slug))

@@ -83,8 +83,7 @@ export function Footer() {
       </div>
 
       <div className="mt-8 pt-5 border-t border-ks-hair flex justify-between font-mono text-[11px] text-ks-muted">
-        <div>&copy; 2026 kitstack &mdash; shipped from Berlin</div>
-        <div>VAT handled by Lemon Squeezy</div>
+        <div>&copy; 2026 kitstack &mdash; shipped from Germany</div>
       </div>
     </footer>
   );

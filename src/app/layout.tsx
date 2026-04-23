@@ -41,6 +41,9 @@ export const metadata: Metadata = {
   },
   description:
     "Free Skills turn Claude into a specialist. Subscription Kits add a database, interactive UI, and memory that survives sessions.",
+  icons: {
+    icon: "/favicon.svg",
+  },
   openGraph: {
     type: "website",
     locale: "en_US",

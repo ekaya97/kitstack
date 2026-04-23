@@ -371,6 +371,53 @@ export default async function Landing() {
         </div>
       </section>
 
+      {/* FAQ */}
+      <section className="px-16 py-[72px] bg-ks-paper-warm border-t border-ks-hair">
+        <div className="mb-[30px]">
+          <div className="font-mono text-[11px] text-ks-muted tracking-[1px] mb-2">
+            FAQ
+          </div>
+          <h2 className="font-serif text-5xl tracking-tight">
+            Common questions.
+          </h2>
+        </div>
+        <div className="grid grid-cols-2 gap-x-12 gap-y-8 max-w-5xl">
+          {[
+            {
+              q: "What's the difference between a skill and a kit?",
+              a: "A skill is a free .zip file you upload to Claude — it makes Claude an expert at one task, but has no memory. A kit is a subscription app with a database, interactive UI, and cross-session persistence. Think of a skill as the demo, a kit as the full product.",
+            },
+            {
+              q: "Do I need a Claude subscription?",
+              a: "For skills: yes, you need Claude Pro, Max, Team, or Enterprise. Skills work on claude.ai, Desktop, Cowork, and Claude Code. For kits: you need a Claude plan that supports connectors, plus a KitStack Starter subscription.",
+            },
+            {
+              q: "What happens to my data if I cancel?",
+              a: "Your data stays accessible for 90 days after cancellation. You can export everything as CSV or JSON at any time using the built-in export tools. After 90 days, databases are permanently deleted.",
+            },
+            {
+              q: "Can I use kits on ChatGPT?",
+              a: "Skills work only with Claude. Kits use the MCP protocol, which is supported by Claude, ChatGPT, VS Code, and other MCP-compatible clients. Cross-platform support is a key advantage.",
+            },
+            {
+              q: "Is my data private?",
+              a: "Yes. Each kit gets its own isolated database — no other user can access it. All data is stored in the EU (Frankfurt). You own your data and can export or delete it anytime.",
+            },
+            {
+              q: "Why €5/mo and not free?",
+              a: "Skills are free because they cost us nothing to serve — they're static files. Kits require per-user databases, MCP server hosting, and interactive UI serving. €5/mo covers infrastructure while staying cheaper than any single SaaS tool a kit replaces.",
+            },
+          ].map(({ q, a }) => (
+            <div key={q}>
+              <h3 className="font-serif text-[18px] text-ks-ink mb-1.5">{q}</h3>
+              <p className="font-sans text-[13.5px] text-ks-muted leading-relaxed">
+                {a}
+              </p>
+            </div>
+          ))}
+        </div>
+      </section>
+
       <Footer />
     </div>
   );

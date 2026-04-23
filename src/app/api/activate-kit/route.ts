@@ -5,27 +5,14 @@ import { getSessionOrNull } from "@/lib/auth-session";
 import { getSubscription } from "@/services/subscription.service";
 import { db } from "@/lib/db";
 import { kitActivations } from "@/db/schema";
-import { provisionKitDatabase } from "../../../../packages/mcp-server/src/framework/db-provisioner";
-import { getUserKitDb } from "../../../../packages/mcp-server/src/framework/dynamo";
-import { migrationSql as meetingMigrations } from "../../../../packages/mcp-server/src/kits/meeting/migrations";
-import { migrationSql as crmMigrations } from "../../../../packages/mcp-server/src/kits/crm/migrations";
-import { migrationSql as expenseMigrations } from "../../../../packages/mcp-server/src/kits/expense/migrations";
-import { migrationSql as outreachMigrations } from "../../../../packages/mcp-server/src/kits/outreach/migrations";
 
-const KIT_MIGRATIONS: Record<string, string> = {
-  "meeting-action-tracker": meetingMigrations,
-  crm: crmMigrations,
-  "expense-tax-prep": expenseMigrations,
-  "cold-outreach": outreachMigrations,
-};
-
-// Map kit slugs (from the kits catalogue) to kit IDs (used by the MCP server)
-const SLUG_TO_KIT_ID: Record<string, string> = {
-  "crm-kit": "crm",
-  "expense-tax-prep-kit": "expense-tax-prep",
-  "cold-outreach-kit": "cold-outreach",
-  "meeting-action-tracker-kit": "meeting-action-tracker",
-};
+// Valid kit slugs
+const VALID_KIT_SLUGS = [
+  "crm-kit",
+  "expense-tax-prep-kit",
+  "cold-outreach-kit",
+  "meeting-action-tracker-kit",
+];
 
 export async function POST(request: NextRequest) {
   const session = await getSessionOrNull();
@@ -40,6 +27,10 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ error: "kitSlug is required" }, { status: 400 });
   }
 
+  if (!VALID_KIT_SLUGS.includes(kitSlug)) {
+    return NextResponse.json({ error: `Unknown kit: ${kitSlug}` }, { status: 404 });
+  }
+
   // Check subscription
   const subscription = await getSubscription(session.user.id);
   if (!subscription) {
@@ -47,12 +38,6 @@ export async function POST(request: NextRequest) {
       { error: "Active subscription required. Subscribe at /pricing first." },
       { status: 403 }
     );
-  }
-
-  // Resolve kit ID
-  const kitId = SLUG_TO_KIT_ID[kitSlug];
-  if (!kitId) {
-    return NextResponse.json({ error: `Unknown kit: ${kitSlug}` }, { status: 404 });
   }
 
   // Check if already activated
@@ -72,26 +57,21 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ status: "already_active", kitSlug });
   }
 
-  // Check if DB already provisioned (from a previous activation)
-  const existingDb = await getUserKitDb(session.user.id, kitId);
-  if (!existingDb) {
-    const migrationSql = KIT_MIGRATIONS[kitId];
-    if (!migrationSql) {
-      return NextResponse.json({ error: `No migrations for kit: ${kitId}` }, { status: 500 });
-    }
-    await provisionKitDatabase(session.user.id, kitId, migrationSql);
-  }
-
-  // Record activation locally
-  await db.insert(kitActivations).values({
-    id: nanoid(),
-    userId: session.user.id,
-    kitSlug,
-    status: "active",
-  }).onConflictDoUpdate({
-    target: [kitActivations.userId, kitActivations.kitSlug],
-    set: { status: "active" },
-  });
+  // Record activation
+  // DB provisioning happens when the user connects the MCP connector —
+  // the MCP router's tool-dispatcher provisions on first tool call
+  await db
+    .insert(kitActivations)
+    .values({
+      id: nanoid(),
+      userId: session.user.id,
+      kitSlug,
+      status: "active",
+    })
+    .onConflictDoUpdate({
+      target: [kitActivations.userId, kitActivations.kitSlug],
+      set: { status: "active" },
+    });
 
   return NextResponse.json({ status: "activated", kitSlug });
 }

@@ -128,6 +128,52 @@ export async function handler(
       return json(result);
     }
 
+    // --- Connection check (called by the marketing site) ---
+
+    if (path === "/connected" && method === "GET") {
+      const userId = event.queryStringParameters?.userId;
+      if (!userId) {
+        return json({ connected: false, reason: "missing_userId" }, 400);
+      }
+
+      // Check if this user has any refresh tokens in OAuthStore
+      // Refresh tokens are stored as REFRESH#{token} → { userId, clientId }
+      // We can't query by userId directly (it's in the data JSON), so we scan
+      // with a filter. At low scale this is fine.
+      const { DynamoDBClient, ScanCommand } = await import("@aws-sdk/client-dynamodb");
+      const { unmarshall } = await import("@aws-sdk/util-dynamodb");
+      const dynamo = new DynamoDBClient({});
+      const oauthTable = process.env.OAUTH_STORE_TABLE;
+
+      if (!oauthTable) {
+        return json({ connected: false, reason: "server_config_error" }, 500);
+      }
+
+      const scan = await dynamo.send(
+        new ScanCommand({
+          TableName: oauthTable,
+          FilterExpression: "begins_with(pk, :prefix) AND sk = :sk",
+          ExpressionAttributeValues: {
+            ":prefix": { S: "REFRESH#" },
+            ":sk": { S: "TOKEN" },
+          },
+          Limit: 50,
+        })
+      );
+
+      const hasToken = (scan.Items || []).some((item) => {
+        const parsed = unmarshall(item);
+        try {
+          const data = JSON.parse(parsed.data);
+          return data.userId === userId;
+        } catch {
+          return false;
+        }
+      });
+
+      return json({ connected: hasToken });
+    }
+
     // --- MCP Protocol (POST /) ---
 
     if (path === "/" && method === "POST") {
