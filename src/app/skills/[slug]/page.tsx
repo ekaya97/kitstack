@@ -545,9 +545,9 @@ export default async function SkillDetailPage({
                 <div className="flex flex-col gap-2">
                   {[
                     "Everything in the free skill",
-                    "Per-user Turso database",
-                    `${upgradeKit.tools.length} MCP tools`,
-                    `${upgradeKit.uiComponents.length} UI components`,
+                    "Your own private database",
+                    `${upgradeKit.tools.length} built-in actions`,
+                    `${upgradeKit.uiComponents.length} interactive views`,
                     "Memory that survives sessions",
                     "Data export anytime",
                   ].map((label) => (

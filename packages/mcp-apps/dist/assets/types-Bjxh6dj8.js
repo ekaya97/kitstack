@@ -1,1 +1,0 @@
-const o=["prospect","proposal","negotiation","won","lost"],t={prospect:"Prospect",proposal:"Proposal",negotiation:"Negotiation",won:"Won",lost:"Lost"},e={prospect:"bg-ks-paper-deep text-ks-ink",proposal:"bg-blue-50 text-blue-800",negotiation:"bg-amber-50 text-amber-800",won:"bg-emerald-50 text-emerald-800",lost:"bg-red-50 text-red-800"};export{o as S,t as a,e as b};

@@ -278,7 +278,7 @@ export default function LoginPage() {
               <div className="flex flex-col gap-1.5 font-sans text-[12px] text-ks-muted">
                 <div className="flex items-center gap-2">
                   <span className="text-green-700">&#10003;</span>
-                  6 free skills, no card required
+                  All skills free, no card required
                 </div>
                 <div className="flex items-center gap-2">
                   <span className="text-green-700">&#10003;</span>

@@ -18,10 +18,10 @@ const compatibleClients = [
 ];
 
 const previewKits = [
-  { name: "CRM Kit", cat: "Revenue", tools: 9 },
-  { name: "Expense & Tax Prep Kit", cat: "Finance", tools: 6 },
-  { name: "Cold Outreach Kit", cat: "Sales", tools: 6 },
-  { name: "Meeting Action Tracker Kit", cat: "Ops", tools: 6 },
+  { name: "CRM Kit", cat: "Revenue", features: 9 },
+  { name: "Expense & Tax Prep Kit", cat: "Finance", features: 6 },
+  { name: "Cold Outreach Kit", cat: "Sales", features: 6 },
+  { name: "Meeting Action Tracker Kit", cat: "Ops", features: 6 },
 ];
 
 export default function OnboardingConnectPage() {
@@ -32,16 +32,15 @@ export default function OnboardingConnectPage() {
       {/* HEADER */}
       <section className="px-16 pt-12 pb-8 text-center max-w-[720px] mx-auto">
         <div className="font-mono text-[11px] text-ks-muted tracking-[1px] mb-4">
-          &sect; SET UP YOUR CONNECTOR &middot; 60 SECONDS
+          &sect; ADD YOUR CONNECTION &middot; 60 SECONDS
         </div>
         <h1 className="font-serif text-[56px] leading-[1.02] tracking-tight text-ks-ink">
           One URL.{" "}
           <span className="italic text-ks-accent">Every kit.</span>
         </h1>
         <p className="font-sans text-[17px] text-ks-muted mt-4 leading-relaxed max-w-[540px] mx-auto">
-          Paste a single connector URL into Claude. All your subscribed kits
-          appear as tools and apps automatically &mdash; no extensions, no
-          plugins.
+          Paste a single URL into Claude. All your subscribed kits appear
+          automatically &mdash; no extensions, no plugins.
         </p>
       </section>
 
@@ -133,13 +132,12 @@ export default function OnboardingConnectPage() {
                 </li>
                 <li>
                   Go to{" "}
-                  <span className="font-semibold text-ks-ink">Connectors</span>{" "}
-                  (or MCP Servers)
+                  <span className="font-semibold text-ks-ink">Connectors</span>
                 </li>
                 <li>
                   Click{" "}
                   <span className="font-semibold text-ks-ink">
-                    Add connector
+                    Add connection
                   </span>
                 </li>
                 <li>Paste the URL above and click Authorize</li>
@@ -191,7 +189,7 @@ export default function OnboardingConnectPage() {
               {/* URL input */}
               <div className="mb-4">
                 <div className="font-sans text-[12px] text-ks-muted mb-1.5">
-                  Connector URL
+                  Connection URL
                 </div>
                 <div className="flex items-center gap-2">
                   <div className="flex-1 border border-ks-accent rounded-lg px-3.5 py-2.5 font-mono text-[13px] text-ks-ink bg-ks-accent-soft/30">
@@ -208,7 +206,7 @@ export default function OnboardingConnectPage() {
 
               {/* Kit list preview (post-auth) */}
               <div className="font-mono text-[9px] text-ks-muted tracking-wider mb-2.5">
-                AUTHORIZED &middot; {previewKits.length} KITS AVAILABLE
+                AUTHORIZED &middot; ALL KITS AVAILABLE
               </div>
               <div className="flex flex-col gap-2">
                 {previewKits.map((kit) => (
@@ -223,7 +221,7 @@ export default function OnboardingConnectPage() {
                       </span>
                     </div>
                     <span className="font-mono text-[10px] text-ks-muted">
-                      {kit.tools} tools
+                      {kit.features} features
                     </span>
                   </div>
                 ))}
@@ -241,7 +239,7 @@ export default function OnboardingConnectPage() {
               Stuck?
             </div>
             <div className="font-sans text-[12px] text-ks-muted leading-relaxed">
-              Make sure you&apos;re using a Claude client that supports MCP
+              Make sure you&apos;re using a Claude client that supports
               connectors. If you see &quot;invalid URL,&quot; check for trailing
               spaces. Still stuck?{" "}
               <span className="text-ks-accent cursor-pointer hover:underline">

@@ -32,14 +32,13 @@ export function KitPreviewCard({ kit }: { kit: Kit }) {
       </div>
       <div className="bg-ks-paper-warm rounded-lg p-3 border border-ks-hair">
         <div className="font-mono text-[9px] text-ks-muted tracking-wide mb-2">
-          &#9635; MCP APP &middot; {kit.uiComponents[0]}
+          &#9635; LIVE PREVIEW &middot; {kit.uiComponents[0]}
         </div>
         {demos[kit.slug]}
       </div>
       <div className="flex justify-between items-center mt-3.5">
         <div className="font-mono text-[11px] text-ks-muted">
-          {kit.tools.length} tools &middot; {kit.schema.length} tables &middot;{" "}
-          {kit.uiComponents.length} UI views
+          Persistent data &middot; interactive dashboards
         </div>
         <Link href={`/kits/${kit.slug}`} className="ks-btn !text-xs !py-1.5 !px-3">
           Open kit &rarr;

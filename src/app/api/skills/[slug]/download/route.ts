@@ -1,5 +1,4 @@
 import { NextRequest, NextResponse } from "next/server";
-import { db } from "@/lib/db";
 import { getSkillBySlug, incrementDownloadCount } from "@/services/skill.service";
 import { getDownloadUrl } from "@/services/storage.service";
 
@@ -8,7 +7,7 @@ export async function GET(
   { params }: { params: Promise<{ slug: string }> }
 ) {
   const { slug } = await params;
-  const skill = await getSkillBySlug(db, slug);
+  const skill = await getSkillBySlug(slug);
 
   if (!skill) {
     return NextResponse.json({ error: "Skill not found" }, { status: 404 });
@@ -22,7 +21,7 @@ export async function GET(
   }
 
   const downloadUrl = await getDownloadUrl(skill.s3Key);
-  await incrementDownloadCount(db, slug);
+  await incrementDownloadCount(slug);
 
   return NextResponse.json({ downloadUrl });
 }

@@ -19,12 +19,12 @@ beforeEach(async () => {
 
 describe("getAllSkills", () => {
   it("returns all skills", async () => {
-    const result = await getAllSkills(db);
+    const result = await getAllSkills();
     expect(result).toHaveLength(3);
   });
 
   it("returns skills ordered by name", async () => {
-    const result = await getAllSkills(db);
+    const result = await getAllSkills();
     const names = result.map((s) => s.name);
     expect(names).toEqual([...names].sort());
   });
@@ -32,33 +32,33 @@ describe("getAllSkills", () => {
 
 describe("getSkillsByCategory", () => {
   it("returns skills matching the category", async () => {
-    const result = await getSkillsByCategory(db, "Revenue");
+    const result = await getSkillsByCategory("Revenue");
     expect(result).toHaveLength(1);
     expect(result[0].slug).toBe("client-proposal-skill");
   });
 
   it("returns empty array for nonexistent category", async () => {
-    const result = await getSkillsByCategory(db, "Nonexistent");
+    const result = await getSkillsByCategory("Nonexistent");
     expect(result).toHaveLength(0);
   });
 });
 
 describe("getSkillBySlug", () => {
   it("returns the correct skill", async () => {
-    const result = await getSkillBySlug(db, "contract-red-flag-skill");
+    const result = await getSkillBySlug("contract-red-flag-skill");
     expect(result).toBeDefined();
     expect(result!.name).toBe("Contract Red Flag Skill");
   });
 
   it("returns undefined for nonexistent slug", async () => {
-    const result = await getSkillBySlug(db, "nope");
+    const result = await getSkillBySlug("nope");
     expect(result).toBeUndefined();
   });
 });
 
 describe("incrementDownloadCount", () => {
   it("increments download count by 1", async () => {
-    await incrementDownloadCount(db, "client-proposal-skill");
+    await incrementDownloadCount("client-proposal-skill");
     const result = await db
       .select()
       .from(skills)
@@ -67,9 +67,9 @@ describe("incrementDownloadCount", () => {
   });
 
   it("increments multiple times", async () => {
-    await incrementDownloadCount(db, "client-proposal-skill");
-    await incrementDownloadCount(db, "client-proposal-skill");
-    await incrementDownloadCount(db, "client-proposal-skill");
+    await incrementDownloadCount("client-proposal-skill");
+    await incrementDownloadCount("client-proposal-skill");
+    await incrementDownloadCount("client-proposal-skill");
     const result = await db
       .select()
       .from(skills)

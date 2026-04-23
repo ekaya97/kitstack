@@ -5,25 +5,24 @@ const items = [
   { label: "Skills", href: "/skills" },
   { label: "Kits", href: "/kits" },
   { label: "Pricing", href: "/pricing" },
-  { label: "Authors", href: "/authors/kitstack" },
 ];
 
 export function Nav({ active }: { active?: string }) {
   return (
-    <div className="flex items-center justify-between px-12 py-5 border-b border-ks-hair bg-ks-paper relative z-10">
-      <Link href="/" className="flex items-center gap-3">
-        <Logo />
-        <span className="font-serif text-[22px] tracking-tight">
+    <nav className="flex items-center justify-between px-12 py-3 border-b border-ks-hair bg-ks-paper relative z-10">
+      <Link href="/" className="flex items-center gap-2.5">
+        <Logo size={24} />
+        <span className="font-serif text-lg tracking-tight">
           kitstack<span className="text-ks-accent">.co</span>
         </span>
       </Link>
 
-      <div className="flex gap-7">
+      <div className="flex gap-6">
         {items.map((it) => (
           <Link
             key={it.label}
             href={it.href}
-            className={`font-sans text-sm pb-[3px] border-b-2 ${
+            className={`font-sans text-[13px] pb-px border-b-[1.5px] ${
               active === it.label
                 ? "font-semibold text-ks-ink border-ks-accent"
                 : "font-medium text-ks-muted border-transparent hover:text-ks-ink"
@@ -43,11 +42,11 @@ export function Nav({ active }: { active?: string }) {
         </Link>
         <Link
           href="/login"
-          className="ks-btn ks-btn-primary !py-2 !px-3.5 !text-[13px]"
+          className="ks-btn ks-btn-primary !py-1.5 !px-3 !text-[13px]"
         >
           Get started &rarr;
         </Link>
       </div>
-    </div>
+    </nav>
   );
 }

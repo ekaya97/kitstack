@@ -1,4 +1,4 @@
-import type { NewSkill, NewKit } from "./schema";
+import type { NewSkill, NewKit, NewReview } from "./schema";
 
 const baseCompatibility = ["claude.ai", "Claude Desktop", "Cowork", "Claude Code"];
 
@@ -30,6 +30,12 @@ export const seedSkills: NewSkill[] = [
     ],
     composition: { skillMd: true, references: 3, examples: 3, templates: 1, scripts: 0, agents: 0 },
     s3Key: "skills/client-proposal-skill.zip",
+    author: "kitstack",
+    fileSize: "18 KB",
+    correspondingKitSlug: "crm-kit",
+    avgRating: 4.9,
+    reviewCount: 142,
+    downloadCount: 3280,
   },
   {
     id: "skill-contract-red-flag",
@@ -56,6 +62,12 @@ export const seedSkills: NewSkill[] = [
     ],
     composition: { skillMd: true, references: 4, examples: 2, templates: 0, scripts: 0, agents: 1 },
     s3Key: "skills/contract-red-flag-skill.zip",
+    author: "kitstack",
+    fileSize: "22 KB",
+    correspondingKitSlug: null,
+    avgRating: 4.8,
+    reviewCount: 98,
+    downloadCount: 1940,
   },
   {
     id: "skill-cold-email",
@@ -82,6 +94,12 @@ export const seedSkills: NewSkill[] = [
     ],
     composition: { skillMd: true, references: 3, examples: 3, templates: 0, scripts: 0, agents: 1 },
     s3Key: "skills/cold-email-sequence-skill.zip",
+    author: "kitstack",
+    fileSize: "16 KB",
+    correspondingKitSlug: "cold-outreach-kit",
+    avgRating: 4.8,
+    reviewCount: 120,
+    downloadCount: 2610,
   },
   {
     id: "skill-linkedin-content",
@@ -109,6 +127,12 @@ export const seedSkills: NewSkill[] = [
     ],
     composition: { skillMd: true, references: 4, examples: 3, templates: 1, scripts: 0, agents: 0 },
     s3Key: "skills/linkedin-content-skill.zip",
+    author: "kitstack",
+    fileSize: "24 KB",
+    correspondingKitSlug: null,
+    avgRating: 4.9,
+    reviewCount: 210,
+    downloadCount: 4120,
   },
   {
     id: "skill-meeting-action",
@@ -132,6 +156,12 @@ export const seedSkills: NewSkill[] = [
     ],
     composition: { skillMd: true, references: 2, examples: 2, templates: 0, scripts: 0, agents: 0 },
     s3Key: "skills/meeting-action-extractor-skill.zip",
+    author: "kitstack",
+    fileSize: "10 KB",
+    correspondingKitSlug: "meeting-action-tracker-kit",
+    avgRating: 4.7,
+    reviewCount: 315,
+    downloadCount: 5340,
   },
   {
     id: "skill-expense-categorizer",
@@ -157,6 +187,12 @@ export const seedSkills: NewSkill[] = [
     ],
     composition: { skillMd: true, references: 3, examples: 2, templates: 0, scripts: 1, agents: 0 },
     s3Key: "skills/expense-categorizer-skill.zip",
+    author: "kitstack",
+    fileSize: "20 KB",
+    correspondingKitSlug: "expense-tax-prep-kit",
+    avgRating: 4.7,
+    reviewCount: 74,
+    downloadCount: 1520,
   },
 ];
 
@@ -170,8 +206,8 @@ export const seedKits: NewKit[] = [
     category: "Revenue",
     description: "Full CRM with contacts, deals, pipeline, and proposals",
     correspondingSkillSlug: "client-proposal-skill",
-    replaces: "Pipedrive, HubSpot Starter",
-    savingsPerMonth: 24,
+    replaces: "Pipedrive €24, HubSpot Starter €20",
+    savingsPerMonth: 44,
     dbSchema:
       "contacts (id, name, company, email, phone, source, notes, last_contacted_at, created_at)\ndeals (id, name, contact_id FK, value, currency, stage, notes, expected_close_date, created_at, updated_at)\nactivities (id, contact_id FK, deal_id FK, type, description, created_at)\nproposals (id, deal_id FK, content, version, status, created_at)",
     mcpTools: [
@@ -194,6 +230,12 @@ export const seedKits: NewKit[] = [
       { name: "Dashboard", description: "Deals by stage, value, and recent activity" },
       { name: "Proposal Preview", description: "Formatted proposal view" },
     ],
+    tagline: "A real CRM that lives inside your Claude chat.",
+    author: "kitstack",
+    status: "live",
+    subscriberCount: 420,
+    avgRating: 4.8,
+    reviewCount: 64,
   },
   {
     id: "kit-expense",
@@ -202,8 +244,8 @@ export const seedKits: NewKit[] = [
     category: "Finance",
     description: "Track expenses across months with quarterly summaries",
     correspondingSkillSlug: "expense-categorizer-skill",
-    replaces: "Lexoffice, sevDesk",
-    savingsPerMonth: 18,
+    replaces: "Lexoffice €14, sevDesk €18",
+    savingsPerMonth: 32,
     dbSchema:
       "expenses (id, date, description, amount_gross, amount_net, vat_amount, vat_rate, category, skr03_account, is_private, needs_receipt, notes, source, created_at)\nquarterly_summaries (id, year, quarter, total_gross, total_net, total_vat, category_breakdown JSON, flagged_items JSON, generated_at)\nsettings (key, value)",
     mcpTools: [
@@ -221,6 +263,12 @@ export const seedKits: NewKit[] = [
       { name: "Import Review", description: "Review and confirm imported expenses" },
       { name: "Steuerberater Export", description: "Formatted export view" },
     ],
+    tagline: "German tax prep that remembers the year.",
+    author: "kitstack",
+    status: "live",
+    subscriberCount: 280,
+    avgRating: 4.9,
+    reviewCount: 38,
   },
   {
     id: "kit-outreach",
@@ -229,8 +277,8 @@ export const seedKits: NewKit[] = [
     category: "Sales",
     description: "Build and manage cold email sequences with prospect tracking",
     correspondingSkillSlug: "cold-email-sequence-skill",
-    replaces: "Lavender, Instantly",
-    savingsPerMonth: 29,
+    replaces: "Lavender €29, Instantly €37",
+    savingsPerMonth: 66,
     dbSchema:
       "sequences (id, name, target_persona, tone, status, created_at)\nemails (id, sequence_id FK, position, subject, body, delay_days, created_at)\nprospects (id, sequence_id FK, name, company, email, linkedin_url, personalization_hooks JSON, status, created_at)",
     mcpTools: [
@@ -247,6 +295,12 @@ export const seedKits: NewKit[] = [
       { name: "Prospect List", description: "Prospect table with status tracking" },
       { name: "Email Preview", description: "Preview with personalization merge" },
     ],
+    tagline: "Sequences that remember who you've written to.",
+    author: "kitstack",
+    status: "live",
+    subscriberCount: 190,
+    avgRating: 4.7,
+    reviewCount: 24,
   },
   {
     id: "kit-meeting",
@@ -255,8 +309,8 @@ export const seedKits: NewKit[] = [
     category: "Operations",
     description: "Track action items across meetings with persistent history",
     correspondingSkillSlug: "meeting-action-extractor-skill",
-    replaces: "Otter.ai, Fireflies, Fathom",
-    savingsPerMonth: 19,
+    replaces: "Otter.ai $17, Fireflies $19",
+    savingsPerMonth: 36,
     dbSchema:
       "meetings (id, title, date, attendees JSON, raw_notes, created_at)\naction_items (id, meeting_id FK, description, owner, deadline, status, created_at)\ndecisions (id, meeting_id FK, description, created_at)",
     mcpTools: [
@@ -272,5 +326,84 @@ export const seedKits: NewKit[] = [
       { name: "Action Tracker", description: "Cross-meeting action items dashboard" },
       { name: "Meeting History", description: "List of past meetings" },
     ],
+    tagline: "Action items that survive past the meeting.",
+    author: "kitstack",
+    status: "live",
+    subscriberCount: 340,
+    avgRating: 4.8,
+    reviewCount: 52,
+  },
+];
+
+// --- Seed Reviews ---
+
+export const seedReviews: NewReview[] = [
+  // Skill reviews: client-proposal-skill
+  {
+    id: "review-skill-proposal-1",
+    targetType: "skill",
+    targetSlug: "client-proposal-skill",
+    userId: "seed-user-1",
+    userName: "Lena K.",
+    userRole: "Brand consultant",
+    rating: 5,
+    text: "Saved me 2 hours on my last proposal. The structure is spot-on and the tone matched my voice.",
+    verified: true,
+  },
+  {
+    id: "review-skill-proposal-2",
+    targetType: "skill",
+    targetSlug: "client-proposal-skill",
+    userId: "seed-user-2",
+    userName: "Marco S.",
+    userRole: "Solo dev",
+    rating: 5,
+    text: "I used to spend forever scoping projects. Now I paste 4 lines and get a full proposal back.",
+    verified: true,
+  },
+  {
+    id: "review-skill-proposal-3",
+    targetType: "skill",
+    targetSlug: "client-proposal-skill",
+    userId: "seed-user-3",
+    userName: "Dana A.",
+    userRole: "Agency owner",
+    rating: 4,
+    text: "Great for the basics. Would love a few more industry-specific templates, but the framework is solid.",
+    verified: true,
+  },
+  // Kit reviews: crm-kit
+  {
+    id: "review-kit-crm-1",
+    targetType: "kit",
+    targetSlug: "crm-kit",
+    userId: "seed-user-4",
+    userName: "Mira S.",
+    userRole: "Freelance Designer",
+    rating: 5,
+    text: `Replaced Pipedrive entirely. I just say "log that call" and it's in the CRM. The pipeline kanban inside Claude is wild.`,
+    verified: true,
+  },
+  {
+    id: "review-kit-crm-2",
+    targetType: "kit",
+    targetSlug: "crm-kit",
+    userId: "seed-user-5",
+    userName: "Jan P.",
+    userRole: "Agency Founder",
+    rating: 5,
+    text: `The proposal generator alone is worth it. But having it connected to a real contact database? That's the upgrade that sticks.`,
+    verified: true,
+  },
+  {
+    id: "review-kit-crm-3",
+    targetType: "kit",
+    targetSlug: "crm-kit",
+    userId: "seed-user-6",
+    userName: "Anja K.",
+    userRole: "Ops Manager",
+    rating: 4,
+    text: "Solid kit. Wish it had calendar integration, but the team says it's coming. Database export works perfectly.",
+    verified: true,
   },
 ];

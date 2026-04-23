@@ -1,5 +1,4 @@
 import { NextRequest, NextResponse } from "next/server";
-import { db } from "@/lib/db";
 import { getKitBySlug } from "@/services/kit.service";
 
 export async function GET(
@@ -7,7 +6,7 @@ export async function GET(
   { params }: { params: Promise<{ slug: string }> }
 ) {
   const { slug } = await params;
-  const kit = await getKitBySlug(db, slug);
+  const kit = await getKitBySlug(slug);
 
   if (!kit) {
     return NextResponse.json({ error: "Kit not found" }, { status: 404 });

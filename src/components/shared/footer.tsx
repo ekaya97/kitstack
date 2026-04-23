@@ -1,31 +1,53 @@
+import Link from "next/link";
 import { Logo } from "@/components/ui/logo";
 
-const columns = [
+interface FooterLink {
+  label: string;
+  href: string;
+  external?: boolean;
+}
+
+const columns: { heading: string; links: FooterLink[] }[] = [
   {
     heading: "Catalogue",
-    items: ["Free skills", "Kits", "Pricing", "What's new"],
+    links: [
+      { label: "Free skills", href: "/skills" },
+      { label: "Kits", href: "/kits" },
+      { label: "Pricing", href: "/pricing" },
+    ],
   },
   {
     heading: "Authors",
-    items: ["Browse authors", "Become an author", "Quality guide"],
+    links: [
+      { label: "Browse authors", href: "/authors/kitstack" },
+    ],
   },
   {
     heading: "Legal",
-    items: ["Impressum", "Privacy", "Terms", "support@kitstack.co"],
+    links: [
+      { label: "Privacy", href: "/privacy" },
+      { label: "Terms", href: "/terms" },
+      { label: "Impressum", href: "/impressum" },
+      {
+        label: "support@kitstack.co",
+        href: "mailto:support@kitstack.co",
+        external: true,
+      },
+    ],
   },
 ];
 
 export function Footer() {
   return (
-    <div className="px-12 pt-12 pb-8 border-t border-ks-hair bg-ks-paper-warm">
+    <footer className="px-12 pt-12 pb-8 border-t border-ks-hair bg-ks-paper-warm">
       <div className="grid grid-cols-[1.5fr_1fr_1fr_1fr] gap-10">
         <div>
-          <div className="flex items-center gap-2.5 mb-3">
+          <Link href="/" className="flex items-center gap-2.5 mb-3">
             <Logo size={24} />
             <span className="font-serif text-xl">
               kitstack<span className="text-ks-accent">.co</span>
             </span>
-          </div>
+          </Link>
           <div className="font-sans text-[13px] text-ks-muted leading-relaxed max-w-xs">
             Free skills and subscription kits that turn Claude into a
             specialist. Skills download free. Kits remember everything.
@@ -37,22 +59,33 @@ export function Footer() {
             <div className="font-sans text-xs font-semibold uppercase tracking-wider mb-2.5">
               {col.heading}
             </div>
-            {col.items.map((item) => (
-              <div
-                key={item}
-                className="font-sans text-[13px] text-ks-muted mb-1.5 hover:text-ks-ink cursor-pointer"
-              >
-                {item}
-              </div>
-            ))}
+            {col.links.map((link) =>
+              link.external ? (
+                <a
+                  key={link.label}
+                  href={link.href}
+                  className="block font-sans text-[13px] text-ks-muted mb-1.5 hover:text-ks-ink"
+                >
+                  {link.label}
+                </a>
+              ) : (
+                <Link
+                  key={link.label}
+                  href={link.href}
+                  className="block font-sans text-[13px] text-ks-muted mb-1.5 hover:text-ks-ink"
+                >
+                  {link.label}
+                </Link>
+              )
+            )}
           </div>
         ))}
       </div>
 
       <div className="mt-8 pt-5 border-t border-ks-hair flex justify-between font-mono text-[11px] text-ks-muted">
         <div>&copy; 2026 kitstack &mdash; shipped from Berlin</div>
-        <div>VAT handled by Lemon Squeezy &middot; no account required</div>
+        <div>VAT handled by Lemon Squeezy</div>
       </div>
-    </div>
+    </footer>
   );
 }

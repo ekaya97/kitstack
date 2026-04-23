@@ -1,12 +1,25 @@
 import { NextRequest, NextResponse } from "next/server";
-import { db } from "@/lib/db";
-import { getAllSkills, getSkillsByCategory } from "@/services/skill.service";
+import { getAllSkillCards } from "@/services/skill.service";
 
 export async function GET(request: NextRequest) {
   const category = request.nextUrl.searchParams.get("category");
-  const skillsList = category
-    ? await getSkillsByCategory(db, category)
-    : await getAllSkills(db);
+  const search = request.nextUrl.searchParams.get("search");
 
-  return NextResponse.json({ skills: skillsList });
+  let skills = await getAllSkillCards();
+
+  if (category && category !== "All") {
+    skills = skills.filter((s) => s.cat === category);
+  }
+
+  if (search) {
+    const q = search.toLowerCase();
+    skills = skills.filter(
+      (s) =>
+        s.name.toLowerCase().includes(q) ||
+        s.desc.toLowerCase().includes(q) ||
+        s.cat.toLowerCase().includes(q)
+    );
+  }
+
+  return NextResponse.json({ skills });
 }

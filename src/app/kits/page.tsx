@@ -84,10 +84,10 @@ export default function KitsPage() {
                 {kit.tagline}
               </p>
 
-              {/* MCP App preview */}
+              {/* App preview */}
               <div className="bg-ks-paper-warm rounded-lg p-3.5 border border-ks-hair mb-4">
                 <div className="font-mono text-[9px] text-ks-muted tracking-wide mb-2.5">
-                  &#9635; MCP APP &middot; {kit.uiComponents[0]}
+                  &#9635; LIVE PREVIEW &middot; {kit.uiComponents[0]}
                 </div>
                 {demos[kit.slug]}
               </div>

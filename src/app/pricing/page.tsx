@@ -28,9 +28,9 @@ export default function PricingPage() {
           <span className="italic text-ks-accent">Upgrade when sticky.</span>
         </h1>
         <p className="font-sans text-[17px] text-ks-muted mt-6 max-w-xl mx-auto leading-relaxed">
-          Skills are free because they&apos;re static files &mdash; no server,
-          no cost. Kits need a database, a connector, and ongoing hosting.
-          That&apos;s what the subscription covers.
+          Skills are always free. Kits run on our servers with your own
+          private database &mdash; the subscription covers hosting and
+          ongoing development.
         </p>
 
         {/* Billing toggle */}
@@ -73,7 +73,7 @@ export default function PricingPage() {
               forever
             </div>
             <ul className="m-0 p-0 list-none font-sans text-[13px] text-ks-ink2 leading-[2]">
-              <li>&#10003; 6 downloadable skills</li>
+              <li>&#10003; Every skill, free to download</li>
               <li>&#10003; Works in Claude, Code &amp; VS Code</li>
               <li>&#10003; 1 free kit trial per day</li>
               <li>&#10003; Email updates</li>
@@ -96,7 +96,7 @@ export default function PricingPage() {
             </div>
             <ul className="m-0 p-0 list-none font-sans text-[13px] text-ks-ink2 leading-[2]">
               <li>&#10003; 1 kit of your choice</li>
-              <li>&#10003; Per-user DB, Frankfurt</li>
+              <li>&#10003; Private database, EU-hosted</li>
               <li>&#10003; Full data export</li>
               <li>&#10003; Multi-client (Claude, VS Code)</li>
               <li>&#10003; Cancel anytime</li>
@@ -127,7 +127,7 @@ export default function PricingPage() {
                 {suffix}
               </div>
               <ul className="m-0 p-0 list-none font-sans text-[13px] text-ks-paper-deep leading-[2]">
-                <li>&#10003; All 4 kits included</li>
+                <li>&#10003; Every kit included</li>
                 <li>&#10003; Priority support</li>
                 <li>&#10003; Early access to new kits</li>
                 <li>
@@ -223,7 +223,7 @@ export default function PricingPage() {
                 <span className="text-2xl">/mo</span>
               </div>
               <div className="font-sans text-sm text-ks-paper-deep mt-4">
-                All 4 kits. One subscription.
+                Every kit. One subscription.
               </div>
               <div className="mt-5 px-4 py-2 rounded-full bg-ks-ink2 font-mono text-xs text-ks-accent">
                 Save &euro;{(totalSaasMonthly - 19) * 12}/year
@@ -249,7 +249,7 @@ export default function PricingPage() {
               [
                 {
                   q: "Why are skills free but kits cost money?",
-                  a: "Skills are static .zip files — no server, no database, no running cost for us. Kits run on a managed MCP connector with a per-user Turso database hosted in Frankfurt. The subscription covers hosting, storage, and ongoing development.",
+                  a: "Skills are files you upload once — no running cost for us. Kits run on our servers with one private database per user, real infrastructure. The subscription covers hosting and development.",
                 },
                 {
                   q: "Can I cancel anytime?",
@@ -257,15 +257,15 @@ export default function PricingPage() {
                 },
                 {
                   q: "Where is my data hosted?",
-                  a: "Every kit user gets a dedicated Turso database in Frankfurt, Germany. Your data never leaves the EU. Full GDPR compliance. You can export everything as JSON or CSV at any time.",
+                  a: "Your data is stored in your own private database in the EU. We can't read it. Export everything as JSON or CSV anytime.",
                 },
                 {
                   q: "Does this work with ChatGPT or VS Code?",
-                  a: "Skills work everywhere — Claude, ChatGPT, VS Code, any LLM that accepts file uploads. Kits currently require an MCP-compatible client (Claude Desktop, Claude Code, VS Code with Copilot). ChatGPT support is on the roadmap.",
+                  a: "Skills work everywhere — Claude, ChatGPT, VS Code, any LLM that accepts file uploads. Kits currently work with Claude Desktop, Claude Code, and VS Code with Copilot. ChatGPT support is on the roadmap.",
                 },
                 {
                   q: "Do I need a developer to set this up?",
-                  a: "No. Add one MCP connector URL in Claude's settings, sign in with OAuth, and you're done. No terminal, no config files, no code. Takes about 90 seconds.",
+                  a: "No. Add one connector URL in Claude's settings, sign in, and you're done. No terminal, no config files, no code. Takes about 90 seconds.",
                 },
                 {
                   q: "Is there a free trial for kits?",

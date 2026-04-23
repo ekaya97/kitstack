@@ -23,7 +23,7 @@ export function ClaudeChat({
         </div>
         <div className="ml-auto flex gap-1.5">
           <span className="ks-chip !text-[9px] !py-px !px-1.5 !border-ks-hair !text-ks-muted">
-            kitstack connector &#10003;
+            kitstack &#10003;
           </span>
         </div>
       </div>
@@ -87,8 +87,8 @@ export function MCPApp({
     <div className="ml-[34px] border-[1.5px] border-ks-hair rounded-[10px] bg-ks-paper overflow-hidden">
       <div className="px-3 py-2 bg-ks-paper-deep border-b border-ks-hair flex items-center gap-1.5 font-mono text-[10px] text-ks-muted tracking-wide">
         <span className="text-ks-accent">&#9635;</span>
-        <span>MCP APP &middot; {title}</span>
-        <span className="ml-auto text-ks-faint">rendered in chat</span>
+        <span>LIVE PREVIEW &middot; {title}</span>
+        <span className="ml-auto text-ks-faint">live preview</span>
       </div>
       <div className="p-3.5">{children}</div>
     </div>
