@@ -8,6 +8,11 @@ import { ExpenseTable } from "@/components/mcp-apps/expense-table";
 import { SequenceBuilder } from "@/components/mcp-apps/sequence-builder";
 import { ActionTracker } from "@/components/mcp-apps/action-tracker";
 import { getAllKitCards } from "@/services/kit.service";
+import { auth } from "@/lib/auth";
+import { headers } from "next/headers";
+import { db } from "@/lib/db";
+import { kitActivations } from "@/db/schema";
+import { eq } from "drizzle-orm";
 import type { KitCardData } from "@/services/transformers";
 
 const demos: Record<string, React.ReactNode> = {
@@ -20,6 +25,21 @@ const demos: Record<string, React.ReactNode> = {
 export default async function KitsPage() {
   const kits = await getAllKitCards();
   const totalReplacesValue = kits.reduce((sum, k) => sum + k.replacesValue, 0);
+
+  // Get user's activated kits
+  let activatedSlugs = new Set<string>();
+  try {
+    const session = await auth.api.getSession({ headers: await headers() });
+    if (session) {
+      const activations = await db
+        .select({ slug: kitActivations.kitSlug })
+        .from(kitActivations)
+        .where(eq(kitActivations.userId, session.user.id));
+      activatedSlugs = new Set(activations.map((a) => a.slug));
+    }
+  } catch {
+    // Not logged in — no activated kits
+  }
   return (
     <div className="bg-ks-paper">
       <Nav active="Kits" />
@@ -119,18 +139,37 @@ export default async function KitsPage() {
 
               {/* Buttons */}
               <div className="flex gap-2.5 mt-auto">
-                <Link
-                  href={`/kits/${kit.slug}`}
-                  className="ks-btn ks-btn-primary !text-[12px] !py-2 !px-4"
-                >
-                  Open kit &rarr;
-                </Link>
-                <Link
-                  href={`/kits/${kit.slug}`}
-                  className="ks-btn !text-[12px] !py-2 !px-4"
-                >
-                  Try it free
-                </Link>
+                {activatedSlugs.has(kit.slug) ? (
+                  <>
+                    <Link
+                      href={`/kits/${kit.slug}`}
+                      className="ks-btn !text-[12px] !py-2 !px-4 !border-green-600 !text-green-700"
+                    >
+                      &#10003; Active
+                    </Link>
+                    <Link
+                      href={`/kits/${kit.slug}`}
+                      className="ks-btn !text-[12px] !py-2 !px-4"
+                    >
+                      View kit
+                    </Link>
+                  </>
+                ) : (
+                  <>
+                    <Link
+                      href={`/kits/${kit.slug}`}
+                      className="ks-btn ks-btn-primary !text-[12px] !py-2 !px-4"
+                    >
+                      Open kit &rarr;
+                    </Link>
+                    <Link
+                      href={`/kits/${kit.slug}`}
+                      className="ks-btn !text-[12px] !py-2 !px-4"
+                    >
+                      Try it free
+                    </Link>
+                  </>
+                )}
               </div>
             </div>
           ))}

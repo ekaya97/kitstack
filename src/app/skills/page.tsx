@@ -23,12 +23,16 @@ export default function SkillsPage() {
   const [activeCat, setActiveCat] = useState("All");
   const [searchOpen, setSearchOpen] = useState(false);
   const [query, setQuery] = useState("");
+  const [downloadedSlugs, setDownloadedSlugs] = useState<Set<string>>(new Set());
 
   useEffect(() => {
     fetch("/api/skills")
       .then((r) => r.json())
       .then((d) => setSkills(d.skills))
       .finally(() => setLoading(false));
+    fetch("/api/user/status")
+      .then((r) => r.json())
+      .then((d) => setDownloadedSlugs(new Set(d.downloadedSlugs)));
   }, []);
 
   const filtered = useMemo(() => {
@@ -230,18 +234,37 @@ export default function SkillsPage() {
 
                   {/* Buttons */}
                   <div className="flex gap-2.5 mt-auto">
-                    <Link
-                      href={`/skills/${skill.slug}`}
-                      className="ks-btn ks-btn-primary !text-[12px] !py-2 !px-4"
-                    >
-                      Download
-                    </Link>
-                    <Link
-                      href={`/skills/${skill.slug}`}
-                      className="ks-btn !text-[12px] !py-2 !px-4"
-                    >
-                      Try it
-                    </Link>
+                    {downloadedSlugs.has(skill.slug) ? (
+                      <>
+                        <Link
+                          href={`/skills/${skill.slug}`}
+                          className="ks-btn !text-[12px] !py-2 !px-4 !border-green-600 !text-green-700"
+                        >
+                          &#10003; Downloaded
+                        </Link>
+                        <Link
+                          href={`/skills/${skill.slug}`}
+                          className="ks-btn !text-[12px] !py-2 !px-4"
+                        >
+                          View skill
+                        </Link>
+                      </>
+                    ) : (
+                      <>
+                        <Link
+                          href={`/skills/${skill.slug}`}
+                          className="ks-btn ks-btn-primary !text-[12px] !py-2 !px-4"
+                        >
+                          Download
+                        </Link>
+                        <Link
+                          href={`/skills/${skill.slug}`}
+                          className="ks-btn !text-[12px] !py-2 !px-4"
+                        >
+                          Try it
+                        </Link>
+                      </>
+                    )}
                   </div>
                 </div>
             ))}
