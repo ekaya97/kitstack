@@ -5,6 +5,7 @@ import { NavAuth } from "./nav-auth";
 const items = [
   { label: "Skills", href: "/skills" },
   { label: "Kits", href: "/kits" },
+  { label: "How it works", href: "/how-it-works" },
   { label: "Pricing", href: "/pricing" },
 ];
 
