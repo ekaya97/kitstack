@@ -10,7 +10,7 @@ export async function getKitsByCategory(db: any, category: string): Promise<Kit[
   return db
     .select()
     .from(kits)
-    .where(eq(kits.category, category))
+    .where(eq(kits.category, category as Kit["category"]))
     .orderBy(kits.name);
 }
 

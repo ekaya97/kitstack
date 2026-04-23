@@ -5,6 +5,8 @@ import type { KitDefinition, KitRegistryItem } from "../framework/types";
 // Import all kit definitions
 import meetingKit from "../kits/meeting/index";
 import crmKit from "../kits/crm/index";
+import expenseKit from "../kits/expense/index";
+import outreachKit from "../kits/outreach/index";
 
 // Kit ID → Lambda ARN env var mapping
 const KIT_ARN_MAP: Record<string, string> = {
@@ -53,12 +55,7 @@ async function seedKit(kit: KitDefinition) {
 }
 
 async function main() {
-  const kits = [meetingKit, crmKit];
-
-  // Add expense and outreach kits when they're built
-  // import expenseKit from "../kits/expense/index";
-  // import outreachKit from "../kits/outreach/index";
-  // kits.push(expenseKit, outreachKit);
+  const kits = [meetingKit, crmKit, expenseKit, outreachKit];
 
   for (const kit of kits) {
     console.log(`\nSeeding ${kit.name} (${kit.tools.length} tools)...`);

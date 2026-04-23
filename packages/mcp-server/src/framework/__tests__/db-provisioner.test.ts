@@ -1,5 +1,8 @@
 import { describe, it, expect, vi, beforeEach } from "vitest";
-import { provisionKitDatabase } from "../db-provisioner";
+
+vi.mock("sst", () => ({
+  Resource: { App: { stage: "production" } },
+}));
 
 vi.mock("../dynamo", () => ({
   putUserKitDb: vi.fn(),
@@ -13,6 +16,8 @@ vi.mock("@libsql/client", () => ({
 
 const mockFetch = vi.fn();
 vi.stubGlobal("fetch", mockFetch);
+
+import { provisionKitDatabase } from "../db-provisioner";
 
 beforeEach(() => {
   vi.clearAllMocks();

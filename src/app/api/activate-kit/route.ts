@@ -1,15 +1,16 @@
 import { NextRequest, NextResponse } from "next/server";
 import { provisionKitDatabase } from "../../../../packages/mcp-server/src/framework/db-provisioner";
 import { getUserKitDb } from "../../../../packages/mcp-server/src/framework/dynamo";
+import { migrationSql as meetingMigrations } from "../../../../packages/mcp-server/src/kits/meeting/migrations";
+import { migrationSql as crmMigrations } from "../../../../packages/mcp-server/src/kits/crm/migrations";
+import { migrationSql as expenseMigrations } from "../../../../packages/mcp-server/src/kits/expense/migrations";
+import { migrationSql as outreachMigrations } from "../../../../packages/mcp-server/src/kits/outreach/migrations";
 
-// Kit migration SQL registry — maps kit slugs to their migration SQL
-// In production, these would be loaded from the kit definitions
 const KIT_MIGRATIONS: Record<string, string> = {
-  "meeting-action-tracker": `
-    CREATE TABLE IF NOT EXISTS meetings (id TEXT PRIMARY KEY, title TEXT NOT NULL, date TEXT NOT NULL, attendees TEXT NOT NULL, raw_notes TEXT NOT NULL, created_at INTEGER);
-    CREATE TABLE IF NOT EXISTS action_items (id TEXT PRIMARY KEY, meeting_id TEXT NOT NULL REFERENCES meetings(id), description TEXT NOT NULL, owner TEXT, deadline TEXT, status TEXT NOT NULL DEFAULT 'open', created_at INTEGER);
-    CREATE TABLE IF NOT EXISTS decisions (id TEXT PRIMARY KEY, meeting_id TEXT NOT NULL REFERENCES meetings(id), description TEXT NOT NULL, created_at INTEGER);
-  `,
+  "meeting-action-tracker": meetingMigrations,
+  crm: crmMigrations,
+  "expense-tax-prep": expenseMigrations,
+  "cold-outreach": outreachMigrations,
 };
 
 export async function POST(request: NextRequest) {
@@ -23,7 +24,6 @@ export async function POST(request: NextRequest) {
     );
   }
 
-  // Check if already provisioned
   const existing = await getUserKitDb(userId, kitId);
   if (existing) {
     return NextResponse.json({
@@ -33,7 +33,6 @@ export async function POST(request: NextRequest) {
     });
   }
 
-  // Look up migration SQL for this kit
   const migrationSql = KIT_MIGRATIONS[kitId];
   if (!migrationSql) {
     return NextResponse.json(

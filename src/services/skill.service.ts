@@ -10,7 +10,7 @@ export async function getSkillsByCategory(db: any, category: string): Promise<Sk
   return db
     .select()
     .from(skills)
-    .where(eq(skills.category, category))
+    .where(eq(skills.category, category as Skill["category"]))
     .orderBy(skills.name);
 }
 

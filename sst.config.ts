@@ -6,6 +6,12 @@ export default $config({
       name: "kitstack",
       removal: input?.stage === "production" ? "retain" : "remove",
       home: "aws",
+      providers: {
+        aws: {
+          profile: process.env.AWS_PROFILE || "enkaprojects",
+          region: "eu-central-1"
+        }
+      }
     };
   },
   async run() {
