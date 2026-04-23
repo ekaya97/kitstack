@@ -11,10 +11,12 @@ export default $config({
   async run() {
     await import("./infra/storage");
     const { web } = await import("./infra/web");
-    await import("./infra/mcp");
+    const { mcpRouter, appData } = await import("./infra/mcp");
 
     return {
       url: web.url,
+      mcpUrl: mcpRouter.url,
+      appDataUrl: appData.url,
     };
   },
 });
