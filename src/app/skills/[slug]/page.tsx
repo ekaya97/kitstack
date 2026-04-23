@@ -17,6 +17,9 @@ import { ScrollTabs } from "@/components/shared/scroll-tabs";
 import { HeaderRating } from "@/components/reviews/header-rating";
 import { ReviewSection } from "@/components/reviews/review-section";
 import { DownloadButton } from "@/components/shared/download-button";
+import { SetupGuide } from "@/components/shared/setup-guide";
+import { WishlistButton } from "@/components/shared/wishlist-button";
+import { ShareButton } from "@/components/shared/share-modal";
 
 export async function generateStaticParams() {
   const skills = await getAllSkillCards();
@@ -124,7 +127,7 @@ export default async function SkillDetailPage({
   ];
 
   return (
-    <div className="bg-ks-paper">
+    <div className="bg-ks-paper min-h-screen flex flex-col">
       <Nav active="Skills" />
 
       {/* ── HEADER ── */}
@@ -248,15 +251,8 @@ export default async function SkillDetailPage({
 
               {/* Action row */}
               <div className="flex justify-between border-t border-ks-hair pt-3">
-                <button className="font-sans text-xs text-ks-muted hover:text-ks-ink cursor-pointer">
-                  &#9825; Wishlist
-                </button>
-                <button className="font-sans text-xs text-ks-muted hover:text-ks-ink cursor-pointer">
-                  &#8679; Helpful
-                </button>
-                <button className="font-sans text-xs text-ks-muted hover:text-ks-ink cursor-pointer">
-                  &#8599; Share
-                </button>
+                <WishlistButton targetType="skill" targetSlug={slug} />
+                <ShareButton type="skill" slug={slug} title={skill.name} />
               </div>
             </div>
           </div>
@@ -416,44 +412,14 @@ export default async function SkillDetailPage({
         <div className="font-mono text-[11px] text-ks-muted tracking-[1px] mb-2">
           SETUP
         </div>
-        <h2 className="font-serif text-[48px] tracking-tight mb-10">
+        <h2 className="font-serif text-[48px] tracking-tight mb-3">
           Download. Upload. Chat.
         </h2>
+        <p className="font-sans text-[15px] text-ks-muted mb-10 max-w-xl leading-relaxed">
+          This skill works with any major AI assistant. Pick your provider below for step-by-step instructions.
+        </p>
 
-        <div className="grid grid-cols-4 gap-4">
-          {[
-            {
-              n: "01",
-              title: "Download",
-              desc: "Click the download button above. You get a .zip file with everything inside.",
-            },
-            {
-              n: "02",
-              title: "Open Claude",
-              desc: "Go to claude.ai (or ChatGPT, or VS Code). Open a new conversation.",
-            },
-            {
-              n: "03",
-              title: "Upload",
-              desc: "Drag the .zip into Claude\u2019s Skills folder, or upload it as a project file.",
-            },
-            {
-              n: "04",
-              title: "Chat",
-              desc: "Tell Claude what you need. The skill\u2019s system prompt and templates kick in automatically.",
-            },
-          ].map((step) => (
-            <div key={step.n} className="ks-card p-6">
-              <div className="font-serif text-[56px] text-ks-accent italic leading-none">
-                {step.n}
-              </div>
-              <div className="font-serif text-[22px] mt-3">{step.title}</div>
-              <div className="font-sans text-[13px] text-ks-muted mt-2 leading-relaxed">
-                {step.desc}
-              </div>
-            </div>
-          ))}
-        </div>
+        <SetupGuide />
       </section>
 
       {/* ── REVIEWS ── */}

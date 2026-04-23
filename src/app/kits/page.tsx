@@ -41,7 +41,7 @@ export default async function KitsPage() {
     // Not logged in — no activated kits
   }
   return (
-    <div className="bg-ks-paper">
+    <div className="bg-ks-paper min-h-screen flex flex-col">
       <Nav active="Kits" />
 
       {/* HEADER */}

@@ -55,7 +55,7 @@ export default function SkillsPage() {
   }, [skills, activeCat, query]);
 
   return (
-    <div className="bg-ks-paper min-h-screen">
+    <div className="bg-ks-paper min-h-screen flex flex-col">
       <Nav active="Skills" />
 
       {/* HEADER */}
@@ -110,11 +110,10 @@ export default function SkillsPage() {
             setSearchOpen(!searchOpen);
             if (searchOpen) setQuery("");
           }}
-          className={`w-9 h-9 rounded-full border flex items-center justify-center transition-colors cursor-pointer shrink-0 ${
-            searchOpen
-              ? "border-ks-accent bg-ks-accent text-white"
-              : "border-ks-hair bg-white text-ks-muted hover:border-ks-accent"
-          }`}
+          className={`w-9 h-7 rounded-full border flex items-center justify-center transition-colors cursor-pointer shrink-0 ${searchOpen
+            ? "border-ks-accent bg-ks-accent text-white"
+            : "border-ks-hair bg-white text-ks-muted hover:border-ks-accent"
+            }`}
           title="Search"
         >
           {searchOpen ? (
@@ -135,7 +134,7 @@ export default function SkillsPage() {
             value={query}
             onChange={(e) => setQuery(e.target.value)}
             placeholder="Search skills by name, category, description..."
-            className="font-sans text-sm bg-white border border-ks-hair rounded-full px-4 py-2 flex-1 outline-none focus:border-ks-accent transition-colors animate-[slideIn_0.2s_ease-out]"
+            className="font-sans text-sm bg-white border border-ks-hair max-h-8 max-w-3xl rounded-full px-4 py-2 flex-1 outline-none focus:border-ks-accent transition-colors animate-[slideIn_0.2s_ease-out]"
           />
         ) : (
           categories.map((cat) => (
@@ -187,86 +186,86 @@ export default function SkillsPage() {
         ) : (
           <div className="grid grid-cols-3 gap-[18px]">
             {filtered.map((skill) => (
-                <div key={skill.slug} className="ks-card p-5 flex flex-col">
-                  {/* Top row: category + FREE chip */}
-                  <div className="flex justify-between items-center mb-3">
-                    <div className="flex items-center gap-2">
-                      <CatMark cat={skill.cat} />
-                      <span className="ks-chip !text-[10px]">
-                        {skill.cat}
-                      </span>
-                    </div>
-                    <span className="ks-chip !text-[10px] !border-ks-ink !text-ks-ink">
-                      FREE
+              <div key={skill.slug} className="ks-card p-5 flex flex-col">
+                {/* Top row: category + FREE chip */}
+                <div className="flex justify-between items-center mb-3">
+                  <div className="flex items-center gap-2">
+                    <CatMark cat={skill.cat} />
+                    <span className="ks-chip !text-[10px]">
+                      {skill.cat}
                     </span>
                   </div>
-
-                  {/* Title + description */}
-                  <h3 className="font-serif text-[22px] tracking-tight leading-tight mb-1.5">
-                    {skill.name}
-                  </h3>
-                  <p className="font-sans text-[13px] text-ks-muted leading-relaxed mb-4 flex-1">
-                    {skill.desc}
-                  </p>
-
-                  {/* Metadata */}
-                  <div className="font-mono text-[10px] text-ks-muted tracking-wide mb-3.5 flex gap-3">
-                    <span>{skill.files} files</span>
-                    <span>&middot;</span>
-                    <span>{skill.size}</span>
-                    <span>&middot;</span>
-                    <span>
-                      {skill.downloads.toLocaleString()} downloads
-                    </span>
-                  </div>
-
-                  {/* Upgrade banner (if applicable) */}
-                  {skill.upgradeTo && (
-                    <Link href={`/kits/${skill.upgradeTo}`} className="bg-ks-accent-soft rounded-lg px-3.5 py-2.5 mb-3.5 block hover:opacity-90 transition-opacity">
-                      <div className="font-mono text-[9px] text-ks-accent-deep tracking-wider mb-1">
-                        UPGRADE TO KIT
-                      </div>
-                      <div className="font-sans text-[12px] text-ks-accent-deep leading-snug">
-                        {skill.upgradeHook}
-                      </div>
-                    </Link>
-                  )}
-
-                  {/* Buttons */}
-                  <div className="flex gap-2.5 mt-auto">
-                    {downloadedSlugs.has(skill.slug) ? (
-                      <>
-                        <Link
-                          href={`/skills/${skill.slug}`}
-                          className="ks-btn !text-[12px] !py-2 !px-4 !border-green-600 !text-green-700"
-                        >
-                          &#10003; Downloaded
-                        </Link>
-                        <Link
-                          href={`/skills/${skill.slug}`}
-                          className="ks-btn !text-[12px] !py-2 !px-4"
-                        >
-                          View skill
-                        </Link>
-                      </>
-                    ) : (
-                      <>
-                        <Link
-                          href={`/skills/${skill.slug}`}
-                          className="ks-btn ks-btn-primary !text-[12px] !py-2 !px-4"
-                        >
-                          Download
-                        </Link>
-                        <Link
-                          href={`/skills/${skill.slug}`}
-                          className="ks-btn !text-[12px] !py-2 !px-4"
-                        >
-                          Try it
-                        </Link>
-                      </>
-                    )}
-                  </div>
+                  <span className="ks-chip !text-[10px] !border-ks-ink !text-ks-ink">
+                    FREE
+                  </span>
                 </div>
+
+                {/* Title + description */}
+                <h3 className="font-serif text-[22px] tracking-tight leading-tight mb-1.5">
+                  {skill.name}
+                </h3>
+                <p className="font-sans text-[13px] text-ks-muted leading-relaxed mb-4 flex-1">
+                  {skill.desc}
+                </p>
+
+                {/* Metadata */}
+                <div className="font-mono text-[10px] text-ks-muted tracking-wide mb-3.5 flex gap-3">
+                  <span>{skill.files} files</span>
+                  <span>&middot;</span>
+                  <span>{skill.size}</span>
+                  <span>&middot;</span>
+                  <span>
+                    {skill.downloads.toLocaleString()} downloads
+                  </span>
+                </div>
+
+                {/* Upgrade banner (if applicable) */}
+                {skill.upgradeTo && (
+                  <Link href={`/kits/${skill.upgradeTo}`} className="bg-ks-accent-soft rounded-lg px-3.5 py-2.5 mb-3.5 block hover:opacity-90 transition-opacity">
+                    <div className="font-mono text-[9px] text-ks-accent-deep tracking-wider mb-1">
+                      UPGRADE TO KIT
+                    </div>
+                    <div className="font-sans text-[12px] text-ks-accent-deep leading-snug">
+                      {skill.upgradeHook}
+                    </div>
+                  </Link>
+                )}
+
+                {/* Buttons */}
+                <div className="flex gap-2.5 mt-auto">
+                  {downloadedSlugs.has(skill.slug) ? (
+                    <>
+                      <Link
+                        href={`/skills/${skill.slug}`}
+                        className="ks-btn !text-[12px] !py-2 !px-4 !border-green-600 !text-green-700"
+                      >
+                        &#10003; Downloaded
+                      </Link>
+                      <Link
+                        href={`/skills/${skill.slug}`}
+                        className="ks-btn !text-[12px] !py-2 !px-4"
+                      >
+                        View skill
+                      </Link>
+                    </>
+                  ) : (
+                    <>
+                      <Link
+                        href={`/skills/${skill.slug}`}
+                        className="ks-btn ks-btn-primary !text-[12px] !py-2 !px-4"
+                      >
+                        Download
+                      </Link>
+                      <Link
+                        href={`/skills/${skill.slug}`}
+                        className="ks-btn !text-[12px] !py-2 !px-4"
+                      >
+                        Try it
+                      </Link>
+                    </>
+                  )}
+                </div>
+              </div>
             ))}
           </div>
         )}

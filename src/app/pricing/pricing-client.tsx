@@ -41,21 +41,19 @@ export function PricingClient({ kits }: PricingClientProps) {
         <div className="mt-8 inline-flex items-center bg-ks-paper-warm rounded-full p-1 border border-ks-hair">
           <button
             onClick={() => setYearly(false)}
-            className={`px-5 py-2 rounded-full font-sans text-sm transition-colors ${
-              !yearly
-                ? "bg-ks-ink text-ks-paper font-semibold"
-                : "text-ks-muted hover:text-ks-ink"
-            }`}
+            className={`px-5 py-2 rounded-full font-sans text-sm transition-colors ${!yearly
+              ? "bg-ks-ink text-ks-paper font-semibold"
+              : "text-ks-muted hover:text-ks-ink"
+              }`}
           >
             Monthly
           </button>
           <button
             onClick={() => setYearly(true)}
-            className={`px-5 py-2 rounded-full font-sans text-sm transition-colors ${
-              yearly
-                ? "bg-ks-ink text-ks-paper font-semibold"
-                : "text-ks-muted hover:text-ks-ink"
-            }`}
+            className={`px-5 py-2 rounded-full font-sans text-sm transition-colors ${yearly
+              ? "bg-ks-ink text-ks-paper font-semibold"
+              : "text-ks-muted hover:text-ks-ink"
+              }`}
           >
             Yearly &middot; save 16%
           </button>
@@ -79,7 +77,7 @@ export function PricingClient({ kits }: PricingClientProps) {
             <ul className="m-0 p-0 list-none font-sans text-[13px] text-ks-ink2 leading-[2]">
               <li>&#10003; Every skill, free to download</li>
               <li>&#10003; Works in Claude, Code &amp; VS Code</li>
-              <li>&#10003; 1 free kit trial per day</li>
+              <li>&#10003; 1 free kit trial per day <span className="text-xs italic text-ks-faint">coming soon</span></li>
               <li>&#10003; Email updates</li>
             </ul>
             <button className="ks-btn mt-6 w-full !text-[13px]">
@@ -101,8 +99,7 @@ export function PricingClient({ kits }: PricingClientProps) {
             <ul className="m-0 p-0 list-none font-sans text-[13px] text-ks-ink2 leading-[2]">
               <li>&#10003; 1 kit of your choice</li>
               <li>&#10003; Private database, EU-hosted</li>
-              <li>&#10003; Full data export</li>
-              <li>&#10003; Multi-client (Claude, VS Code)</li>
+              <li>&#10003; Multi-client (Claude, ChatGPT, Gemini)</li>
               <li>&#10003; Cancel anytime</li>
             </ul>
             <button className="ks-btn ks-btn-primary mt-6 w-full !text-[13px]">
@@ -132,8 +129,8 @@ export function PricingClient({ kits }: PricingClientProps) {
               </div>
               <ul className="m-0 p-0 list-none font-sans text-[13px] text-ks-paper-deep leading-[2]">
                 <li>&#10003; Every kit included</li>
-                <li>&#10003; Priority support</li>
-                <li>&#10003; Early access to new kits</li>
+                <li>&#10003; Full data export</li>
+                <li>&#10003; Early access + Priority Support</li>
                 <li>
                   &#10003; Replaces{" "}
                   <span className="ks-strike text-ks-faint">
@@ -153,21 +150,23 @@ export function PricingClient({ kits }: PricingClientProps) {
             <div className="font-mono text-[10px] text-ks-muted tracking-wider mb-1">
               TEAM
             </div>
-            <div className="font-serif text-[44px] tracking-tight leading-none">
-              &euro;{price(14)}
+            <div className="font-serif text-[40px] tracking-tight leading-none">
+              Get in touch
             </div>
             <div className="font-sans text-xs text-ks-muted mt-1 mb-6">
               {yearly ? "/year per seat" : "/seat/mo"}
             </div>
             <ul className="m-0 p-0 list-none font-sans text-[13px] text-ks-ink2 leading-[2]">
               <li>&#10003; Shared team databases</li>
-              <li>&#10003; Roles &amp; permissions</li>
+              <li>&#10003; Roles &amp; permissions &amp; SSO &amp; Audit logs</li>
               <li>&#10003; Centralised team billing</li>
               <li>&#10003; Onboarding call</li>
             </ul>
-            <button className="ks-btn mt-6 w-full !text-[13px]">
-              Talk to us &rarr;
-            </button>
+            <a href="mailto:hello@kitstack.co">
+              <button className="ks-btn mt-6 w-full !text-[13px]">
+                Talk to us &rarr;
+              </button>
+            </a>
           </div>
         </div>
       </section>
@@ -192,9 +191,8 @@ export function PricingClient({ kits }: PricingClientProps) {
               {kits.map((kit, i) => (
                 <div
                   key={kit.slug}
-                  className={`flex items-center justify-between py-4 ${
-                    i < kits.length - 1 ? "border-b border-ks-hair" : ""
-                  }`}
+                  className={`flex items-center justify-between py-4 ${i < kits.length - 1 ? "border-b border-ks-hair" : ""
+                    }`}
                 >
                   <div>
                     <div className="font-serif text-lg">{kit.name}</div>

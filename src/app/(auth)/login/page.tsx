@@ -1,7 +1,7 @@
 "use client";
 
 import { useState } from "react";
-import { useRouter } from "next/navigation";
+import { useRouter, useSearchParams } from "next/navigation";
 import { motion, AnimatePresence } from "framer-motion";
 import { authClient } from "@/lib/auth-client";
 
@@ -16,6 +16,9 @@ const fade = {
 
 export default function LoginPage() {
   const router = useRouter();
+  const searchParams = useSearchParams();
+  const redirectTo = searchParams.get("redirect") || "/dashboard";
+  const pendingAction = searchParams.get("action");
   const [step, setStep] = useState<Step>("email");
   const [email, setEmail] = useState("");
   const [name, setName] = useState("");
@@ -71,13 +74,19 @@ export default function LoginPage() {
       }
     }
 
-    router.push("/dashboard");
+    const dest = pendingAction
+      ? `${redirectTo}?action=${pendingAction}`
+      : redirectTo;
+    router.push(dest);
   };
 
   const handleOAuth = async (provider: "google" | "github") => {
+    const dest = pendingAction
+      ? `${redirectTo}?action=${pendingAction}`
+      : redirectTo;
     await authClient.signIn.social({
       provider,
-      callbackURL: "/dashboard",
+      callbackURL: dest,
     });
   };
 

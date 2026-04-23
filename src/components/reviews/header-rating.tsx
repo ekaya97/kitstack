@@ -1,10 +1,11 @@
 "use client";
 
 import { useState } from "react";
-import { useRouter } from "next/navigation";
+import { useRouter, usePathname } from "next/navigation";
 import { authClient } from "@/lib/auth-client";
 import { Stars } from "@/components/ui/stars";
 import { RatingInput } from "./rating-input";
+import { loginUrl } from "@/lib/auth-redirect";
 
 export function HeaderRating({
   targetType,
@@ -18,6 +19,7 @@ export function HeaderRating({
   count: number;
 }) {
   const router = useRouter();
+  const pathname = usePathname();
   const { data: session } = authClient.useSession();
   const [showInput, setShowInput] = useState(false);
   const [submitting, setSubmitting] = useState(false);
@@ -29,7 +31,7 @@ export function HeaderRating({
 
   const handleQuickRate = async (value: number) => {
     if (!session) {
-      router.push("/login");
+      router.push(loginUrl(pathname, "rate"));
       return;
     }
 
@@ -108,7 +110,7 @@ export function HeaderRating({
         <button
           onClick={() => {
             if (!session) {
-              router.push("/login");
+              router.push(loginUrl(pathname, "rate"));
               return;
             }
             setShowInput(true);

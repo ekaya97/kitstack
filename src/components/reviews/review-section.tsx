@@ -1,8 +1,9 @@
 "use client";
 
 import { useState, useEffect, useCallback } from "react";
-import { useRouter } from "next/navigation";
+import { useRouter, usePathname } from "next/navigation";
 import { authClient } from "@/lib/auth-client";
+import { loginUrl } from "@/lib/auth-redirect";
 import { Avatar } from "@/components/ui/avatar";
 import { Stars } from "@/components/ui/stars";
 import { RatingInput } from "./rating-input";
@@ -70,6 +71,7 @@ export function ReviewSection({
   initialCount: number;
 }) {
   const router = useRouter();
+  const pathname = usePathname();
   const { data: session } = authClient.useSession();
 
   const [reviews, setReviews] = useState<Review[]>(initialReviews);
@@ -350,7 +352,7 @@ export function ReviewSection({
             )
           ) : (
             <a
-              href="/login"
+              href={loginUrl(pathname, "review")}
               className="ks-card p-4 text-center font-sans text-[13px] text-ks-muted hover:text-ks-ink hover:border-ks-accent transition-colors block mb-2"
             >
               Sign in to leave a review &rarr;

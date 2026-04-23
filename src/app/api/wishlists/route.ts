@@ -4,13 +4,22 @@ import { headers } from "next/headers";
 import {
   addToWishlist,
   removeFromWishlist,
+  isWishlisted,
   getUserWishlist,
 } from "@/services/wishlist.service";
 
-export async function GET() {
+export async function GET(request: NextRequest) {
   const session = await auth.api.getSession({ headers: await headers() });
   if (!session) {
-    return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+    return NextResponse.json({ wishlisted: false, wishlists: [] });
+  }
+
+  // Check a specific item
+  const targetType = request.nextUrl.searchParams.get("targetType");
+  const targetSlug = request.nextUrl.searchParams.get("targetSlug");
+  if (targetType && targetSlug) {
+    const result = await isWishlisted(session.user.id, targetType, targetSlug);
+    return NextResponse.json({ wishlisted: result });
   }
 
   const items = await getUserWishlist(session.user.id);
