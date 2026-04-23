@@ -3,10 +3,10 @@ import { nanoid } from "nanoid";
 import { eq, and } from "drizzle-orm";
 import { getSessionOrNull } from "@/lib/auth-session";
 import { getSubscription } from "@/services/subscription.service";
+import { canActivateKit, reactivateKit } from "@/services/kit-activation.service";
 import { db } from "@/lib/db";
 import { kitActivations } from "@/db/schema";
 
-// Valid kit slugs
 const VALID_KIT_SLUGS = [
   "crm-kit",
   "expense-tax-prep-kit",
@@ -31,47 +31,72 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ error: `Unknown kit: ${kitSlug}` }, { status: 404 });
   }
 
-  // Check subscription
   const subscription = await getSubscription(session.user.id);
   if (!subscription) {
     return NextResponse.json(
-      { error: "Active subscription required. Subscribe at /pricing first." },
+      { error: "Active subscription required." },
       { status: 403 }
     );
   }
 
-  // Check if already activated
-  const existingActivation = await db
+  // Check if already active
+  const existing = await db
     .select()
     .from(kitActivations)
     .where(
       and(
         eq(kitActivations.userId, session.user.id),
-        eq(kitActivations.kitSlug, kitSlug),
-        eq(kitActivations.status, "active")
+        eq(kitActivations.kitSlug, kitSlug)
       )
     )
     .then((r) => r[0]);
 
-  if (existingActivation) {
+  if (existing?.status === "active") {
     return NextResponse.json({ status: "already_active", kitSlug });
   }
 
-  // Record activation
-  // DB provisioning happens when the user connects the MCP connector —
-  // the MCP router's tool-dispatcher provisions on first tool call
-  await db
-    .insert(kitActivations)
-    .values({
-      id: nanoid(),
-      userId: session.user.id,
-      kitSlug,
-      status: "active",
-    })
-    .onConflictDoUpdate({
-      target: [kitActivations.userId, kitActivations.kitSlug],
-      set: { status: "active" },
-    });
+  // If previously deactivated/archived, reactivate (still counts against limit)
+  if (existing) {
+    const { allowed, activeCount, limit } = await canActivateKit(
+      session.user.id,
+      subscription.plan
+    );
+    if (!allowed) {
+      return NextResponse.json(
+        {
+          error: `Your ${subscription.plan} plan allows ${limit} active kit${limit !== 1 ? "s" : ""}. You have ${activeCount} active. Deactivate one first.`,
+          activeCount,
+          limit,
+        },
+        { status: 403 }
+      );
+    }
+    await reactivateKit(session.user.id, kitSlug);
+    return NextResponse.json({ status: "activated", kitSlug });
+  }
+
+  // New activation — check limit
+  const { allowed, activeCount, limit } = await canActivateKit(
+    session.user.id,
+    subscription.plan
+  );
+  if (!allowed) {
+    return NextResponse.json(
+      {
+        error: `Your ${subscription.plan} plan allows ${limit} active kit${limit !== 1 ? "s" : ""}. You have ${activeCount} active. Deactivate one first.`,
+        activeCount,
+        limit,
+      },
+      { status: 403 }
+    );
+  }
+
+  await db.insert(kitActivations).values({
+    id: nanoid(),
+    userId: session.user.id,
+    kitSlug,
+    status: "active",
+  });
 
   return NextResponse.json({ status: "activated", kitSlug });
 }

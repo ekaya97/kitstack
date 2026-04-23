@@ -1,6 +1,8 @@
 import { NextResponse } from "next/server";
-import { eq, and } from "drizzle-orm";
+import { eq, and, ne } from "drizzle-orm";
 import { getSessionOrNull } from "@/lib/auth-session";
+import { getSubscription } from "@/services/subscription.service";
+import { getActiveKitCount, PLAN_LIMITS } from "@/services/kit-activation.service";
 import { db } from "@/lib/db";
 import { kitActivations, kits } from "@/db/schema";
 
@@ -10,10 +12,18 @@ export async function GET() {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
 
+  const subscription = await getSubscription(session.user.id);
+  const plan = subscription?.plan ?? "starter";
+  const limit = PLAN_LIMITS[plan as keyof typeof PLAN_LIMITS] ?? 0;
+  const activeCount = await getActiveKitCount(session.user.id);
+
+  // Get all activations (active + deactivated, not archived)
   const activations = await db
     .select({
       kitSlug: kitActivations.kitSlug,
+      status: kitActivations.status,
       activatedAt: kitActivations.createdAt,
+      deactivatedAt: kitActivations.deactivatedAt,
       kitName: kits.name,
       kitCategory: kits.category,
       kitDescription: kits.description,
@@ -28,9 +38,14 @@ export async function GET() {
     .where(
       and(
         eq(kitActivations.userId, session.user.id),
-        eq(kitActivations.status, "active")
+        ne(kitActivations.status, "archived")
       )
     );
 
-  return NextResponse.json({ kits: activations });
+  return NextResponse.json({
+    kits: activations,
+    plan,
+    activeCount,
+    limit: limit === Infinity ? null : limit,
+  });
 }

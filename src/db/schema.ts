@@ -127,7 +127,10 @@ export const kitActivations = sqliteTable("kit_activations", {
   id: text("id").primaryKey(),
   userId: text("user_id").notNull(),
   kitSlug: text("kit_slug").notNull(),
-  status: text("status", { enum: ["active", "deactivated"] }).notNull().default("active"),
+  status: text("status", {
+    enum: ["active", "deactivated", "archived"],
+  }).notNull().default("active"),
+  deactivatedAt: integer("deactivated_at", { mode: "timestamp" }),
   createdAt: integer("created_at", { mode: "timestamp" }).$defaultFn(() => new Date()),
 }, (table) => [
   uniqueIndex("kit_activations_unique_idx").on(table.userId, table.kitSlug),
