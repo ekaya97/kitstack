@@ -39,7 +39,7 @@ const columns: { heading: string; links: FooterLink[] }[] = [
 
 export function Footer() {
   return (
-    <footer className="px-12 pt-12 pb-8 border-t border-ks-hair bg-ks-paper-warm">
+    <footer className="mt-auto px-12 pt-12 pb-8 border-t border-ks-hair bg-ks-paper-warm">
       <div className="grid grid-cols-[1.5fr_1fr_1fr_1fr] gap-10">
         <div>
           <Link href="/" className="flex items-center gap-2.5 mb-3">

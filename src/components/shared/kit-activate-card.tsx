@@ -4,6 +4,8 @@ import { useState, useEffect } from "react";
 import Link from "next/link";
 import { authClient } from "@/lib/auth-client";
 import { McpConnectModal } from "./mcp-connect-modal";
+import { WishlistButton } from "./wishlist-button";
+import { ShareButton } from "./share-modal";
 
 interface Props {
   kitSlug: string;
@@ -198,12 +200,8 @@ export function KitActivateCard({
 
         {/* Action row */}
         <div className="flex justify-between border-t border-ks-hair pt-4 mb-5">
-          <button className="font-sans text-xs text-ks-muted hover:text-ks-ink cursor-pointer">
-            &#9825; Wishlist
-          </button>
-          <button className="font-sans text-xs text-ks-muted hover:text-ks-ink cursor-pointer">
-            &#8599; Share
-          </button>
+          <WishlistButton targetType="kit" targetSlug={kitSlug} />
+          <ShareButton type="kit" slug={kitSlug} title={kitName} />
         </div>
 
         {/* Features checklist */}

@@ -52,7 +52,7 @@ export default async function AuthorProfilePage({
   const pinnedKits = kits.slice(0, 3);
 
   return (
-    <div className="bg-ks-paper min-h-screen">
+    <div className="bg-ks-paper min-h-screen flex flex-col">
       <Nav />
 
       <div className="px-12 pt-10 pb-16 grid grid-cols-[300px_1fr] gap-12 items-start">

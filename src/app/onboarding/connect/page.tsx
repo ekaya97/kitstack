@@ -1,6 +1,9 @@
 import { Nav } from "@/components/shared/nav";
 import { Footer } from "@/components/shared/footer";
 import { CatMark } from "@/components/ui/cat-mark";
+import { getAllKitCards } from "@/services/kit.service";
+
+const MCP_URL = "mcp.kitstack.co";
 
 const steps = [
   { n: "01", label: "Copy URL", status: "done" as const },
@@ -17,16 +20,11 @@ const compatibleClients = [
   "Cursor",
 ];
 
-const previewKits = [
-  { name: "CRM Kit", cat: "Revenue", features: 9 },
-  { name: "Expense & Tax Prep Kit", cat: "Finance", features: 6 },
-  { name: "Cold Outreach Kit", cat: "Sales", features: 6 },
-  { name: "Meeting Action Tracker Kit", cat: "Ops", features: 6 },
-];
+export default async function OnboardingConnectPage() {
+  const kits = await getAllKitCards();
 
-export default function OnboardingConnectPage() {
   return (
-    <div className="bg-ks-paper">
+    <div className="bg-ks-paper min-h-screen flex flex-col">
       <Nav />
 
       {/* HEADER */}
@@ -99,14 +97,13 @@ export default function OnboardingConnectPage() {
       <section className="px-16 pb-12 grid grid-cols-2 gap-6">
         {/* LEFT: INSTRUCTIONS */}
         <div className="flex flex-col gap-6">
-          {/* Step 1: Copy */}
           <div>
             <div className="font-mono text-[10px] text-ks-muted tracking-wider mb-2.5">
               STEP 1 &middot; COPY
             </div>
             <div className="flex items-center gap-2 bg-ks-ink rounded-xl px-4 py-3.5">
               <code className="font-mono text-[14px] text-ks-paper flex-1">
-                mcp.kitstack.co/u/lena
+                {MCP_URL}
               </code>
               <button className="font-mono text-[11px] text-ks-accent hover:text-ks-accent-deep font-semibold shrink-0 border border-ks-ink2 rounded-md px-3 py-1.5 hover:border-ks-accent transition-colors">
                 COPY
@@ -114,13 +111,11 @@ export default function OnboardingConnectPage() {
             </div>
           </div>
 
-          {/* Step 2: Paste in Claude */}
           <div>
             <div className="font-mono text-[10px] text-ks-muted tracking-wider mb-2.5">
               STEP 2 &middot; PASTE IN CLAUDE
             </div>
 
-            {/* Desktop instructions */}
             <div className="ks-card p-4 mb-3">
               <div className="font-sans text-[13px] font-semibold text-ks-ink mb-2">
                 Desktop &amp; web
@@ -144,7 +139,6 @@ export default function OnboardingConnectPage() {
               </ol>
             </div>
 
-            {/* Mobile instructions */}
             <div className="ks-card p-4 mb-4">
               <div className="font-sans text-[13px] font-semibold text-ks-ink mb-2">
                 Mobile
@@ -155,7 +149,6 @@ export default function OnboardingConnectPage() {
               </div>
             </div>
 
-            {/* Compatible clients */}
             <div className="flex flex-wrap gap-2">
               {compatibleClients.map((client) => (
                 <span key={client} className="ks-chip !text-[11px]">
@@ -172,9 +165,7 @@ export default function OnboardingConnectPage() {
             PREVIEW
           </div>
 
-          {/* Fake Claude settings window */}
           <div className="border border-ks-hair rounded-xl bg-white overflow-hidden shadow-[0_8px_30px_-10px_rgba(0,0,0,0.12)]">
-            {/* Title bar */}
             <div className="px-3.5 py-2.5 border-b border-ks-hair flex items-center gap-2 bg-[#fafaf7]">
               <span className="w-2.5 h-2.5 rounded-full bg-[#e06b4a]" />
               <span className="w-2.5 h-2.5 rounded-full bg-[#f4c95f]" />
@@ -184,16 +175,14 @@ export default function OnboardingConnectPage() {
               </div>
             </div>
 
-            {/* Settings content */}
             <div className="p-5">
-              {/* URL input */}
               <div className="mb-4">
                 <div className="font-sans text-[12px] text-ks-muted mb-1.5">
                   Connection URL
                 </div>
                 <div className="flex items-center gap-2">
                   <div className="flex-1 border border-ks-accent rounded-lg px-3.5 py-2.5 font-mono text-[13px] text-ks-ink bg-ks-accent-soft/30">
-                    mcp.kitstack.co/u/lena
+                    {MCP_URL}
                   </div>
                   <button className="ks-btn ks-btn-accent !py-2.5 !px-4 !text-[12px]">
                     Authorize &rarr;
@@ -201,15 +190,13 @@ export default function OnboardingConnectPage() {
                 </div>
               </div>
 
-              {/* Divider */}
               <div className="border-t border-ks-hair my-4" />
 
-              {/* Kit list preview (post-auth) */}
               <div className="font-mono text-[9px] text-ks-muted tracking-wider mb-2.5">
-                AUTHORIZED &middot; ALL KITS AVAILABLE
+                AUTHORIZED &middot; {kits.length} KITS AVAILABLE
               </div>
               <div className="flex flex-col gap-2">
-                {previewKits.map((kit) => (
+                {kits.map((kit) => (
                   <div
                     key={kit.name}
                     className="flex items-center justify-between bg-ks-paper-warm rounded-lg px-3.5 py-2.5"
@@ -221,7 +208,7 @@ export default function OnboardingConnectPage() {
                       </span>
                     </div>
                     <span className="font-mono text-[10px] text-ks-muted">
-                      {kit.features} features
+                      {kit.tools.length} actions
                     </span>
                   </div>
                 ))}
@@ -233,7 +220,6 @@ export default function OnboardingConnectPage() {
             </div>
           </div>
 
-          {/* Stuck? help */}
           <div className="bg-ks-paper-warm border border-ks-hair rounded-xl p-4">
             <div className="font-sans text-[13px] font-semibold text-ks-ink mb-1">
               Stuck?
@@ -242,28 +228,13 @@ export default function OnboardingConnectPage() {
               Make sure you&apos;re using a Claude client that supports
               connectors. If you see &quot;invalid URL,&quot; check for trailing
               spaces. Still stuck?{" "}
-              <span className="text-ks-accent cursor-pointer hover:underline">
+              <a href="mailto:support@kitstack.co" className="text-ks-accent hover:underline">
                 support@kitstack.co
-              </span>
+              </a>
             </div>
           </div>
         </div>
       </section>
-
-      {/* BOTTOM BAR */}
-      <div className="bg-ks-paper-warm border-t border-ks-hair px-16 py-4 flex items-center justify-between">
-        <div className="font-sans text-[14px] text-ks-ink">
-          Done the paste?
-        </div>
-        <div className="flex gap-2.5">
-          <button className="ks-btn !py-2.5 !px-4 !text-[13px]">
-            Skip for now
-          </button>
-          <button className="ks-btn ks-btn-primary !py-2.5 !px-5 !text-[13px]">
-            Verify connection &rarr;
-          </button>
-        </div>
-      </div>
 
       <Footer />
     </div>

@@ -16,7 +16,7 @@ import Link from "next/link";
 export default async function Landing() {
   const kits = await getAllKitCards();
   return (
-    <div className="bg-ks-paper">
+    <div className="bg-ks-paper min-h-screen flex flex-col">
       <Nav />
 
       {/* HERO */}
@@ -249,80 +249,66 @@ export default async function Landing() {
       </section>
 
       {/* SAVINGS MATH */}
-      <section className="px-16 py-[72px] bg-ks-ink text-ks-paper">
-        <div className="grid grid-cols-[1fr_1.3fr] gap-[60px] items-center">
-          <div>
-            <div className="font-mono text-[11px] text-ks-accent tracking-[1px] mb-2.5">
-              THE MATH
-            </div>
-            <h2 className="font-serif text-[56px] leading-none tracking-tight">
-              &euro;5/mo replaces
-              <br />
-              <span className="italic text-ks-accent">&euro;178/mo</span> of
-              SaaS.
-            </h2>
-            <div className="font-sans text-[15px] text-ks-paper-deep mt-[22px] leading-relaxed max-w-[420px]">
-              Starter subscription unlocks every kit. Your data stays yours
-              &mdash; exportable anytime.
-            </div>
-          </div>
+      {(() => {
+        const totalSavings = kits.reduce((s, k) => s + k.replacesValue, 0);
+        return (
+          <section className="px-16 py-[72px] bg-ks-ink text-ks-paper">
+            <div className="grid grid-cols-[1fr_1.3fr] gap-[60px] items-center">
+              <div>
+                <div className="font-mono text-[11px] text-ks-accent tracking-[1px] mb-2.5">
+                  THE MATH
+                </div>
+                <h2 className="font-serif text-[56px] leading-none tracking-tight">
+                  &euro;5/mo replaces
+                  <br />
+                  <span className="italic text-ks-accent">
+                    &euro;{totalSavings}/mo
+                  </span>{" "}
+                  of SaaS.
+                </h2>
+                <div className="font-sans text-[15px] text-ks-paper-deep mt-[22px] leading-relaxed max-w-[420px]">
+                  Starter subscription unlocks every kit. Your data stays yours
+                  &mdash; exportable anytime.
+                </div>
+              </div>
 
-          <div className="flex flex-col gap-2.5">
-            {[
-              {
-                name: "Pipedrive + HubSpot Starter",
-                was: 44,
-                kit: "CRM Kit",
-              },
-              {
-                name: "Lexoffice + sevDesk",
-                was: 32,
-                kit: "Expense & Tax Prep Kit",
-              },
-              {
-                name: "Lavender + Instantly",
-                was: 66,
-                kit: "Cold Outreach Kit",
-              },
-              {
-                name: "Otter.ai + Fireflies",
-                was: 36,
-                kit: "Meeting Tracker Kit",
-              },
-            ].map((r, i) => (
-              <div
-                key={i}
-                className="grid grid-cols-[1.4fr_80px_1fr] gap-3.5 py-3 border-b border-ks-ink2 items-center"
-              >
-                <div className="font-sans text-sm text-ks-paper-deep ks-strike">
-                  {r.name}
+              <div className="flex flex-col gap-2.5">
+                {kits.map((kit) => (
+                  <div
+                    key={kit.slug}
+                    className="grid grid-cols-[1.4fr_80px_1fr] gap-3.5 py-3 border-b border-ks-ink2 items-center"
+                  >
+                    <div className="font-sans text-sm text-ks-paper-deep ks-strike">
+                      {kit.replaces.join(", ")}
+                    </div>
+                    <div className="font-serif text-[22px] text-ks-paper-deep italic">
+                      &euro;{kit.replacesValue}/mo
+                    </div>
+                    <div className="flex items-center gap-2">
+                      <span className="font-serif text-[22px] text-ks-accent italic">
+                        &rarr;
+                      </span>
+                      <span className="font-sans text-sm">{kit.name}</span>
+                    </div>
+                  </div>
+                ))}
+                <div className="grid grid-cols-[1.4fr_80px_1fr] gap-3.5 pt-3.5 items-center">
+                  <div className="font-sans text-sm font-semibold">
+                    All of the above, for:
+                  </div>
+                  <div className="font-serif text-[44px] text-ks-accent italic leading-none">
+                    &euro;5
+                    <span className="text-lg">/mo</span>
+                  </div>
+                  <div className="font-sans text-xs text-ks-paper-deep">
+                    Starter &middot; all kits &middot; cancel anytime
+                  </div>
                 </div>
-                <div className="font-serif text-[22px] text-ks-paper-deep italic">
-                  &euro;{r.was}/mo
-                </div>
-                <div className="flex items-center gap-2">
-                  <span className="font-serif text-[22px] text-ks-accent italic">
-                    &rarr;
-                  </span>
-                  <span className="font-sans text-sm">{r.kit}</span>
-                </div>
-              </div>
-            ))}
-            <div className="grid grid-cols-[1.4fr_80px_1fr] gap-3.5 pt-3.5 items-center">
-              <div className="font-sans text-sm font-semibold">
-                All of the above, for:
-              </div>
-              <div className="font-serif text-[44px] text-ks-accent italic leading-none">
-                &euro;5
-                <span className="text-lg">/mo</span>
-              </div>
-              <div className="font-sans text-xs text-ks-paper-deep">
-                Starter &middot; all kits &middot; cancel anytime
               </div>
             </div>
-          </div>
-        </div>
-      </section>
+          </section>
+        );
+      })()}
 
       {/* CONNECTOR SETUP TEASER */}
       <section className="px-16 py-[72px]">

@@ -54,7 +54,7 @@ export default async function KitDetailPage({
   const distribution = await getRatingDistribution("kit", slug);
 
   return (
-    <div className="bg-ks-paper">
+    <div className="bg-ks-paper min-h-screen flex flex-col">
       <Nav active="Kits" />
 
       {/* ── HEADER ── */}
