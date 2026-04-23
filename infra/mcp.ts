@@ -78,6 +78,15 @@ export const mcpRouter = new sst.aws.Function("McpRouter", {
   ],
 });
 
+// --- MCP Router Domain ---
+
+export const mcpDomain = new sst.aws.Router("McpDomain", {
+  domain: $dev ? undefined : "mcp.kitstack.co",
+  routes: {
+    "/*": mcpRouter.url,
+  },
+});
+
 // --- App Data Lambda (JWT → Turso → JSON for iframe apps) ---
 
 export const appData = new sst.aws.Function("AppData", {

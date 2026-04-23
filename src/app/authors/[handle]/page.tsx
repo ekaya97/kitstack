@@ -4,7 +4,7 @@ import { Nav } from "@/components/shared/nav";
 import { Footer } from "@/components/shared/footer";
 import { CatMark } from "@/components/ui/cat-mark";
 import { ContribGrid } from "@/components/ui/contrib-grid";
-import { KITS } from "@/data/kits";
+import { getAllKitCards } from "@/services/kit.service";
 
 const author = {
   handle: "kitstack",
@@ -39,7 +39,8 @@ export default async function AuthorProfilePage({
   params: Promise<{ handle: string }>;
 }) {
   await params;
-  const pinnedKits = KITS.slice(0, 3);
+  const kits = await getAllKitCards();
+  const pinnedKits = kits.slice(0, 3);
 
   return (
     <div className="bg-ks-paper min-h-screen">
@@ -269,7 +270,7 @@ export default async function AuthorProfilePage({
               All kits
             </h2>
             <div className="ks-card divide-y divide-ks-hair">
-              {KITS.map((kit) => (
+              {kits.map((kit) => (
                 <Link
                   key={kit.slug}
                   href={`/kits/${kit.slug}`}

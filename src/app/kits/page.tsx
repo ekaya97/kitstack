@@ -7,18 +7,19 @@ import { PipelineKanban } from "@/components/mcp-apps/pipeline-kanban";
 import { ExpenseTable } from "@/components/mcp-apps/expense-table";
 import { SequenceBuilder } from "@/components/mcp-apps/sequence-builder";
 import { ActionTracker } from "@/components/mcp-apps/action-tracker";
-import { KITS } from "@/data/kits";
+import { getAllKitCards } from "@/services/kit.service";
+import type { KitCardData } from "@/services/transformers";
 
 const demos: Record<string, React.ReactNode> = {
   "crm-kit": <PipelineKanban compact />,
-  "expense-kit": <ExpenseTable rows={4} />,
-  "outreach-kit": <SequenceBuilder />,
-  "meeting-kit": <ActionTracker />,
+  "expense-tax-prep-kit": <ExpenseTable rows={4} />,
+  "cold-outreach-kit": <SequenceBuilder />,
+  "meeting-action-tracker-kit": <ActionTracker />,
 };
 
-const totalReplacesValue = KITS.reduce((sum, k) => sum + k.replacesValue, 0);
-
-export default function KitsPage() {
+export default async function KitsPage() {
+  const kits = await getAllKitCards();
+  const totalReplacesValue = kits.reduce((sum, k) => sum + k.replacesValue, 0);
   return (
     <div className="bg-ks-paper">
       <Nav active="Kits" />
@@ -62,7 +63,7 @@ export default function KitsPage() {
       {/* KITS GRID */}
       <section className="px-16 pb-[72px]">
         <div className="grid grid-cols-2 gap-[18px]">
-          {KITS.map((kit) => (
+          {kits.map((kit) => (
             <div key={kit.slug} className="ks-card p-5 flex flex-col">
               {/* Top row: category + live status + stars */}
               <div className="flex justify-between items-center mb-2.5">

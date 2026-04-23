@@ -11,11 +11,14 @@ import {
   ChatUser,
   ChatClaude,
 } from "@/components/claude-chat/claude-chat";
-import { SKILLS, findSkill, findKit } from "@/data/kits";
+import { getAllSkillCards, getSkillCardBySlug, getSkillBySlug } from "@/services/skill.service";
+import { getKitCardBySlug } from "@/services/kit.service";
+import { getReviewsByTarget, getRatingDistribution } from "@/services/review.service";
 import { ScrollTabs } from "@/components/shared/scroll-tabs";
 
 export async function generateStaticParams() {
-  return SKILLS.map((s) => ({ slug: s.slug }));
+  const skills = await getAllSkillCards();
+  return skills.map((s) => ({ slug: s.slug }));
 }
 
 export async function generateMetadata({
@@ -24,7 +27,7 @@ export async function generateMetadata({
   params: Promise<{ slug: string }>;
 }): Promise<Metadata> {
   const { slug } = await params;
-  const skill = findSkill(slug);
+  const skill = await getSkillCardBySlug(slug);
   if (!skill) return { title: "Skill not found" };
   return {
     title: `${skill.name} — KitStack`,
@@ -32,36 +35,84 @@ export async function generateMetadata({
   };
 }
 
-const FILE_TREE = [
-  { name: "README.md", indent: 0, icon: "doc" },
-  { name: "system-prompt.md", indent: 0, icon: "doc" },
-  { name: "templates/", indent: 0, icon: "dir" },
-  { name: "exec-summary.md", indent: 1, icon: "doc" },
-  { name: "scope-table.md", indent: 1, icon: "doc" },
-  { name: "pricing-table.md", indent: 1, icon: "doc" },
-  { name: "terms.md", indent: 1, icon: "doc" },
-  { name: "examples/", indent: 0, icon: "dir" },
-  { name: "sample-brief.md", indent: 1, icon: "doc" },
-  { name: "sample-output.md", indent: 1, icon: "doc" },
-];
+function formatTimeAgo(date: string | Date | null): string {
+  if (!date) return "";
+  const now = new Date();
+  const then = new Date(date);
+  const diffMs = now.getTime() - then.getTime();
+  const diffMinutes = Math.floor(diffMs / 60000);
+  const diffHours = Math.floor(diffMinutes / 60);
+  const diffDays = Math.floor(diffHours / 24);
+  const diffWeeks = Math.floor(diffDays / 7);
+  const diffMonths = Math.floor(diffDays / 30);
 
-const FILE_DESCRIPTIONS = [
-  {
-    title: "System prompt",
-    desc: "The core instruction set. Defines the expert persona, output format, and anti-slop rules.",
-    file: "system-prompt.md",
-  },
-  {
-    title: "Templates",
-    desc: "Markdown templates for each proposal section. Structured placeholders Claude fills from your brief.",
-    file: "templates/",
-  },
-  {
-    title: "Examples",
-    desc: "Sample input and output pairs so Claude calibrates tone, length, and detail level.",
-    file: "examples/",
-  },
-];
+  if (diffMinutes < 1) return "just now";
+  if (diffMinutes < 60) return `${diffMinutes}m ago`;
+  if (diffHours < 24) return `${diffHours}h ago`;
+  if (diffDays < 7) return `${diffDays}d ago`;
+  if (diffWeeks < 5) return `${diffWeeks}w ago`;
+  return `${diffMonths}mo ago`;
+}
+
+function buildFileTree(whatsInside: { file: string; description: string }[]) {
+  const tree: { name: string; indent: number; icon: "dir" | "doc" }[] = [];
+  const addedDirs = new Set<string>();
+
+  for (const entry of whatsInside) {
+    const parts = entry.file.split("/");
+    // Add parent directories that haven't been added yet
+    for (let i = 0; i < parts.length - 1; i++) {
+      const dirName = parts[i] + "/";
+      const dirKey = parts.slice(0, i + 1).join("/");
+      if (!addedDirs.has(dirKey)) {
+        addedDirs.add(dirKey);
+        tree.push({ name: dirName, indent: i, icon: "dir" });
+      }
+    }
+    // Add the file itself
+    const fileName = parts[parts.length - 1];
+    const indent = parts.length - 1;
+    tree.push({ name: fileName, indent, icon: "doc" });
+  }
+
+  return tree;
+}
+
+function buildFileDescriptions(whatsInside: { file: string; description: string }[]) {
+  const descriptions: { title: string; desc: string; file: string }[] = [];
+
+  // Group entries by top-level directory, and list top-level files individually
+  const dirGroups = new Map<string, { file: string; description: string }[]>();
+  const topLevelFiles: { file: string; description: string }[] = [];
+
+  for (const entry of whatsInside) {
+    const slashIndex = entry.file.indexOf("/");
+    if (slashIndex === -1) {
+      topLevelFiles.push(entry);
+    } else {
+      const dir = entry.file.substring(0, slashIndex + 1);
+      if (!dirGroups.has(dir)) dirGroups.set(dir, []);
+      dirGroups.get(dir)!.push(entry);
+    }
+  }
+
+  // Add top-level files
+  for (const f of topLevelFiles) {
+    const name = f.file.replace(/\.md$/, "").replace(/[-_]/g, " ");
+    const title = name.charAt(0).toUpperCase() + name.slice(1);
+    descriptions.push({ title, desc: f.description, file: f.file });
+  }
+
+  // Add directory groups
+  for (const [dir, entries] of dirGroups) {
+    const dirName = dir.replace(/\/$/, "").replace(/[-_]/g, " ");
+    const title = dirName.charAt(0).toUpperCase() + dirName.slice(1);
+    const desc = entries.map((e) => e.description).join(". ");
+    descriptions.push({ title, desc, file: dir });
+  }
+
+  return descriptions;
+}
 
 export default async function SkillDetailPage({
   params,
@@ -69,10 +120,17 @@ export default async function SkillDetailPage({
   params: Promise<{ slug: string }>;
 }) {
   const { slug } = await params;
-  const skill = findSkill(slug);
+  const skill = await getSkillCardBySlug(slug);
   if (!skill) notFound();
 
-  const upgradeKit = skill.upgradeTo ? findKit(skill.upgradeTo) : null;
+  const rawSkill = await getSkillBySlug(slug);
+  const upgradeKit = skill.upgradeTo ? await getKitCardBySlug(skill.upgradeTo) : null;
+  const reviewsList = await getReviewsByTarget("skill", slug);
+  const distribution = await getRatingDistribution("skill", slug);
+
+  const whatsInsideEntries = rawSkill?.whatsInside ?? [];
+  const fileTree = buildFileTree(whatsInsideEntries);
+  const fileDescriptions = buildFileDescriptions(whatsInsideEntries);
 
   const tabs = [
     { id: "see-it-work", label: "See it work" },
@@ -329,7 +387,7 @@ export default async function SkillDetailPage({
             <div className="font-mono text-[10px] text-ks-faint tracking-wider mb-3">
               {skill.slug}.zip
             </div>
-            {FILE_TREE.map((f, i) => (
+            {fileTree.map((f, i) => (
               <div
                 key={i}
                 className="flex items-center gap-2 py-[3px]"
@@ -356,7 +414,7 @@ export default async function SkillDetailPage({
           </div>
 
           <div className="flex flex-col gap-4">
-            {FILE_DESCRIPTIONS.map((fd) => (
+            {fileDescriptions.map((fd) => (
               <div key={fd.file} className="ks-card p-5">
                 <div className="flex items-center gap-2.5 mb-2">
                   <span className="font-mono text-[11px] px-2 py-0.5 rounded bg-ks-paper-warm text-ks-muted border border-ks-hair">
@@ -435,44 +493,42 @@ export default async function SkillDetailPage({
               {skill.reviews} ratings
             </div>
             <div className="mt-4 flex flex-col gap-1">
-              {[5, 4, 3, 2, 1].map((n) => {
-                const p = { 5: 72, 4: 20, 3: 5, 2: 2, 1: 1 }[n] ?? 0;
-                return (
-                  <div key={n} className="grid grid-cols-[18px_1fr_30px] gap-2 items-center">
-                    <span className="font-mono text-[10px] text-ks-muted">{n}&#9733;</span>
+              {distribution.map((d) => (
+                  <div key={d.stars} className="grid grid-cols-[18px_1fr_30px] gap-2 items-center">
+                    <span className="font-mono text-[10px] text-ks-muted">{d.stars}&#9733;</span>
                     <div className="h-[5px] bg-ks-hair rounded-full">
-                      <div className="h-full bg-ks-accent rounded-full" style={{ width: `${p}%` }} />
+                      <div className="h-full bg-ks-accent rounded-full" style={{ width: `${d.pct}%` }} />
                     </div>
-                    <span className="font-mono text-[9px] text-ks-muted text-right">{p}%</span>
+                    <span className="font-mono text-[9px] text-ks-muted text-right">{d.pct}%</span>
                   </div>
-                );
-              })}
+              ))}
             </div>
           </div>
           <div className="flex flex-col gap-3">
-            {[
-              { name: "Lena K.", role: "Brand consultant", v: 5, text: "Saved me 2 hours on my last proposal. The structure is spot-on and the tone matched my voice.", ago: "3d ago", helpful: 24, tone: "#3b7a3b" },
-              { name: "Marco S.", role: "Solo dev", v: 5, text: "I used to spend forever scoping projects. Now I paste 4 lines and get a full proposal back.", ago: "1w ago", helpful: 12, tone: "#6b4ea8" },
-              { name: "Dana A.", role: "Agency owner", v: 4, text: "Great for the basics. Would love a few more industry-specific templates, but the framework is solid.", ago: "2w ago", helpful: 8, tone: "#2b6cb0" },
-            ].map((r, i) => (
-              <div key={i} className="ks-card p-4">
-                <div className="flex items-center gap-2.5 mb-2">
-                  <Avatar name={r.name} size={26} tone={r.tone} />
-                  <div className="flex-1">
-                    <div className="font-sans text-[12.5px] font-semibold">
-                      {r.name}{" "}
-                      <span className="ks-chip !text-[9px] !py-0 !px-1.5 !ml-1">verified</span>
+            {reviewsList.map((r) => {
+              const ago = formatTimeAgo(r.createdAt);
+              return (
+                <div key={r.id} className="ks-card p-4">
+                  <div className="flex items-center gap-2.5 mb-2">
+                    <Avatar name={r.userName} size={26} tone="#3b7a3b" />
+                    <div className="flex-1">
+                      <div className="font-sans text-[12.5px] font-semibold">
+                        {r.userName}{" "}
+                        {r.verified && (
+                          <span className="ks-chip !text-[9px] !py-0 !px-1.5 !ml-1">verified</span>
+                        )}
+                      </div>
+                      <div className="font-sans text-[10.5px] text-ks-muted">{r.userRole} &middot; {ago}</div>
                     </div>
-                    <div className="font-sans text-[10.5px] text-ks-muted">{r.role} &middot; {r.ago}</div>
+                    <Stars v={r.rating} size={11} showValue={false} />
                   </div>
-                  <Stars v={r.v} size={11} showValue={false} />
+                  <div className="font-sans text-[13px] leading-relaxed text-ks-ink2">{r.text}</div>
+                  <div className="font-sans text-[11px] text-ks-muted mt-2.5">
+                    &#128077; Helpful ({r.helpfulCount}) &middot; &#128172; Reply
+                  </div>
                 </div>
-                <div className="font-sans text-[13px] leading-relaxed text-ks-ink2">{r.text}</div>
-                <div className="font-sans text-[11px] text-ks-muted mt-2.5">
-                  &#128077; Helpful ({r.helpful}) &middot; &#128172; Reply
-                </div>
-              </div>
-            ))}
+              );
+            })}
           </div>
         </div>
       </section>

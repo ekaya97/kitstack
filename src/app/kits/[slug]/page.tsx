@@ -14,11 +14,14 @@ import {
   MCPApp,
 } from "@/components/claude-chat/claude-chat";
 import { PipelineKanban } from "@/components/mcp-apps/pipeline-kanban";
-import { KITS, findKit, findSkill } from "@/data/kits";
+import { getAllKitCards, getKitCardBySlug } from "@/services/kit.service";
+import { getSkillCardBySlug } from "@/services/skill.service";
+import { getReviewsByTarget, getRatingDistribution } from "@/services/review.service";
 import { ScrollTabs } from "@/components/shared/scroll-tabs";
 
 export async function generateStaticParams() {
-  return KITS.map((k) => ({ slug: k.slug }));
+  const kits = await getAllKitCards();
+  return kits.map((k) => ({ slug: k.slug }));
 }
 
 export async function generateMetadata({
@@ -27,7 +30,7 @@ export async function generateMetadata({
   params: Promise<{ slug: string }>;
 }): Promise<Metadata> {
   const { slug } = await params;
-  const kit = findKit(slug);
+  const kit = await getKitCardBySlug(slug);
   if (!kit) return { title: "Kit not found" };
   return {
     title: `${kit.name} — KitStack`,
@@ -41,10 +44,12 @@ export default async function KitDetailPage({
   params: Promise<{ slug: string }>;
 }) {
   const { slug } = await params;
-  const kit = findKit(slug);
+  const kit = await getKitCardBySlug(slug);
   if (!kit) notFound();
 
-  const linkedSkill = findSkill(kit.fromSkill);
+  const linkedSkill = kit.fromSkill ? await getSkillCardBySlug(kit.fromSkill) : null;
+  const reviewsList = await getReviewsByTarget("kit", slug);
+  const distribution = await getRatingDistribution("kit", slug);
 
   return (
     <div className="bg-ks-paper">
@@ -468,13 +473,7 @@ export default async function KitDetailPage({
             </div>
 
             {/* Distribution bars */}
-            {[
-              { stars: 5, pct: 72 },
-              { stars: 4, pct: 18 },
-              { stars: 3, pct: 7 },
-              { stars: 2, pct: 2 },
-              { stars: 1, pct: 1 },
-            ].map((row) => (
+            {distribution.map((row) => (
               <div key={row.stars} className="flex items-center gap-2.5 mb-1.5">
                 <span className="font-mono text-[11px] text-ks-muted w-4 text-right">
                   {row.stars}
@@ -494,44 +493,19 @@ export default async function KitDetailPage({
 
           {/* Right — review cards */}
           <div className="flex flex-col gap-4">
-            {[
-              {
-                name: "Mira S.",
-                role: "Freelance Designer",
-                tone: "#3b7a3b",
-                rating: 5,
-                text: `Replaced Pipedrive entirely. I just say "log that call" and it's in the CRM. The pipeline kanban inside Claude is wild.`,
-                helpful: 24,
-              },
-              {
-                name: "Jan P.",
-                role: "Agency Founder",
-                tone: "#2b6cb0",
-                rating: 5,
-                text: `The proposal generator alone is worth it. But having it connected to a real contact database? That's the upgrade that sticks.`,
-                helpful: 18,
-              },
-              {
-                name: "Anja K.",
-                role: "Ops Manager",
-                tone: "#c94080",
-                rating: 4,
-                text: `Solid kit. Wish it had calendar integration, but the team says it's coming. Database export works perfectly.`,
-                helpful: 11,
-              },
-            ].map((review) => (
-              <div key={review.name} className="ks-card p-5">
+            {reviewsList.map((review) => (
+              <div key={review.id} className="ks-card p-5">
                 <div className="flex items-center gap-3 mb-3">
-                  <Avatar name={review.name} size={36} tone={review.tone} />
+                  <Avatar name={review.userName} size={36} tone="#3b7a3b" />
                   <div>
                     <div className="font-sans text-sm font-semibold text-ks-ink flex items-center gap-2">
-                      {review.name}
+                      {review.userName}
                       <span className="ks-chip !text-[9px] !py-px !px-1.5 !border-green-300 !text-green-700">
                         verified
                       </span>
                     </div>
                     <div className="font-sans text-[12px] text-ks-muted">
-                      {review.role}
+                      {review.userRole}
                     </div>
                   </div>
                   <div className="ml-auto">
@@ -542,7 +516,7 @@ export default async function KitDetailPage({
                   {review.text}
                 </div>
                 <div className="mt-3 font-sans text-[12px] text-ks-muted">
-                  &#8679; {review.helpful} found this helpful
+                  &#8679; {review.helpfulCount} found this helpful
                 </div>
               </div>
             ))}

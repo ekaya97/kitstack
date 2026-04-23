@@ -1,11 +1,11 @@
 "use client";
 
-import { useState, useMemo } from "react";
+import { useState, useEffect, useMemo } from "react";
 import Link from "next/link";
 import { Nav } from "@/components/shared/nav";
 import { Footer } from "@/components/shared/footer";
 import { CatMark } from "@/components/ui/cat-mark";
-import { SKILLS, findKit } from "@/data/kits";
+import type { SkillCardData } from "@/services/transformers";
 
 const categories = [
   "All",
@@ -18,12 +18,19 @@ const categories = [
 ];
 
 export default function SkillsPage() {
+  const [skills, setSkills] = useState<SkillCardData[]>([]);
   const [activeCat, setActiveCat] = useState("All");
   const [searchOpen, setSearchOpen] = useState(false);
   const [query, setQuery] = useState("");
 
+  useEffect(() => {
+    fetch("/api/skills")
+      .then((r) => r.json())
+      .then((d) => setSkills(d.skills));
+  }, []);
+
   const filtered = useMemo(() => {
-    let list = SKILLS;
+    let list = skills;
     if (activeCat !== "All") {
       list = list.filter(
         (s) => s.cat === activeCat || (activeCat === "Ops" && s.cat === "Ops")
@@ -39,7 +46,7 @@ export default function SkillsPage() {
       );
     }
     return list;
-  }, [activeCat, query]);
+  }, [skills, activeCat, query]);
 
   return (
     <div className="bg-ks-paper min-h-screen">
@@ -154,11 +161,7 @@ export default function SkillsPage() {
           </div>
         ) : (
           <div className="grid grid-cols-3 gap-[18px]">
-            {filtered.map((skill) => {
-              const kit = skill.upgradeTo
-                ? findKit(skill.upgradeTo)
-                : null;
-              return (
+            {filtered.map((skill) => (
                 <div key={skill.slug} className="ks-card p-5 flex flex-col">
                   {/* Top row: category + FREE chip */}
                   <div className="flex justify-between items-center mb-3">
@@ -193,15 +196,15 @@ export default function SkillsPage() {
                   </div>
 
                   {/* Upgrade banner (if applicable) */}
-                  {kit && (
-                    <div className="bg-ks-accent-soft rounded-lg px-3.5 py-2.5 mb-3.5">
+                  {skill.upgradeTo && (
+                    <Link href={`/kits/${skill.upgradeTo}`} className="bg-ks-accent-soft rounded-lg px-3.5 py-2.5 mb-3.5 block hover:opacity-90 transition-opacity">
                       <div className="font-mono text-[9px] text-ks-accent-deep tracking-wider mb-1">
                         UPGRADE TO KIT
                       </div>
                       <div className="font-sans text-[12px] text-ks-accent-deep leading-snug">
                         {skill.upgradeHook}
                       </div>
-                    </div>
+                    </Link>
                   )}
 
                   {/* Buttons */}
@@ -220,8 +223,7 @@ export default function SkillsPage() {
                     </Link>
                   </div>
                 </div>
-              );
-            })}
+            ))}
           </div>
         )}
       </section>

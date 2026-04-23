@@ -5,7 +5,7 @@ import { seedSkills, seedKits, seedReviews } from "./seed-data";
 
 async function seed() {
   const client = createClient({
-    url: process.env.TURSO_DATABASE_URL!,
+    url: process.env.TURSO_DATABASE_URL || "file:databases/local.db",
     authToken: process.env.TURSO_AUTH_TOKEN,
   });
   const db = drizzle(client);

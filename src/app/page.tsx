@@ -9,10 +9,12 @@ import {
   MCPApp,
 } from "@/components/claude-chat/claude-chat";
 import { PipelineKanban } from "@/components/mcp-apps/pipeline-kanban";
-import { KITS } from "@/data/kits";
+import { getAllKitCards } from "@/services/kit.service";
+import type { KitCardData } from "@/services/transformers";
 import Link from "next/link";
 
-export default function Landing() {
+export default async function Landing() {
+  const kits = await getAllKitCards();
   return (
     <div className="bg-ks-paper">
       <Nav />
@@ -240,7 +242,7 @@ export default function Landing() {
           </Link>
         </div>
         <div className="grid grid-cols-2 gap-[18px]">
-          {KITS.map((k) => (
+          {kits.map((k) => (
             <KitPreviewCard key={k.slug} kit={k} />
           ))}
         </div>

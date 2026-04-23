@@ -10,7 +10,7 @@ import {
   MCPApp,
 } from "@/components/claude-chat/claude-chat";
 import { PipelineKanban } from "@/components/mcp-apps/pipeline-kanban";
-import { findKit } from "@/data/kits";
+import { getKitCardBySlug } from "@/services/kit.service";
 
 export default async function TryKitPage({
   params,
@@ -18,7 +18,7 @@ export default async function TryKitPage({
   params: Promise<{ slug: string }>;
 }) {
   const { slug } = await params;
-  const kit = findKit(slug);
+  const kit = await getKitCardBySlug(slug);
   if (!kit) notFound();
 
   return (

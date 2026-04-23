@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import type { Kit } from "@/data/kits";
+import type { KitCardData } from "@/services/transformers";
 import { CatMark } from "@/components/ui/cat-mark";
 import { PipelineKanban } from "@/components/mcp-apps/pipeline-kanban";
 import { ExpenseTable } from "@/components/mcp-apps/expense-table";
@@ -10,12 +10,12 @@ import { ActionTracker } from "@/components/mcp-apps/action-tracker";
 
 const demos: Record<string, React.ReactNode> = {
   "crm-kit": <PipelineKanban compact />,
-  "expense-kit": <ExpenseTable rows={4} />,
-  "outreach-kit": <SequenceBuilder />,
-  "meeting-kit": <ActionTracker />,
+  "expense-tax-prep-kit": <ExpenseTable rows={4} />,
+  "cold-outreach-kit": <SequenceBuilder />,
+  "meeting-action-tracker-kit": <ActionTracker />,
 };
 
-export function KitPreviewCard({ kit }: { kit: Kit }) {
+export function KitPreviewCard({ kit }: { kit: KitCardData }) {
   return (
     <div className="ks-card p-5 flex flex-col">
       <div className="flex justify-between items-center mb-2.5">
