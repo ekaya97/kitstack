@@ -3,19 +3,8 @@ import Link from "next/link";
 import { Nav } from "@/components/shared/nav";
 import { Footer } from "@/components/shared/footer";
 import { CatMark } from "@/components/ui/cat-mark";
-import { ContribGrid } from "@/components/ui/contrib-grid";
 import { getAllKitCards } from "@/services/kit.service";
-
-const author = {
-  handle: "kitstack",
-  name: "KitStack",
-  bio: "Official KitStack team. We build, test, and ship the foundational kits. Berlin-based.",
-  verified: true,
-  website: "kitstack.co",
-  location: "Berlin, DE",
-  joined: "April 2026",
-  stats: { kits: 8, installs: 8000, stars: 1240, followers: 312 },
-};
+import { getAllSkillCards } from "@/services/skill.service";
 
 export function generateStaticParams() {
   return [{ handle: "kitstack" }];
@@ -28,8 +17,9 @@ export async function generateMetadata({
 }): Promise<Metadata> {
   await params;
   return {
-    title: `@${author.handle} — KitStack`,
-    description: author.bio,
+    title: "@kitstack — KitStack",
+    description:
+      "Official KitStack team. We build, test, and ship the foundational skills and kits.",
   };
 }
 
@@ -39,124 +29,122 @@ export default async function AuthorProfilePage({
   params: Promise<{ handle: string }>;
 }) {
   await params;
-  const kits = await getAllKitCards();
+
+  const [kits, skillCards] = await Promise.all([
+    getAllKitCards(),
+    getAllSkillCards(),
+  ]);
+
+  const totalDownloads = skillCards.reduce((s, sk) => s + sk.downloads, 0);
+  const totalSubscribers = kits.reduce((s, k) => s + k.subscribers, 0);
+  const allRatings = [
+    ...skillCards.map((s) => s.rating),
+    ...kits.map((k) => k.rating),
+  ].filter((r) => r > 0);
+  const avgRating =
+    allRatings.length > 0
+      ? (allRatings.reduce((s, r) => s + r, 0) / allRatings.length).toFixed(1)
+      : "—";
+  const totalReviews =
+    skillCards.reduce((s, sk) => s + sk.reviews, 0) +
+    kits.reduce((s, k) => s + k.reviews, 0);
+
   const pinnedKits = kits.slice(0, 3);
 
   return (
     <div className="bg-ks-paper min-h-screen">
-      <Nav active="Authors" />
+      <Nav />
 
       <div className="px-12 pt-10 pb-16 grid grid-cols-[300px_1fr] gap-12 items-start">
-        {/* ── LEFT SIDEBAR ── */}
+        {/* LEFT SIDEBAR */}
         <aside className="sticky top-24">
-          {/* Avatar */}
-          <div
-            className="w-[240px] h-[240px] rounded-full bg-ks-ink border-4 border-ks-hair flex items-center justify-center mb-5"
-          >
+          <div className="w-[240px] h-[240px] rounded-full bg-ks-ink border-4 border-ks-hair flex items-center justify-center mb-5">
             <span className="font-serif italic text-[96px] text-ks-paper leading-none select-none">
               K
             </span>
           </div>
 
-          {/* Name + verified */}
           <div className="flex items-center gap-2 mb-0.5">
             <h1 className="font-serif text-[36px] tracking-tight leading-none">
-              {author.name}
+              KitStack
             </h1>
-            {author.verified && (
-              <span className="text-ks-accent text-[20px] leading-none" title="Verified">
-                &#10003;
-              </span>
-            )}
+            <span
+              className="text-ks-accent text-[20px] leading-none"
+              title="Verified"
+            >
+              &#10003;
+            </span>
           </div>
 
-          {/* Handle */}
           <div className="font-mono text-[14px] text-ks-muted mb-3">
-            @{author.handle}
+            @kitstack
           </div>
 
-          {/* Bio */}
           <p className="font-sans text-[14px] text-ks-ink2 leading-relaxed mb-5">
-            {author.bio}
+            Official KitStack team. We build, test, and ship the foundational
+            skills and kits. Based in Germany.
           </p>
 
-          {/* Action buttons */}
-          <button className="ks-btn ks-btn-primary w-full mb-2">
-            + Follow
-          </button>
-          <button className="ks-btn w-full mb-5">
-            &#9993; Message
-          </button>
+          <Link
+            href="/skills"
+            className="ks-btn ks-btn-primary w-full mb-2 justify-center"
+          >
+            Browse skills
+          </Link>
+          <Link
+            href="/kits"
+            className="ks-btn w-full mb-5 justify-center"
+          >
+            Browse kits
+          </Link>
 
-          {/* Meta info */}
           <div className="flex flex-col gap-2 font-sans text-[13px] text-ks-muted mb-5">
             <div className="flex items-center gap-2">
               <span className="text-[15px]">&#8962;</span>
-              <span>{author.location}</span>
+              <span>D&uuml;sseldorf, DE</span>
             </div>
             <div className="flex items-center gap-2">
               <span className="text-[15px]">&#9939;</span>
               <a
-                href={`https://${author.website}`}
+                href="https://kitstack.co"
                 target="_blank"
                 rel="noopener noreferrer"
                 className="text-ks-accent hover:underline"
               >
-                {author.website}
+                kitstack.co
               </a>
             </div>
             <div className="flex items-center gap-2">
               <span className="text-[15px]">&#9783;</span>
-              <span>{author.joined}</span>
+              <span>April 2026</span>
             </div>
           </div>
 
-          {/* Followers / Stars */}
           <div className="border-t border-ks-hair pt-4 flex gap-6">
             <div>
               <div className="font-serif text-[22px] text-ks-ink leading-none">
-                {author.stats.followers.toLocaleString()}
+                {totalSubscribers.toLocaleString()}
               </div>
               <div className="font-sans text-[11px] text-ks-muted mt-0.5">
-                followers
+                subscribers
               </div>
             </div>
             <div>
               <div className="font-serif text-[22px] text-ks-ink leading-none">
-                {author.stats.stars.toLocaleString()}
+                {totalDownloads.toLocaleString()}
               </div>
               <div className="font-sans text-[11px] text-ks-muted mt-0.5">
-                stars
+                downloads
               </div>
             </div>
           </div>
         </aside>
 
-        {/* ── RIGHT MAIN CONTENT ── */}
+        {/* RIGHT MAIN */}
         <main>
-          {/* Tab bar */}
           <div className="flex gap-6 border-b border-ks-hair mb-8">
             <button className="font-sans text-[14px] font-semibold text-ks-ink pb-3 border-b-2 border-ks-accent">
-              Kits &middot; {author.stats.kits}
-            </button>
-            <button className="font-sans text-[14px] text-ks-muted pb-3 border-b-2 border-transparent hover:text-ks-ink">
-              Pinned &middot; 3
-            </button>
-            <button className="font-sans text-[14px] text-ks-muted pb-3 border-b-2 border-transparent hover:text-ks-ink">
-              Activity
-            </button>
-            <button className="font-sans text-[14px] text-ks-muted pb-3 border-b-2 border-transparent hover:text-ks-ink">
-              About
-            </button>
-          </div>
-
-          {/* Community authors note */}
-          <div className="border-2 border-dashed border-ks-hair bg-ks-paper-warm rounded-lg p-5 mb-8 flex items-center justify-between">
-            <p className="font-sans text-[14px] text-ks-muted">
-              Community authors &mdash; coming later.
-            </p>
-            <button className="font-sans text-[13px] text-ks-accent hover:underline">
-              Waitlist for authors &rarr;
+              Published &middot; {skillCards.length + kits.length}
             </button>
           </div>
 
@@ -164,68 +152,34 @@ export default async function AuthorProfilePage({
           <div className="grid grid-cols-4 gap-4 mb-10">
             <div className="ks-card p-4 text-center">
               <div className="font-serif text-[36px] text-ks-ink leading-none">
-                {author.stats.kits}
+                {skillCards.length}
               </div>
               <div className="font-sans text-[12px] text-ks-muted mt-1">
-                kits published
+                free skills
               </div>
             </div>
             <div className="ks-card p-4 text-center">
               <div className="font-serif text-[36px] text-ks-ink leading-none">
-                {(author.stats.installs / 1000).toFixed(0)},000+
+                {kits.length}
               </div>
               <div className="font-sans text-[12px] text-ks-muted mt-1">
-                total installs
+                subscription kits
               </div>
             </div>
             <div className="ks-card p-4 text-center">
               <div className="font-serif text-[36px] text-ks-ink leading-none">
-                4.8
+                {avgRating}
               </div>
               <div className="font-sans text-[12px] text-ks-muted mt-1">
-                avg rating
+                avg rating ({totalReviews.toLocaleString()} reviews)
               </div>
             </div>
             <div className="ks-card p-4 text-center">
               <div className="font-serif text-[36px] text-ks-ink leading-none">
-                &euro;32k+
+                {totalDownloads.toLocaleString()}
               </div>
               <div className="font-sans text-[12px] text-ks-muted mt-1">
-                revenue generated
-              </div>
-            </div>
-          </div>
-
-          {/* Shipping cadence */}
-          <div className="mb-10">
-            <h2 className="font-serif text-[22px] tracking-tight mb-4">
-              Shipping cadence
-            </h2>
-            <div className="ks-card p-5">
-              <ContribGrid w={14} h={7} cell={14} seed={7} />
-              <div className="flex items-center gap-2 mt-3 font-sans text-[11px] text-ks-muted">
-                <span>Less</span>
-                <span
-                  className="inline-block w-[14px] h-[14px] rounded-sm"
-                  style={{ background: "#ece3d1" }}
-                />
-                <span
-                  className="inline-block w-[14px] h-[14px] rounded-sm"
-                  style={{ background: "#f7d9c8" }}
-                />
-                <span
-                  className="inline-block w-[14px] h-[14px] rounded-sm"
-                  style={{ background: "#f0a57f" }}
-                />
-                <span
-                  className="inline-block w-[14px] h-[14px] rounded-sm"
-                  style={{ background: "#e6784b" }}
-                />
-                <span
-                  className="inline-block w-[14px] h-[14px] rounded-sm"
-                  style={{ background: "#d65a2f" }}
-                />
-                <span>More</span>
+                skill downloads
               </div>
             </div>
           </div>
@@ -233,7 +187,7 @@ export default async function AuthorProfilePage({
           {/* Pinned kits */}
           <div className="mb-10">
             <h2 className="font-serif text-[22px] tracking-tight mb-4">
-              Pinned
+              Pinned kits
             </h2>
             <div className="grid grid-cols-3 gap-4">
               {pinnedKits.map((kit) => (
@@ -264,10 +218,48 @@ export default async function AuthorProfilePage({
             </div>
           </div>
 
-          {/* All kits table */}
+          {/* Free skills */}
+          <div className="mb-10">
+            <h2 className="font-serif text-[22px] tracking-tight mb-4">
+              Free skills
+            </h2>
+            <div className="ks-card divide-y divide-ks-hair">
+              {skillCards.map((skill) => (
+                <Link
+                  key={skill.slug}
+                  href={`/skills/${skill.slug}`}
+                  className="flex items-center gap-4 px-5 py-4 hover:bg-ks-paper-warm transition-colors"
+                >
+                  <CatMark cat={skill.cat} size={24} />
+                  <div className="flex-1 min-w-0">
+                    <div className="font-sans text-[14px] font-medium text-ks-ink">
+                      {skill.name}
+                    </div>
+                    <div className="font-sans text-[12px] text-ks-muted truncate">
+                      {skill.desc}
+                    </div>
+                  </div>
+                  <span className="ks-chip !text-[10px] shrink-0">
+                    {skill.cat}
+                  </span>
+                  <span className="font-sans text-[12px] text-ks-muted shrink-0">
+                    {skill.downloads.toLocaleString()} downloads
+                  </span>
+                  <span className="font-sans text-[12px] text-ks-muted shrink-0">
+                    &#9733; {skill.rating}
+                  </span>
+                  <span className="font-serif text-[14px] italic text-ks-accent shrink-0">
+                    Free
+                  </span>
+                </Link>
+              ))}
+            </div>
+          </div>
+
+          {/* All kits */}
           <div>
             <h2 className="font-serif text-[22px] tracking-tight mb-4">
-              All kits
+              Subscription kits
             </h2>
             <div className="ks-card divide-y divide-ks-hair">
               {kits.map((kit) => (

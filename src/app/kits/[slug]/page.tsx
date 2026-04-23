@@ -5,7 +5,6 @@ import { Nav } from "@/components/shared/nav";
 import { Footer } from "@/components/shared/footer";
 import { CatMark } from "@/components/ui/cat-mark";
 import { Avatar } from "@/components/ui/avatar";
-import { Stars } from "@/components/ui/stars";
 import {
   ClaudeChat,
   ChatUser,
@@ -18,6 +17,9 @@ import { getAllKitCards, getKitCardBySlug } from "@/services/kit.service";
 import { getSkillCardBySlug } from "@/services/skill.service";
 import { getReviewsByTarget, getRatingDistribution } from "@/services/review.service";
 import { ScrollTabs } from "@/components/shared/scroll-tabs";
+import { HeaderRating } from "@/components/reviews/header-rating";
+import { ReviewSection } from "@/components/reviews/review-section";
+import { KitActivateCard } from "@/components/shared/kit-activate-card";
 
 export async function generateStaticParams() {
   const kits = await getAllKitCards();
@@ -98,103 +100,41 @@ export default async function KitDetailPage({
               {kit.desc}
             </p>
 
-            {/* Author row */}
-            <div className="flex items-center gap-3 mb-5">
-              <Avatar name={kit.author} size={32} tone="#3b7a3b" />
-              <span className="font-sans text-sm text-ks-ink">
-                by <b>{kit.author}</b>{" "}
-                <span className="text-green-700">&#10003;</span>
-              </span>
-            </div>
-
-            {/* Rating / reviews / subscribers */}
-            <div className="flex items-center gap-5">
-              <Stars v={kit.rating} />
-              <span className="font-sans text-[13px] text-ks-muted">
-                {kit.reviews} reviews
-              </span>
-              <span className="font-sans text-[13px] text-ks-muted">
+            {/* Author row + Rating inline */}
+            <div className="flex items-center gap-4 flex-wrap mb-6">
+              <Link href={`/authors/${kit.author}`} className="flex items-center gap-2.5 group">
+                <Avatar name={kit.author} size={28} tone="#3b7a3b" />
+                <span className="font-sans text-[13px] text-ks-ink group-hover:text-ks-accent">
+                  by <b>{kit.author}</b>{" "}
+                  <span className="text-green-700">&#10003;</span>
+                </span>
+              </Link>
+              <div className="w-px h-5 bg-ks-hair" />
+              <HeaderRating
+                targetType="kit"
+                targetSlug={slug}
+                rating={kit.rating}
+                count={kit.reviews}
+              />
+              <span className="font-sans text-[12px] text-ks-muted">
                 {kit.subscribers.toLocaleString()} subscribers
               </span>
+              <div className="w-px h-5 bg-ks-hair" />
+              <span className="font-sans text-[12px] text-ks-muted">
+                replaces{" "}
+                {kit.replaces.map((r, i) => (
+                  <span key={i}>
+                    <span className="ks-strike">{r}</span>
+                    {i < kit.replaces.length - 1 && ", "}
+                  </span>
+                ))}
+                {" "}&mdash; saves <b className="text-ks-accent">&euro;{kit.replacesValue}/mo</b>
+              </span>
             </div>
 
-            {/* Stats grid */}
-            <div className="grid grid-cols-4 gap-4 mt-8 pt-8 border-t border-ks-hair">
-              <div>
-                <div className="font-mono text-[10px] text-ks-muted tracking-wider mb-1.5">
-                  REPLACES
-                </div>
-                <div className="font-sans text-sm text-ks-ink leading-snug">
-                  {kit.replaces.map((r, i) => (
-                    <span key={i}>
-                      <span className="ks-strike">{r}</span>
-                      {i < kit.replaces.length - 1 && ", "}
-                    </span>
-                  ))}
-                </div>
-              </div>
-              <div>
-                <div className="font-mono text-[10px] text-ks-muted tracking-wider mb-1.5">
-                  SAVES
-                </div>
-                <div className="font-serif text-2xl text-ks-accent italic">
-                  &euro;{kit.replacesValue}/mo
-                </div>
-              </div>
-              <div>
-                <div className="font-mono text-[10px] text-ks-muted tracking-wider mb-1.5">
-                  DATA TYPES
-                </div>
-                <div className="font-serif text-2xl text-ks-ink">
-                  {kit.schema.length}
-                </div>
-              </div>
-              <div>
-                <div className="font-mono text-[10px] text-ks-muted tracking-wider mb-1.5">
-                  ACTIONS
-                </div>
-                <div className="font-serif text-2xl text-ks-ink">
-                  {kit.tools.length}
-                </div>
-              </div>
-            </div>
-          </div>
-
-          {/* Right sidebar — pricing card */}
-          <div className="ks-card p-6 sticky top-8">
-            <div className="font-mono text-[10px] text-ks-muted tracking-wider mb-2">
-              SUBSCRIPTION KIT
-            </div>
-            <div className="font-serif text-[44px] text-ks-ink italic leading-none mb-1">
-              &euro;5<span className="text-lg">/mo</span>
-            </div>
-            <div className="font-sans text-[13px] text-ks-muted mb-5">
-              Starter plan &middot; unlocks every kit
-            </div>
-
-            <button className="ks-btn ks-btn-accent w-full justify-center !py-3.5 !text-[15px] mb-2.5">
-              Connect to Claude &rarr;
-            </button>
-            <button className="ks-btn w-full justify-center !py-3 !text-[13px] mb-5">
-              Try it free &middot; 1/day
-            </button>
-
-            {/* Action row */}
-            <div className="flex justify-between border-t border-ks-hair pt-4 mb-5">
-              <button className="font-sans text-xs text-ks-muted hover:text-ks-ink cursor-pointer">
-                &#9825; Wishlist
-              </button>
-              <button className="font-sans text-xs text-ks-muted hover:text-ks-ink cursor-pointer">
-                &#8679; Helpful
-              </button>
-              <button className="font-sans text-xs text-ks-muted hover:text-ks-ink cursor-pointer">
-                &#8599; Share
-              </button>
-            </div>
-
-            {/* Features checklist */}
-            <div className="border-t border-ks-hair pt-4 flex flex-col gap-2">
-              <div className="font-mono text-[10px] text-ks-muted tracking-wider mb-1">
+            {/* Includes */}
+            <div className="flex flex-col gap-1.5 mt-6">
+              <div className="font-mono text-[10px] text-ks-muted tracking-wider mb-0.5">
                 INCLUDES
               </div>
               {[
@@ -207,26 +147,24 @@ export default async function KitDetailPage({
               ].map((f) => (
                 <div
                   key={f}
-                  className="font-sans text-[13px] text-ks-ink flex items-center gap-2"
+                  className="font-sans text-[12.5px] text-ks-ink flex items-center gap-2"
                 >
                   <span className="text-green-700 text-xs">&#10003;</span>
                   {f}
                 </div>
               ))}
             </div>
-
-            {/* Link to free skill */}
-            {linkedSkill && (
-              <div className="mt-5 pt-4 border-t border-ks-hair">
-                <Link
-                  href={`/skills/${linkedSkill.slug}`}
-                  className="font-sans text-[13px] text-ks-accent hover:underline"
-                >
-                  Want just the basics? Try the free skill &rarr;
-                </Link>
-              </div>
-            )}
           </div>
+
+          {/* Right sidebar — activation card */}
+          <KitActivateCard
+            kitSlug={kit.slug}
+            kitName={kit.name}
+            toolCount={kit.tools.length}
+            uiCount={kit.uiComponents.length}
+            schemaCount={kit.schema.length}
+            linkedSkillSlug={linkedSkill?.slug}
+          />
         </div>
       </section>
 
@@ -447,82 +385,14 @@ export default async function KitDetailPage({
       </section>
 
       {/* ── REVIEWS ── */}
-      <section
-        className="px-12 py-16 bg-ks-paper-warm border-y border-ks-hair"
-        id="reviews"
-      >
-        <div className="font-mono text-[11px] text-ks-muted tracking-[1px] mb-2">
-          REVIEWS
-        </div>
-        <h2 className="font-serif text-[48px] tracking-tight mb-10">
-          What subscribers say.
-        </h2>
-
-        <div className="grid grid-cols-[300px_1fr] gap-12">
-          {/* Left — rating summary */}
-          <div className="ks-card p-6">
-            <div className="font-serif text-[56px] text-ks-ink leading-none">
-              {kit.rating}
-            </div>
-            <div className="font-sans text-[13px] text-ks-muted mb-3">
-              out of 5
-            </div>
-            <Stars v={kit.rating} size={18} />
-            <div className="font-sans text-[13px] text-ks-muted mt-1 mb-5">
-              {kit.reviews} reviews
-            </div>
-
-            {/* Distribution bars */}
-            {distribution.map((row) => (
-              <div key={row.stars} className="flex items-center gap-2.5 mb-1.5">
-                <span className="font-mono text-[11px] text-ks-muted w-4 text-right">
-                  {row.stars}
-                </span>
-                <div className="flex-1 h-2 bg-ks-paper-deep rounded-full overflow-hidden">
-                  <div
-                    className="h-full bg-ks-accent rounded-full"
-                    style={{ width: `${row.pct}%` }}
-                  />
-                </div>
-                <span className="font-mono text-[10px] text-ks-muted w-8">
-                  {row.pct}%
-                </span>
-              </div>
-            ))}
-          </div>
-
-          {/* Right — review cards */}
-          <div className="flex flex-col gap-4">
-            {reviewsList.map((review) => (
-              <div key={review.id} className="ks-card p-5">
-                <div className="flex items-center gap-3 mb-3">
-                  <Avatar name={review.userName} size={36} tone="#3b7a3b" />
-                  <div>
-                    <div className="font-sans text-sm font-semibold text-ks-ink flex items-center gap-2">
-                      {review.userName}
-                      <span className="ks-chip !text-[9px] !py-px !px-1.5 !border-green-300 !text-green-700">
-                        verified
-                      </span>
-                    </div>
-                    <div className="font-sans text-[12px] text-ks-muted">
-                      {review.userRole}
-                    </div>
-                  </div>
-                  <div className="ml-auto">
-                    <Stars v={review.rating} size={12} showValue={false} />
-                  </div>
-                </div>
-                <div className="font-sans text-[13.5px] text-ks-ink2 leading-relaxed">
-                  {review.text}
-                </div>
-                <div className="mt-3 font-sans text-[12px] text-ks-muted">
-                  &#8679; {review.helpfulCount} found this helpful
-                </div>
-              </div>
-            ))}
-          </div>
-        </div>
-      </section>
+      <ReviewSection
+        targetType="kit"
+        targetSlug={slug}
+        initialReviews={reviewsList}
+        initialDistribution={distribution}
+        initialRating={kit.rating}
+        initialCount={kit.reviews}
+      />
 
       <Footer />
     </div>

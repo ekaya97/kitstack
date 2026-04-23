@@ -9,6 +9,16 @@ import { Footer } from "@/components/shared/footer";
 import { CatMark } from "@/components/ui/cat-mark";
 import { Avatar } from "@/components/ui/avatar";
 
+interface McpTool {
+  name: string;
+  description: string;
+}
+
+interface McpApp {
+  name: string;
+  description: string;
+}
+
 interface MyKit {
   kitSlug: string;
   activatedAt: string | null;
@@ -17,6 +27,9 @@ interface MyKit {
   kitDescription: string | null;
   kitReplaces: string | null;
   kitSavingsPerMonth: number | null;
+  kitMcpTools: McpTool[] | null;
+  kitMcpApps: McpApp[] | null;
+  kitDbSchema: string | null;
 }
 
 interface SubscriptionData {
@@ -171,42 +184,84 @@ export default function DashboardPage() {
               <div className="font-mono text-[11px] text-ks-muted tracking-[1px]">
                 ACTIVE KITS
               </div>
-              {myKits.map((kit) => (
-                <div key={kit.kitSlug} className="ks-card p-5">
-                  <div className="flex items-center justify-between mb-3">
-                    <div className="flex items-center gap-2.5">
-                      <CatMark cat={kit.kitCategory || "Revenue"} size={22} />
-                      <h3 className="font-serif text-[24px] tracking-tight">
-                        {kit.kitName}
-                      </h3>
+              {myKits.map((kit) => {
+                const toolCount = kit.kitMcpTools?.length ?? 0;
+                const appCount = kit.kitMcpApps?.length ?? 0;
+                const schemaCount = kit.kitDbSchema
+                  ? kit.kitDbSchema.split("\n").filter((l) => l.trim().includes(" (")).length
+                  : 0;
+
+                return (
+                  <div key={kit.kitSlug} className="ks-card p-5">
+                    <div className="flex items-center justify-between mb-3">
+                      <div className="flex items-center gap-2.5">
+                        <CatMark cat={kit.kitCategory || "Revenue"} size={22} />
+                        <h3 className="font-serif text-[24px] tracking-tight">
+                          {kit.kitName}
+                        </h3>
+                      </div>
+                      <div className="flex items-center gap-2 font-mono text-[11px] text-ks-muted">
+                        <span className="inline-flex items-center gap-1 text-[#3b7a3b] font-semibold">
+                          <span className="text-[8px]">&#9679;</span> Active
+                        </span>
+                        {kit.kitSavingsPerMonth ? (
+                          <span>
+                            &middot; saving &euro;{kit.kitSavingsPerMonth}/mo
+                          </span>
+                        ) : null}
+                      </div>
                     </div>
-                    {kit.kitReplaces && (
-                      <span className="font-mono text-[11px] text-ks-muted">
-                        replaces {kit.kitReplaces}
-                      </span>
-                    )}
-                  </div>
 
-                  <div className="flex items-center gap-2 mb-4 font-mono text-[11px] text-ks-muted">
-                    <span className="inline-flex items-center gap-1 text-[#3b7a3b] font-semibold">
-                      <span className="text-[8px]">&#9679;</span> Connected
-                    </span>
-                    {kit.kitSavingsPerMonth && (
-                      <span>
-                        &middot; saving &euro;{kit.kitSavingsPerMonth}/mo
-                      </span>
-                    )}
-                  </div>
+                    {/* Stats grid */}
+                    <div className="grid grid-cols-4 gap-3 mb-4">
+                      <div className="bg-ks-paper-warm rounded-lg p-3">
+                        <div className="font-mono text-[9px] text-ks-muted tracking-wider mb-1">
+                          ACTIONS
+                        </div>
+                        <div className="font-sans text-[14px] font-semibold text-ks-ink">
+                          {toolCount}
+                        </div>
+                      </div>
+                      <div className="bg-ks-paper-warm rounded-lg p-3">
+                        <div className="font-mono text-[9px] text-ks-muted tracking-wider mb-1">
+                          VIEWS
+                        </div>
+                        <div className="font-sans text-[14px] font-semibold text-ks-ink">
+                          {appCount}
+                        </div>
+                      </div>
+                      <div className="bg-ks-paper-warm rounded-lg p-3">
+                        <div className="font-mono text-[9px] text-ks-muted tracking-wider mb-1">
+                          DATA TYPES
+                        </div>
+                        <div className="font-sans text-[14px] font-semibold text-ks-ink">
+                          {schemaCount}
+                        </div>
+                      </div>
+                      <div className="bg-ks-paper-warm rounded-lg p-3">
+                        <div className="font-mono text-[9px] text-ks-muted tracking-wider mb-1">
+                          REPLACES
+                        </div>
+                        <div className="font-sans text-[13px] font-medium text-ks-ink truncate">
+                          {kit.kitReplaces?.split(",")[0] || "—"}
+                        </div>
+                      </div>
+                    </div>
 
-                  <div className="flex gap-2.5">
-                    <button className="ks-btn ks-btn-primary !py-2 !px-3.5 !text-[12px]">
-                      Open in Claude
-                    </button>
-                    <button className="ks-btn !py-2 !px-3.5 !text-[12px]">
-                      Export data
-                    </button>
+                    <div className="flex gap-2.5">
+                      <Link
+                        href={`/kits/${kit.kitSlug}`}
+                        className="ks-btn ks-btn-primary !py-2 !px-3.5 !text-[12px]"
+                      >
+                        View kit details
+                      </Link>
+                      <button className="ks-btn !py-2 !px-3.5 !text-[12px]">
+                        Open in Claude
+                      </button>
+                    </div>
                   </div>
-                </div>
+                );
+              }
               ))}
             </>
           )}
