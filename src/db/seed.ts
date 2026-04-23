@@ -1,6 +1,6 @@
 import { createClient } from "@libsql/client";
 import { drizzle } from "drizzle-orm/libsql";
-import { skills, kits } from "./schema";
+import { skills, kits, authors } from "./schema";
 import { seedSkills, seedKits } from "./seed-data";
 
 async function seed() {
@@ -67,6 +67,32 @@ async function seed() {
         },
       });
   }
+
+  console.log("Seeding authors...");
+  await db
+    .insert(authors)
+    .values({
+      id: "author-kitstack",
+      userId: null,
+      handle: "kitstack",
+      displayName: "KitStack",
+      bio: "Official KitStack team. We build, test, and ship the foundational skills and kits.",
+      avatarUrl: "/icon.svg",
+      verified: true,
+      website: "kitstack.co",
+      location: "Düsseldorf, DE",
+    })
+    .onConflictDoUpdate({
+      target: authors.handle,
+      set: {
+        displayName: "KitStack",
+        bio: "Official KitStack team. We build, test, and ship the foundational skills and kits.",
+        avatarUrl: "/icon.svg",
+        verified: true,
+        website: "kitstack.co",
+        location: "Düsseldorf, DE",
+      },
+    });
 
   console.log("Done.");
   process.exit(0);

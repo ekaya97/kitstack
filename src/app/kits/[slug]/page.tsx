@@ -19,6 +19,7 @@ import { getReviewsByTarget, getRatingDistribution } from "@/services/review.ser
 import { ScrollTabs } from "@/components/shared/scroll-tabs";
 import { HeaderRating } from "@/components/reviews/header-rating";
 import { ReviewSection } from "@/components/reviews/review-section";
+import { AppPreviewTabs } from "@/components/shared/app-preview-tabs";
 import { KitActivateCard } from "@/components/shared/kit-activate-card";
 
 export async function generateStaticParams() {
@@ -58,7 +59,7 @@ export default async function KitDetailPage({
       <Nav active="Kits" />
 
       {/* ── HEADER ── */}
-      <section className="px-12 pt-10 pb-14">
+      <section className="px-4 sm:px-8 lg:px-12 pt-10 pb-14">
         {/* Breadcrumb */}
         <div className="font-sans text-[13px] text-ks-muted mb-6 flex items-center gap-1.5">
           <Link href="/" className="hover:text-ks-ink">
@@ -72,7 +73,7 @@ export default async function KitDetailPage({
           <span className="text-ks-ink font-medium">{kit.name}</span>
         </div>
 
-        <div className="grid grid-cols-[1fr_380px] gap-16 items-start">
+        <div className="grid grid-cols-1 lg:grid-cols-[1fr_380px] gap-6 lg:gap-16 items-start">
           {/* Left column */}
           <div>
             {/* Category + status chips */}
@@ -91,7 +92,7 @@ export default async function KitDetailPage({
             </div>
 
             {/* Title */}
-            <h1 className="font-serif text-[64px] leading-[0.98] tracking-[-2px] text-ks-ink mb-5">
+            <h1 className="font-serif text-[28px] sm:text-[48px] lg:text-[64px] leading-[0.98] tracking-[-2px] text-ks-ink mb-5">
               {kit.name}
             </h1>
 
@@ -179,15 +180,15 @@ export default async function KitDetailPage({
       />
 
       {/* ── SEE IT WORK ── */}
-      <section className="px-12 py-16" id="see-it-work">
+      <section className="px-4 sm:px-8 lg:px-12 py-16" id="see-it-work">
         <div className="font-mono text-[11px] text-ks-muted tracking-[1px] mb-2">
           SEE IT WORK
         </div>
-        <h2 className="font-serif text-[48px] tracking-tight mb-8">
+        <h2 className="font-serif text-[26px] sm:text-[36px] lg:text-[48px] tracking-tight mb-8">
           {kit.tagline}
         </h2>
 
-        <div className="grid grid-cols-[1fr_1.2fr] gap-10">
+        <div className="grid grid-cols-1 lg:grid-cols-[1fr_1.2fr] gap-6 lg:gap-10">
           {/* Left — description + tool list */}
           <div>
             <p className="font-sans text-[15px] text-ks-muted leading-relaxed mb-6">
@@ -251,104 +252,32 @@ export default async function KitDetailPage({
 
       {/* ── WHAT'S INSIDE ── */}
       <section
-        className="px-12 py-16 bg-ks-paper-warm border-y border-ks-hair"
+        className="px-4 sm:px-8 lg:px-12 py-16 bg-ks-paper-warm border-y border-ks-hair"
         id="whats-inside"
       >
         <div className="font-mono text-[11px] text-ks-muted tracking-[1px] mb-2">
           WHAT&apos;S INSIDE
         </div>
-        <h2 className="font-serif text-[48px] tracking-tight mb-10">
-          How it works.
+        <h2 className="font-serif text-[26px] sm:text-[36px] lg:text-[48px] tracking-tight mb-3">
+          {kit.uiComponents.length} interactive views.
         </h2>
+        <p className="font-sans text-[15px] text-ks-muted mb-8 max-w-xl leading-relaxed">
+          These are the actual screens that render inside your chat. Click through them with sample data.
+        </p>
 
-        <div className="grid grid-cols-3 gap-5">
-          {/* Your data layer */}
-          <div className="ks-card overflow-hidden">
-            <div className="bg-blue-600 px-5 py-3">
-              <span className="font-mono text-[10px] text-white/80 tracking-wider">
-                LAYER 1
-              </span>
-              <div className="font-serif text-[22px] text-white mt-0.5">
-                Your data
-              </div>
-              <div className="font-sans text-[12px] text-white/70">
-                Private to you
-              </div>
-            </div>
-            <div className="p-5 flex flex-col gap-2">
-              {kit.schema.map((table) => (
-                <div
-                  key={table}
-                  className="font-mono text-[12px] px-3 py-2 rounded-md bg-blue-50 text-blue-800 border border-blue-200"
-                >
-                  {table}
-                </div>
-              ))}
-            </div>
-          </div>
-
-          {/* What it can do layer */}
-          <div className="ks-card overflow-hidden">
-            <div className="bg-ks-accent px-5 py-3">
-              <span className="font-mono text-[10px] text-white/80 tracking-wider">
-                LAYER 2
-              </span>
-              <div className="font-serif text-[22px] text-white mt-0.5">
-                What it can do
-              </div>
-              <div className="font-sans text-[12px] text-white/70">
-                Claude handles these on your behalf
-              </div>
-            </div>
-            <div className="p-5 flex flex-col gap-2">
-              {kit.tools.map((tool) => (
-                <div
-                  key={tool}
-                  className="font-mono text-[12px] px-3 py-2 rounded-md bg-orange-50 text-ks-accent-deep border border-orange-200"
-                >
-                  &#9674; {tool}
-                </div>
-              ))}
-            </div>
-          </div>
-
-          {/* What you see layer */}
-          <div className="ks-card overflow-hidden">
-            <div className="bg-green-700 px-5 py-3">
-              <span className="font-mono text-[10px] text-white/80 tracking-wider">
-                LAYER 3
-              </span>
-              <div className="font-serif text-[22px] text-white mt-0.5">
-                What you see
-              </div>
-              <div className="font-sans text-[12px] text-white/70">
-                Interactive views in chat
-              </div>
-            </div>
-            <div className="p-5 flex flex-col gap-2">
-              {kit.uiComponents.map((comp) => (
-                <div
-                  key={comp}
-                  className="font-sans text-[12px] px-3 py-2 rounded-md bg-green-50 text-green-800 border border-green-200"
-                >
-                  &#9635; {comp}
-                </div>
-              ))}
-            </div>
-          </div>
-        </div>
+        <AppPreviewTabs kitSlug={slug} />
       </section>
 
       {/* ── SETUP ── */}
-      <section className="px-12 py-16" id="setup">
+      <section className="px-4 sm:px-8 lg:px-12 py-16" id="setup">
         <div className="font-mono text-[11px] text-ks-muted tracking-[1px] mb-2">
           SETUP
         </div>
-        <h2 className="font-serif text-[48px] tracking-tight mb-10">
+        <h2 className="font-serif text-[26px] sm:text-[36px] lg:text-[48px] tracking-tight mb-10">
           Four steps. Five minutes.
         </h2>
 
-        <div className="grid grid-cols-4 gap-4">
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
           {[
             {
               n: "01",
@@ -372,7 +301,7 @@ export default async function KitDetailPage({
             },
           ].map((step) => (
             <div key={step.n} className="ks-card p-6">
-              <div className="font-serif text-[56px] text-ks-accent italic leading-none">
+              <div className="font-serif text-[28px] sm:text-[42px] lg:text-[56px] text-ks-accent italic leading-none">
                 {step.n}
               </div>
               <div className="font-serif text-[22px] mt-3">{step.title}</div>

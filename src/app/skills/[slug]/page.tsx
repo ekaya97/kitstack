@@ -131,7 +131,7 @@ export default async function SkillDetailPage({
       <Nav active="Skills" />
 
       {/* ── HEADER ── */}
-      <section className="px-16 pt-6 pb-10 border-b border-ks-hair">
+      <section className="px-4 sm:px-8 lg:px-16 pt-6 pb-10 border-b border-ks-hair">
         {/* Breadcrumb */}
         <div className="font-mono text-[11px] text-ks-muted mb-4 flex items-center gap-1.5">
           <Link href="/" className="hover:text-ks-ink">Home</Link>
@@ -141,7 +141,7 @@ export default async function SkillDetailPage({
           <span className="text-ks-ink font-medium">{skill.name}</span>
         </div>
 
-        <div className="grid grid-cols-[1fr_360px] gap-12 items-end">
+        <div className="grid grid-cols-1 lg:grid-cols-[1fr_360px] gap-6 lg:gap-12 items-end">
           {/* Left column */}
           <div>
             {/* Category + free chip */}
@@ -156,7 +156,7 @@ export default async function SkillDetailPage({
             </div>
 
             {/* Title */}
-            <h1 className="font-serif text-[56px] leading-[1] tracking-[-2px] text-ks-ink mb-3">
+            <h1 className="font-serif text-[28px] sm:text-[42px] lg:text-[56px] leading-[1] tracking-[-2px] text-ks-ink mb-3">
               {skill.name}
             </h1>
 
@@ -213,7 +213,7 @@ export default async function SkillDetailPage({
           </div>
 
           {/* Right sidebar — download card */}
-          <div className="sticky top-8 flex flex-col gap-3">
+          <div className="lg:sticky lg:top-8 flex flex-col gap-3">
             <div className="ks-card p-5">
               <div className="font-mono text-[10px] text-ks-muted tracking-wider mb-1">
                 FREE SKILL
@@ -250,7 +250,7 @@ export default async function SkillDetailPage({
               )}
 
               {/* Action row */}
-              <div className="flex justify-between border-t border-ks-hair pt-3">
+              <div className="flex justify-between border-t border-ks-hair pt-4">
                 <WishlistButton targetType="skill" targetSlug={slug} />
                 <ShareButton type="skill" slug={slug} title={skill.name} />
               </div>
@@ -263,11 +263,11 @@ export default async function SkillDetailPage({
       <ScrollTabs tabs={tabs} />
 
       {/* ── SEE IT WORK ── */}
-      <section className="px-16 py-16" id="see-it-work">
+      <section className="px-4 sm:px-8 lg:px-16 py-16" id="see-it-work">
         <div className="font-mono text-[11px] text-ks-muted tracking-[1px] mb-2">
           SEE IT WORK
         </div>
-        <h2 className="font-serif text-[48px] tracking-tight mb-8">
+        <h2 className="font-serif text-[26px] sm:text-[36px] lg:text-[48px] tracking-tight mb-8">
           One prompt. Full output.
         </h2>
 
@@ -347,17 +347,17 @@ export default async function SkillDetailPage({
 
       {/* ── WHAT'S INSIDE ── */}
       <section
-        className="px-16 py-16 bg-ks-paper-warm border-y border-ks-hair"
+        className="px-4 sm:px-8 lg:px-16 py-16 bg-ks-paper-warm border-y border-ks-hair"
         id="whats-inside"
       >
         <div className="font-mono text-[11px] text-ks-muted tracking-[1px] mb-2">
           WHAT&apos;S INSIDE
         </div>
-        <h2 className="font-serif text-[48px] tracking-tight mb-10">
+        <h2 className="font-serif text-[26px] sm:text-[36px] lg:text-[48px] tracking-tight mb-10">
           {skill.files} files. One .zip.
         </h2>
 
-        <div className="grid grid-cols-[340px_1fr] gap-10">
+        <div className="grid grid-cols-1 md:grid-cols-[340px_1fr] gap-10">
           <div className="bg-ks-ink rounded-xl p-5 self-start">
             <div className="font-mono text-[10px] text-ks-faint tracking-wider mb-3">
               {skill.slug}.zip
@@ -377,8 +377,8 @@ export default async function SkillDetailPage({
                 </span>
                 <span
                   className={`font-mono text-[12px] ${f.icon === "dir"
-                      ? "text-ks-paper font-medium"
-                      : "text-ks-paper-deep"
+                    ? "text-ks-paper font-medium"
+                    : "text-ks-paper-deep"
                     }`}
                 >
                   {f.name}
@@ -408,11 +408,11 @@ export default async function SkillDetailPage({
       </section>
 
       {/* ── SETUP ── */}
-      <section className="px-16 py-16" id="setup">
+      <section className="px-4 sm:px-8 lg:px-16 py-16" id="setup">
         <div className="font-mono text-[11px] text-ks-muted tracking-[1px] mb-2">
           SETUP
         </div>
-        <h2 className="font-serif text-[48px] tracking-tight mb-3">
+        <h2 className="font-serif text-[26px] sm:text-[36px] lg:text-[48px] tracking-tight mb-3">
           Download. Upload. Chat.
         </h2>
         <p className="font-sans text-[15px] text-ks-muted mb-10 max-w-xl leading-relaxed">
@@ -435,7 +435,7 @@ export default async function SkillDetailPage({
       {/* ── UPGRADE PATH ── */}
       {upgradeKit && (
         <section
-          className="px-16 py-12 bg-ks-ink text-ks-paper"
+          className="px-4 sm:px-8 lg:px-16 py-12 bg-ks-ink text-ks-paper"
           id="upgrade-path"
         >
           <div className="max-w-4xl mx-auto">
@@ -450,7 +450,7 @@ export default async function SkillDetailPage({
               The kit version remembers everything, adds a database, and renders interactive UI inside your chat.
             </p>
 
-            <div className="grid grid-cols-2 gap-5">
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
               {/* Skill side */}
               <div className="border border-dashed border-ks-faint rounded-xl p-6 opacity-80">
                 <div className="font-mono text-[10px] text-ks-faint tracking-wider mb-2">

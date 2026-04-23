@@ -41,12 +41,12 @@ export function ScrollTabs({ tabs }: { tabs: Tab[] }) {
 
   return (
     <div className="sticky top-0 z-20 bg-ks-paper border-b border-ks-hair">
-      <div className="px-16 flex gap-1.5 py-3">
+      <div className="px-4 sm:px-8 md:px-16 flex gap-1.5 py-3 overflow-x-auto flex-nowrap [&::-webkit-scrollbar]:hidden [-ms-overflow-style:none] [scrollbar-width:none]">
         {tabs.map((tab) => (
           <button
             key={tab.id}
             onClick={() => scrollTo(tab.id)}
-            className={`font-sans text-[13px] font-medium px-4 py-2 rounded-full cursor-pointer transition-colors ${
+            className={`font-sans text-[12px] sm:text-[13px] font-medium px-3 py-1.5 sm:px-4 sm:py-2 rounded-full cursor-pointer transition-colors whitespace-nowrap ${
               active === tab.id
                 ? "bg-ks-ink text-ks-paper"
                 : "text-ks-muted hover:bg-ks-paper-warm"

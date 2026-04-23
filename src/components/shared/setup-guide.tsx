@@ -111,7 +111,7 @@ export function SetupGuide() {
   return (
     <div>
       {/* Provider tabs */}
-      <div className="flex gap-2 mb-8">
+      <div className="flex flex-wrap gap-2 mb-8">
         {providers.map((p) => (
           <button
             key={p.id}
@@ -129,10 +129,10 @@ export function SetupGuide() {
       </div>
 
       {/* Steps */}
-      <div className="grid grid-cols-4 gap-4">
+      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
         {provider.steps.map((step) => (
           <div key={step.n} className="ks-card p-6">
-            <div className="font-serif text-[56px] text-ks-accent italic leading-none">
+            <div className="font-serif text-[40px] sm:text-[48px] lg:text-[56px] text-ks-accent italic leading-none">
               {step.n}
             </div>
             <div className="font-serif text-[22px] mt-3">{step.title}</div>

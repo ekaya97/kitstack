@@ -122,11 +122,11 @@ export function KitActivateCard({
         onClose={() => setState("not-activated")}
       />
 
-      <div className="ks-card p-6 sticky top-8">
+      <div className="ks-card p-4 sm:p-5 md:p-6 lg:sticky lg:top-8">
         <div className="font-mono text-[10px] text-ks-muted tracking-wider mb-2">
           SUBSCRIPTION KIT
         </div>
-        <div className="font-serif text-[44px] text-ks-ink italic leading-none mb-1">
+        <div className="font-serif text-[36px] sm:text-[40px] md:text-[44px] text-ks-ink italic leading-none mb-1">
           &euro;5<span className="text-lg">/mo</span>
         </div>
         <div className="font-sans text-[13px] text-ks-muted mb-5">
@@ -180,7 +180,7 @@ export function KitActivateCard({
             <div className="flex items-center gap-2 bg-emerald-50 border border-emerald-200 rounded-full px-4 py-3 mb-2.5">
               <span className="text-emerald-600 text-sm">&#10003;</span>
               <span className="font-sans text-[14px] text-emerald-800 font-medium">
-                Active &mdash; ready in Claude
+                Active &mdash; ready to use
               </span>
             </div>
             <Link
@@ -192,6 +192,15 @@ export function KitActivateCard({
           </>
         )}
 
+        {state !== "active" && state !== "loading" && state !== "connecting" && state !== "activating" && (
+          <Link
+            href={`/kits/${kitSlug}/try`}
+            className="ks-btn w-full justify-center !py-3 !text-[13px] mb-2.5"
+          >
+            Try it free &rarr;
+          </Link>
+        )}
+
         {state === "connecting" ? null : error ? (
           <div className="font-sans text-[12px] text-red-600 mb-3">
             {error}
@@ -199,37 +208,15 @@ export function KitActivateCard({
         ) : null}
 
         {/* Action row */}
-        <div className="flex justify-between border-t border-ks-hair pt-4 mb-5">
+        <div className="flex justify-between border-t border-ks-hair py-4">
           <WishlistButton targetType="kit" targetSlug={kitSlug} />
           <ShareButton type="kit" slug={kitSlug} title={kitName} />
         </div>
 
-        {/* Features checklist */}
-        <div className="border-t border-ks-hair pt-4 flex flex-col gap-2">
-          <div className="font-mono text-[10px] text-ks-muted tracking-wider mb-1">
-            INCLUDES
-          </div>
-          {[
-            "Your own private database",
-            `${toolCount} built-in actions`,
-            `${uiCount} interactive views`,
-            `${schemaCount} data types`,
-            "Data export anytime",
-            "EU-hosted, your data stays private",
-          ].map((f) => (
-            <div
-              key={f}
-              className="font-sans text-[13px] text-ks-ink flex items-center gap-2"
-            >
-              <span className="text-green-700 text-xs">&#10003;</span>
-              {f}
-            </div>
-          ))}
-        </div>
 
         {/* Link to free skill */}
         {linkedSkillSlug && (
-          <div className="mt-5 pt-4 border-t border-ks-hair">
+          <div className="pt-4 border-t border-ks-hair">
             <Link
               href={`/skills/${linkedSkillSlug}`}
               className="font-sans text-[13px] text-ks-accent hover:underline"

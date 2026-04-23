@@ -39,8 +39,8 @@ const columns: { heading: string; links: FooterLink[] }[] = [
 
 export function Footer() {
   return (
-    <footer className="mt-auto px-12 pt-12 pb-8 border-t border-ks-hair bg-ks-paper-warm">
-      <div className="grid grid-cols-[1.5fr_1fr_1fr_1fr] gap-10">
+    <footer className="mt-auto px-4 sm:px-8 md:px-12 pt-12 pb-8 border-t border-ks-hair bg-ks-paper-warm">
+      <div className="grid grid-cols-2 md:grid-cols-[1.5fr_1fr_1fr_1fr] gap-6 md:gap-10">
         <div>
           <Link href="/" className="flex items-center gap-2.5 mb-3">
             <Logo size={24} />
@@ -82,7 +82,7 @@ export function Footer() {
         ))}
       </div>
 
-      <div className="mt-8 pt-5 border-t border-ks-hair flex justify-between font-mono text-[11px] text-ks-muted">
+      <div className="mt-8 pt-5 border-t border-ks-hair flex flex-col sm:flex-row justify-between gap-2 sm:gap-0 font-mono text-[11px] text-ks-muted">
         <div>&copy; 2026 kitstack &mdash; shipped from Germany</div>
       </div>
     </footer>

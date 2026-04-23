@@ -3,6 +3,7 @@
 import { useState } from "react";
 import { Nav } from "@/components/shared/nav";
 import { Footer } from "@/components/shared/footer";
+import { FAQ } from "@/components/shared/faq";
 import type { KitCardData } from "@/services/transformers";
 
 interface PricingClientProps {
@@ -23,11 +24,11 @@ export function PricingClient({ kits }: PricingClientProps) {
       <Nav active="Pricing" />
 
       {/* ───── HERO ───── */}
-      <section className="px-16 pt-[72px] pb-14 text-center max-w-3xl mx-auto">
+      <section className="px-4 sm:px-8 lg:px-16 pt-10 sm:pt-12 lg:pt-[72px] pb-14 text-center max-w-3xl mx-auto">
         <div className="font-mono text-[11px] text-ks-muted tracking-[1px] mb-3">
           &sect; PRICING
         </div>
-        <h1 className="font-serif text-[72px] leading-[0.98] tracking-[-2px] text-ks-ink">
+        <h1 className="font-serif text-[32px] sm:text-[52px] lg:text-[72px] leading-[0.98] tracking-[-2px] text-ks-ink">
           Start free.{" "}
           <span className="italic text-ks-accent">Upgrade when sticky.</span>
         </h1>
@@ -61,14 +62,14 @@ export function PricingClient({ kits }: PricingClientProps) {
       </section>
 
       {/* ───── PRICING TIERS ───── */}
-      <section className="px-16 pb-20">
-        <div className="grid grid-cols-4 gap-5 items-start">
+      <section className="px-4 sm:px-8 lg:px-16 pb-20">
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-5 items-start">
           {/* FREE */}
-          <div className="ks-card p-7">
+          <div className="ks-card p-7 h-full">
             <div className="font-mono text-[10px] text-ks-muted tracking-wider mb-1">
               FREE
             </div>
-            <div className="font-serif text-[44px] tracking-tight leading-none">
+            <div className="font-serif text-[26px] sm:text-[36px] lg:text-[44px] tracking-tight leading-none">
               &euro;0
             </div>
             <div className="font-sans text-xs text-ks-muted mt-1 mb-6">
@@ -86,18 +87,18 @@ export function PricingClient({ kits }: PricingClientProps) {
           </div>
 
           {/* STARTER */}
-          <div className="ks-card p-7">
+          <div className="ks-card p-7 h-full">
             <div className="font-mono text-[10px] text-ks-muted tracking-wider mb-1">
               STARTER
             </div>
-            <div className="font-serif text-[44px] tracking-tight leading-none">
+            <div className="font-serif text-[26px] sm:text-[36px] lg:text-[44px] tracking-tight leading-none">
               &euro;{price(5)}
             </div>
             <div className="font-sans text-xs text-ks-muted mt-1 mb-6">
               {yearly ? "/year per kit" : "/mo per kit"}
             </div>
             <ul className="m-0 p-0 list-none font-sans text-[13px] text-ks-ink2 leading-[2]">
-              <li>&#10003; 1 kit of your choice</li>
+              <li>&#10003; 2 kits of your choice</li>
               <li>&#10003; Private database, EU-hosted</li>
               <li>&#10003; Multi-client (Claude, ChatGPT, Gemini)</li>
               <li>&#10003; Cancel anytime</li>
@@ -108,12 +109,12 @@ export function PricingClient({ kits }: PricingClientProps) {
           </div>
 
           {/* PRO — HIGHLIGHTED */}
-          <div className="relative">
+          <div className="relative h-full">
             <div className="absolute -top-3.5 left-1/2 -translate-x-1/2 z-10 px-3 py-1 bg-ks-accent text-white font-mono text-[10px] tracking-wider rounded-full">
               MOST POPULAR
             </div>
             <div
-              className="ks-card-ink p-7 relative"
+              className="ks-card-ink p-7 relative h-full"
               style={{
                 boxShadow: "0 0 40px rgba(214, 90, 47, 0.18), 0 0 80px rgba(214, 90, 47, 0.08)",
               }}
@@ -121,7 +122,7 @@ export function PricingClient({ kits }: PricingClientProps) {
               <div className="font-mono text-[10px] text-ks-accent tracking-wider mb-1">
                 PRO
               </div>
-              <div className="font-serif text-[44px] tracking-tight leading-none text-ks-paper">
+              <div className="font-serif text-[26px] sm:text-[36px] lg:text-[44px] tracking-tight leading-none text-ks-paper">
                 &euro;{price(19)}
               </div>
               <div className="font-sans text-xs text-ks-faint mt-1 mb-6">
@@ -146,7 +147,7 @@ export function PricingClient({ kits }: PricingClientProps) {
           </div>
 
           {/* TEAM */}
-          <div className="ks-card p-7">
+          <div className="ks-card p-7 h-full">
             <div className="font-mono text-[10px] text-ks-muted tracking-wider mb-1">
               TEAM
             </div>
@@ -172,12 +173,12 @@ export function PricingClient({ kits }: PricingClientProps) {
       </section>
 
       {/* ───── SAAS COMPARISON ───── */}
-      <section className="px-16 py-20 bg-ks-paper-warm border-y border-ks-hair">
+      <section className="px-4 sm:px-8 lg:px-16 py-20 bg-ks-paper-warm border-y border-ks-hair">
         <div className="max-w-5xl mx-auto">
           <div className="font-mono text-[11px] text-ks-muted tracking-[1px] mb-2">
             &sect; WHY PRO IS A BARGAIN
           </div>
-          <h2 className="font-serif text-[52px] tracking-tight mb-10">
+          <h2 className="font-serif text-[28px] sm:text-[40px] lg:text-[52px] tracking-tight mb-10">
             &euro;19/mo vs.{" "}
             <span className="ks-strike text-ks-muted">
               &euro;{totalSaasMonthly}/mo
@@ -185,7 +186,7 @@ export function PricingClient({ kits }: PricingClientProps) {
             SaaS stack.
           </h2>
 
-          <div className="grid grid-cols-[1.3fr_0.7fr] gap-5">
+          <div className="grid grid-cols-1 lg:grid-cols-[1.3fr_0.7fr] gap-5">
             {/* Left — per-kit breakdown */}
             <div className="ks-card p-7">
               {kits.map((kit, i) => (
@@ -235,56 +236,7 @@ export function PricingClient({ kits }: PricingClientProps) {
         </div>
       </section>
 
-      {/* ───── FAQ ───── */}
-      <section className="px-16 py-20">
-        <div className="max-w-5xl mx-auto">
-          <div className="font-mono text-[11px] text-ks-muted tracking-[1px] mb-2">
-            &sect; FAQ
-          </div>
-          <h2 className="font-serif text-[52px] tracking-tight mb-10">
-            Questions,{" "}
-            <span className="italic text-ks-accent">answered.</span>
-          </h2>
-
-          <div className="grid grid-cols-2 gap-5">
-            {(
-              [
-                {
-                  q: "Why are skills free but kits cost money?",
-                  a: "Skills are files you upload once — no running cost for us. Kits run on our servers with one private database per user, real infrastructure. The subscription covers hosting and development.",
-                },
-                {
-                  q: "Can I cancel anytime?",
-                  a: "Yes. Cancel with one click in your dashboard. Your subscription ends at the current billing period. Your data stays exportable for 30 days after cancellation.",
-                },
-                {
-                  q: "Where is my data hosted?",
-                  a: "Your data is stored in your own private database in the EU. We can't read it. Export everything as JSON or CSV anytime.",
-                },
-                {
-                  q: "Does this work with ChatGPT or VS Code?",
-                  a: "Skills work everywhere — Claude, ChatGPT, VS Code, any LLM that accepts file uploads. Kits currently work with Claude Desktop, Claude Code, and VS Code with Copilot. ChatGPT support is on the roadmap.",
-                },
-                {
-                  q: "Do I need a developer to set this up?",
-                  a: "No. Add one connector URL in Claude's settings, sign in, and you're done. No terminal, no config files, no code. Takes about 90 seconds.",
-                },
-                {
-                  q: "Is there a free trial for kits?",
-                  a: "Every free-tier user gets 1 kit trial per day — full functionality, data resets at midnight. It's enough to see if a kit fits your workflow before subscribing.",
-                },
-              ] as const
-            ).map((faq) => (
-              <div key={faq.q} className="ks-card p-6">
-                <div className="font-serif text-lg mb-2">{faq.q}</div>
-                <div className="font-sans text-[13px] text-ks-muted leading-relaxed">
-                  {faq.a}
-                </div>
-              </div>
-            ))}
-          </div>
-        </div>
-      </section>
+      <FAQ />
 
       <Footer />
     </div>

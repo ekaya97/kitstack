@@ -119,6 +119,20 @@ export const wishlists = sqliteTable("wishlists", {
   uniqueIndex("wishlists_unique_idx").on(table.userId, table.targetType, table.targetSlug),
 ]);
 
+// Authors (profile for skill/kit creators)
+export const authors = sqliteTable("authors", {
+  id: text("id").primaryKey(),
+  userId: text("user_id"), // nullable — system authors may not have a login
+  handle: text("handle").notNull().unique(),
+  displayName: text("display_name").notNull(),
+  bio: text("bio"),
+  avatarUrl: text("avatar_url"),
+  verified: integer("verified", { mode: "boolean" }).default(false),
+  website: text("website"),
+  location: text("location"),
+  createdAt: integer("created_at", { mode: "timestamp" }).$defaultFn(() => new Date()),
+});
+
 // ── BetterAuth tables ──
 export { user, session, account, verification } from "./auth-schema";
 
@@ -153,4 +167,6 @@ export type NewSubscription = typeof subscriptions.$inferInsert;
 export type Review = typeof reviews.$inferSelect;
 export type NewReview = typeof reviews.$inferInsert;
 export type Wishlist = typeof wishlists.$inferSelect;
+export type Author = typeof authors.$inferSelect;
+export type NewAuthor = typeof authors.$inferInsert;
 export type SkillDownload = typeof skillDownloads.$inferSelect;

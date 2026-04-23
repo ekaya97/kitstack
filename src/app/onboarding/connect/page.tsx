@@ -28,11 +28,11 @@ export default async function OnboardingConnectPage() {
       <Nav />
 
       {/* HEADER */}
-      <section className="px-16 pt-12 pb-8 text-center max-w-[720px] mx-auto">
+      <section className="px-4 sm:px-8 lg:px-16 pt-12 pb-8 text-center max-w-[720px] mx-auto">
         <div className="font-mono text-[11px] text-ks-muted tracking-[1px] mb-4">
           &sect; ADD YOUR CONNECTION &middot; 60 SECONDS
         </div>
-        <h1 className="font-serif text-[56px] leading-[1.02] tracking-tight text-ks-ink">
+        <h1 className="font-serif text-[32px] sm:text-[44px] lg:text-[56px] leading-[1.02] tracking-tight text-ks-ink">
           One URL.{" "}
           <span className="italic text-ks-accent">Every kit.</span>
         </h1>
@@ -43,8 +43,8 @@ export default async function OnboardingConnectPage() {
       </section>
 
       {/* PROGRESS STEPPER */}
-      <section className="px-16 pb-10">
-        <div className="grid grid-cols-4 gap-3">
+      <section className="px-4 sm:px-8 lg:px-16 pb-10">
+        <div className="grid grid-cols-2 sm:grid-cols-2 lg:grid-cols-4 gap-3">
           {steps.map((step) => (
             <div
               key={step.n}
@@ -94,7 +94,7 @@ export default async function OnboardingConnectPage() {
       </section>
 
       {/* TWO-COLUMN MAIN PANEL */}
-      <section className="px-16 pb-12 grid grid-cols-2 gap-6">
+      <section className="px-4 sm:px-8 lg:px-16 pb-12 grid grid-cols-1 md:grid-cols-2 gap-6">
         {/* LEFT: INSTRUCTIONS */}
         <div className="flex flex-col gap-6">
           <div>

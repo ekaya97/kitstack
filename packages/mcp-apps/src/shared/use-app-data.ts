@@ -52,7 +52,7 @@ export function useAppData<T>(
   const kit = getParam("kit") || "crm";
   const refetch = useCallback(() => setTick((t) => t + 1), []);
 
-  const useMock = !token && import.meta.env.DEV;
+  const useMock = !token && (!APP_DATA_URL || import.meta.env.DEV);
 
   useEffect(() => {
     if (useMock) return;

@@ -224,7 +224,7 @@ export function ReviewSection({
   };
 
   return (
-    <section className="px-16 py-16 border-t border-ks-hair" id="reviews">
+    <section className="px-4 sm:px-8 lg:px-16 py-16 border-t border-ks-hair" id="reviews">
       <div className="font-mono text-[11px] text-ks-muted tracking-[1px] mb-2">
         REVIEWS
         {refreshing && (
@@ -232,12 +232,12 @@ export function ReviewSection({
         )}
       </div>
 
-      <div className="grid grid-cols-[280px_1fr] gap-10">
+      <div className="grid grid-cols-1 md:grid-cols-[280px_1fr] gap-6 md:gap-10">
         {/* Left — stats */}
         <div>
           {totalCount > 0 ? (
             <>
-              <h2 className="font-serif text-[44px] tracking-tight mb-2">
+              <h2 className="font-serif text-[32px] sm:text-[38px] md:text-[44px] tracking-tight mb-2">
                 {avgRating}
                 <span className="text-lg text-ks-muted">/5</span>
               </h2>

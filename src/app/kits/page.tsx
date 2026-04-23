@@ -45,12 +45,12 @@ export default async function KitsPage() {
       <Nav active="Kits" />
 
       {/* HEADER */}
-      <section className="px-16 pt-[72px] pb-12 grid grid-cols-[1.1fr_1fr] gap-[60px] items-center">
+      <section className="px-4 sm:px-8 lg:px-16 pt-10 sm:pt-12 lg:pt-[72px] pb-12 grid grid-cols-1 lg:grid-cols-[1.1fr_1fr] gap-6 sm:gap-10 lg:gap-[60px] items-center">
         <div>
           <div className="font-mono text-[11px] text-ks-muted tracking-[1px] mb-[18px]">
             KITS &middot; &euro;5/MO STARTER &middot; ALL INCLUDED
           </div>
-          <h1 className="font-serif text-[68px] leading-[0.98] tracking-[-2px] text-ks-ink">
+          <h1 className="font-serif text-[32px] sm:text-[48px] lg:text-[68px] leading-[0.98] tracking-[-2px] text-ks-ink">
             Kits.{" "}
             <span className="italic text-ks-accent">Real apps,</span>
             <br />
@@ -64,8 +64,8 @@ export default async function KitsPage() {
         </div>
 
         {/* Right side: pricing callout */}
-        <div className="flex flex-col items-center text-center">
-          <div className="font-serif text-[120px] leading-none tracking-[-4px] text-ks-ink">
+        <div className="flex flex-col items-center lg:items-center text-center">
+          <div className="font-serif text-[60px] sm:text-[80px] lg:text-[120px] leading-none tracking-[-4px] text-ks-ink">
             &euro;{totalReplacesValue}
           </div>
           <div className="font-mono text-[11px] text-ks-muted tracking-[1px] mt-1 mb-6">
@@ -81,8 +81,8 @@ export default async function KitsPage() {
       </section>
 
       {/* KITS GRID */}
-      <section className="px-16 pb-[72px]">
-        <div className="grid grid-cols-2 gap-[18px]">
+      <section className="px-4 sm:px-8 lg:px-16 pb-[72px]">
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-[18px]">
           {kits.map((kit) => (
             <div key={kit.slug} className="ks-card p-5 flex flex-col">
               {/* Top row: category + live status + stars */}

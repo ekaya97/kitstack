@@ -8,6 +8,7 @@ import { Nav } from "@/components/shared/nav";
 import { Footer } from "@/components/shared/footer";
 import { CatMark } from "@/components/ui/cat-mark";
 import { Avatar } from "@/components/ui/avatar";
+import { AuthorCTA } from "@/components/shared/author-cta";
 
 interface McpTool {
   name: string;
@@ -119,14 +120,14 @@ export default function DashboardPage() {
       <Nav />
 
       {/* TOP SUMMARY */}
-      <section className="px-16 pt-12 pb-8 flex items-end justify-between">
+      <section className="px-4 sm:px-8 lg:px-16 pt-12 pb-8 flex flex-col sm:flex-row items-start sm:items-end justify-between gap-4">
         <div className="flex items-center gap-5">
           <Avatar name={user.name || user.email} size={48} tone="#3b7a3b" />
           <div>
             <div className="font-mono text-[11px] text-ks-muted tracking-[1px] mb-1">
               YOUR SHELF
             </div>
-            <h1 className="font-serif text-[44px] leading-none tracking-tight text-ks-ink">
+            <h1 className="font-serif text-[28px] sm:text-[36px] lg:text-[44px] leading-none tracking-tight text-ks-ink">
               {getGreeting()}, {firstName}.
             </h1>
             <div className="font-sans text-[15px] text-ks-muted mt-1.5">
@@ -166,7 +167,7 @@ export default function DashboardPage() {
         </div>
       </section>
 
-      <section className="px-16 pb-16 grid grid-cols-[2fr_1fr] gap-6 items-start">
+      <section className="px-4 sm:px-8 lg:px-16 pb-16 grid grid-cols-1 lg:grid-cols-[2fr_1fr] gap-6 items-start">
         {/* LEFT COLUMN */}
         <div className="flex flex-col gap-5">
           {/* No subscription CTA */}
@@ -242,7 +243,7 @@ export default function DashboardPage() {
                   </div>
                 </div>
 
-                <div className="grid grid-cols-4 gap-3 mb-4">
+                <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 mb-4">
                   {[
                     { label: "ACTIONS", value: toolCount },
                     { label: "VIEWS", value: appCount },
@@ -347,6 +348,9 @@ export default function DashboardPage() {
               </Link>
             </div>
           )}
+
+          {/* Author CTA */}
+          <AuthorCTA />
         </div>
 
         {/* RIGHT SIDEBAR */}

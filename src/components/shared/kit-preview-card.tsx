@@ -18,7 +18,7 @@ const demos: Record<string, React.ReactNode> = {
 export function KitPreviewCard({ kit }: { kit: KitCardData }) {
   return (
     <div className="ks-card p-5 flex flex-col">
-      <div className="flex justify-between items-center mb-2.5">
+      <div className="flex flex-wrap justify-between items-center gap-2 mb-2.5">
         <div className="flex items-center gap-2">
           <CatMark cat={kit.cat} />
           <div className="font-serif text-2xl tracking-tight">{kit.name}</div>
@@ -36,7 +36,7 @@ export function KitPreviewCard({ kit }: { kit: KitCardData }) {
         </div>
         {demos[kit.slug]}
       </div>
-      <div className="flex justify-between items-center mt-3.5">
+      <div className="flex flex-wrap justify-between items-center gap-2 mt-3.5">
         <div className="font-mono text-[11px] text-ks-muted">
           Persistent data &middot; interactive dashboards
         </div>

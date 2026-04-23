@@ -116,7 +116,7 @@ export default function LoginPage() {
       {/* Heading */}
       <AnimatePresence mode="wait">
         <motion.div key={step + "-heading"} className="text-center mb-8" {...fade}>
-          <h1 className="font-serif text-[40px] tracking-tight leading-tight">
+          <h1 className="font-serif text-[28px] sm:text-[36px] md:text-[40px] tracking-tight leading-tight">
             {heading}
           </h1>
           <p className="font-sans text-[15px] text-ks-muted mt-2">{subtitle}</p>

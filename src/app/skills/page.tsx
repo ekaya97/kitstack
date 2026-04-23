@@ -59,12 +59,12 @@ export default function SkillsPage() {
       <Nav active="Skills" />
 
       {/* HEADER */}
-      <section className="px-16 pt-[72px] pb-12 grid grid-cols-[1.1fr_1fr] gap-[60px] items-center">
+      <section className="px-4 sm:px-8 lg:px-16 pt-10 sm:pt-12 lg:pt-[72px] pb-12 grid grid-cols-1 lg:grid-cols-[1.1fr_1fr] gap-6 sm:gap-10 lg:gap-[60px] items-center">
         <div>
           <div className="font-mono text-[11px] text-ks-muted tracking-[1px] mb-[18px]">
             FREE SKILLS &middot; NO SIGNUP
           </div>
-          <h1 className="font-serif text-[72px] leading-[0.98] tracking-[-2px] text-ks-ink">
+          <h1 className="font-serif text-[32px] sm:text-[52px] lg:text-[72px] leading-[0.98] tracking-[-2px] text-ks-ink">
             Skills.{" "}
             <span className="italic text-ks-accent">All free.</span>
           </h1>
@@ -103,7 +103,7 @@ export default function SkillsPage() {
       </section>
 
       {/* CATEGORY FILTER + SEARCH */}
-      <div className="px-16 pb-8 flex items-center gap-2 overflow-hidden">
+      <div className="px-4 sm:px-8 lg:px-16 pb-8 flex flex-wrap items-center gap-2 overflow-hidden">
         {/* Search icon — always on left */}
         <button
           onClick={() => {
@@ -154,9 +154,9 @@ export default function SkillsPage() {
       </div>
 
       {/* SKILLS GRID */}
-      <section className="px-16 pb-[72px]">
+      <section className="px-4 sm:px-8 lg:px-16 pb-[72px]">
         {loading ? (
-          <div className="grid grid-cols-3 gap-[18px]">
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-[18px]">
             {[1, 2, 3, 4, 5, 6].map((i) => (
               <div key={i} className="ks-card p-5 animate-pulse">
                 <div className="flex justify-between mb-3">
@@ -184,7 +184,7 @@ export default function SkillsPage() {
             </div>
           </div>
         ) : (
-          <div className="grid grid-cols-3 gap-[18px]">
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-[18px]">
             {filtered.map((skill) => (
               <div key={skill.slug} className="ks-card p-5 flex flex-col">
                 {/* Top row: category + FREE chip */}

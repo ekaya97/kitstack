@@ -1,5 +1,6 @@
 import { Nav } from "@/components/shared/nav";
 import { Footer } from "@/components/shared/footer";
+import { FAQ } from "@/components/shared/faq";
 import { KitPreviewCard } from "@/components/shared/kit-preview-card";
 import { Note } from "@/components/ui/note";
 import {
@@ -20,7 +21,7 @@ export default async function Landing() {
       <Nav />
 
       {/* HERO */}
-      <section className="px-16 pt-[72px] pb-12 grid grid-cols-[1.1fr_1fr] gap-[60px] items-center">
+      <section className="px-4 sm:px-8 lg:px-16 pt-10 sm:pt-12 lg:pt-[72px] pb-12 grid grid-cols-1 lg:grid-cols-[1.1fr_1fr] gap-6 sm:gap-10 lg:gap-[60px] items-center">
         <div>
           <div className="flex items-center gap-2.5 mb-[22px]">
             <span className="ks-chip ks-chip-soft">
@@ -30,7 +31,7 @@ export default async function Landing() {
               v0.5
             </span>
           </div>
-          <h1 className="font-serif text-[80px] leading-[0.98] tracking-[-2px] text-ks-ink">
+          <h1 className="font-serif text-[36px] sm:text-[56px] lg:text-[80px] leading-[0.98] tracking-[-2px] text-ks-ink">
             Cancel the SaaS.
             <br />
             <span className="italic">Keep the work.</span>
@@ -41,7 +42,7 @@ export default async function Landing() {
             <b className="text-ks-ink">Kits</b> add a database, an interactive
             UI inside the chat, and memory that survives sessions.
           </p>
-          <div className="flex gap-3 mt-8">
+          <div className="flex flex-col sm:flex-row gap-3 mt-8">
             <Link
               href="/skills"
               className="ks-btn ks-btn-primary !py-3.5 !px-[22px] !text-[15px]"
@@ -112,7 +113,7 @@ export default async function Landing() {
             </ClaudeChat>
             <Note
               angle={3}
-              className="absolute -top-[18px] -right-3 !text-xl"
+              className="absolute bottom-4 -left-24 !text-xl hidden lg:block"
             >
               real UI,
               <br />
@@ -123,20 +124,20 @@ export default async function Landing() {
       </section>
 
       {/* TWO-TIER EXPLAINER */}
-      <section className="px-16 py-16 bg-ks-paper-warm border-y border-ks-hair">
+      <section className="px-4 sm:px-8 lg:px-16 py-16 bg-ks-paper-warm border-y border-ks-hair">
         <div className="flex justify-between items-end mb-[30px]">
           <div>
             <div className="font-mono text-[11px] text-ks-muted tracking-[1px] mb-2">
               HOW IT WORKS
             </div>
-            <h2 className="font-serif text-[52px] tracking-tight">
+            <h2 className="font-serif text-[28px] sm:text-[40px] lg:text-[52px] tracking-tight">
               Two products.{" "}
               <span className="italic text-ks-accent">One trust curve.</span>
             </h2>
           </div>
         </div>
 
-        <div className="grid grid-cols-2 gap-5">
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
           {/* Skills column */}
           <div className="ks-card p-7">
             <div className="flex items-center gap-2.5 mb-4">
@@ -212,7 +213,7 @@ export default async function Landing() {
         </div>
 
         {/* The upgrade arrow */}
-        <div className="flex justify-center mt-[30px] items-center gap-3.5 font-sans text-sm text-ks-muted">
+        <div className="flex flex-wrap justify-center mt-[30px] items-center gap-3.5 font-sans text-sm text-ks-muted">
           <span>Download a free skill</span>
           <span className="font-serif text-[32px] text-ks-accent italic">
             &rarr;
@@ -226,13 +227,13 @@ export default async function Landing() {
       </section>
 
       {/* FEATURED KITS */}
-      <section className="px-16 pt-[72px] pb-10">
+      <section className="px-4 sm:px-8 lg:px-16 pt-10 sm:pt-12 lg:pt-[72px] pb-10">
         <div className="flex justify-between items-end mb-7">
           <div>
             <div className="font-mono text-[11px] text-ks-muted tracking-[1px] mb-2">
               KITS &middot; LIVE
             </div>
-            <h2 className="font-serif text-[52px] tracking-tight">
+            <h2 className="font-serif text-[28px] sm:text-[40px] lg:text-[52px] tracking-tight">
               A UI,{" "}
               <span className="italic text-ks-accent">inside your chat.</span>
             </h2>
@@ -241,7 +242,7 @@ export default async function Landing() {
             All kits &rarr;
           </Link>
         </div>
-        <div className="grid grid-cols-2 gap-[18px]">
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-[18px]">
           {kits.map((k) => (
             <KitPreviewCard key={k.slug} kit={k} />
           ))}
@@ -252,13 +253,13 @@ export default async function Landing() {
       {(() => {
         const totalSavings = kits.reduce((s, k) => s + k.replacesValue, 0);
         return (
-          <section className="px-16 py-[72px] bg-ks-ink text-ks-paper">
-            <div className="grid grid-cols-[1fr_1.3fr] gap-[60px] items-center">
+          <section className="px-4 sm:px-8 lg:px-16 py-10 sm:py-12 lg:py-[72px] bg-ks-ink text-ks-paper">
+            <div className="grid grid-cols-1 lg:grid-cols-[1fr_1.3fr] gap-6 sm:gap-10 lg:gap-[60px] items-center">
               <div>
                 <div className="font-mono text-[11px] text-ks-accent tracking-[1px] mb-2.5">
                   THE MATH
                 </div>
-                <h2 className="font-serif text-[56px] leading-none tracking-tight">
+                <h2 className="font-serif text-[28px] sm:text-[42px] lg:text-[56px] leading-none tracking-tight">
                   &euro;5/mo replaces
                   <br />
                   <span className="italic text-ks-accent">
@@ -276,7 +277,7 @@ export default async function Landing() {
                 {kits.map((kit) => (
                   <div
                     key={kit.slug}
-                    className="grid grid-cols-[1.4fr_80px_1fr] gap-3.5 py-3 border-b border-ks-ink2 items-center"
+                    className="grid grid-cols-1 sm:grid-cols-[1.4fr_80px_1fr] gap-1 sm:gap-3.5 py-3 border-b border-ks-ink2 items-center"
                   >
                     <div className="font-sans text-sm text-ks-paper-deep ks-strike">
                       {kit.replaces.join(", ")}
@@ -292,11 +293,11 @@ export default async function Landing() {
                     </div>
                   </div>
                 ))}
-                <div className="grid grid-cols-[1.4fr_80px_1fr] gap-3.5 pt-3.5 items-center">
+                <div className="grid grid-cols-1 sm:grid-cols-[1.4fr_80px_1fr] gap-1 sm:gap-3.5 pt-3.5 items-center">
                   <div className="font-sans text-sm font-semibold">
                     All of the above, for:
                   </div>
-                  <div className="font-serif text-[44px] text-ks-accent italic leading-none">
+                  <div className="font-serif text-[26px] sm:text-[36px] lg:text-[44px] text-ks-accent italic leading-none">
                     &euro;5
                     <span className="text-lg">/mo</span>
                   </div>
@@ -311,17 +312,17 @@ export default async function Landing() {
       })()}
 
       {/* CONNECTOR SETUP TEASER */}
-      <section className="px-16 py-[72px]">
+      <section className="px-4 sm:px-8 lg:px-16 py-10 sm:py-12 lg:py-[72px]">
         <div className="mb-[30px]">
           <div className="font-mono text-[11px] text-ks-muted tracking-[1px] mb-2">
             SETUP &middot; ONE STEP
           </div>
-          <h2 className="font-serif text-5xl tracking-tight">
+          <h2 className="font-serif text-[28px] sm:text-4xl lg:text-5xl tracking-tight">
             Add it once.{" "}
             <span className="italic text-ks-accent">Every kit works.</span>
           </h2>
         </div>
-        <div className="grid grid-cols-3 gap-3.5">
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3.5">
           {(
             [
               [
@@ -345,7 +346,7 @@ export default async function Landing() {
             ] as const
           ).map(([n, t, d]) => (
             <div key={n} className="ks-card p-6">
-              <div className="font-serif text-[56px] text-ks-accent italic leading-none">
+              <div className="font-serif text-[28px] sm:text-[42px] lg:text-[56px] text-ks-accent italic leading-none">
                 {n}
               </div>
               <div className="font-serif text-[22px] mt-3">{t}</div>
@@ -357,52 +358,7 @@ export default async function Landing() {
         </div>
       </section>
 
-      {/* FAQ */}
-      <section className="px-16 py-[72px] bg-ks-paper-warm border-t border-ks-hair">
-        <div className="mb-[30px]">
-          <div className="font-mono text-[11px] text-ks-muted tracking-[1px] mb-2">
-            FAQ
-          </div>
-          <h2 className="font-serif text-5xl tracking-tight">
-            Common questions.
-          </h2>
-        </div>
-        <div className="grid grid-cols-2 gap-x-12 gap-y-8 max-w-5xl">
-          {[
-            {
-              q: "What's the difference between a skill and a kit?",
-              a: "A skill is a free .zip file you upload to Claude — it makes Claude an expert at one task, but has no memory. A kit is a subscription app with a database, interactive UI, and cross-session persistence. Think of a skill as the demo, a kit as the full product.",
-            },
-            {
-              q: "Do I need a Claude subscription?",
-              a: "For skills: yes, you need Claude Pro, Max, Team, or Enterprise. Skills work on claude.ai, Desktop, Cowork, and Claude Code. For kits: you need a Claude plan that supports connectors, plus a KitStack Starter subscription.",
-            },
-            {
-              q: "What happens to my data if I cancel?",
-              a: "Your data stays accessible for 90 days after cancellation. You can export everything as CSV or JSON at any time using the built-in export tools. After 90 days, databases are permanently deleted.",
-            },
-            {
-              q: "Can I use kits on ChatGPT?",
-              a: "Skills work only with Claude. Kits use the MCP protocol, which is supported by Claude, ChatGPT, VS Code, and other MCP-compatible clients. Cross-platform support is a key advantage.",
-            },
-            {
-              q: "Is my data private?",
-              a: "Yes. Each kit gets its own isolated database — no other user can access it. All data is stored in the EU (Frankfurt). You own your data and can export or delete it anytime.",
-            },
-            {
-              q: "Why €5/mo and not free?",
-              a: "Skills are free because they cost us nothing to serve — they're static files. Kits require per-user databases, MCP server hosting, and interactive UI serving. €5/mo covers infrastructure while staying cheaper than any single SaaS tool a kit replaces.",
-            },
-          ].map(({ q, a }) => (
-            <div key={q}>
-              <h3 className="font-serif text-[18px] text-ks-ink mb-1.5">{q}</h3>
-              <p className="font-sans text-[13.5px] text-ks-muted leading-relaxed">
-                {a}
-              </p>
-            </div>
-          ))}
-        </div>
-      </section>
+      <FAQ />
 
       <Footer />
     </div>
