@@ -43,6 +43,10 @@ declare module "sst" {
       "name": string
       "type": "sst.aws.Bucket"
     }
+    "KitCdn": {
+      "type": "sst.aws.Router"
+      "url": string
+    }
     "KitCrm": {
       "name": string
       "type": "sst.aws.Function"

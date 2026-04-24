@@ -11,7 +11,7 @@ import {
   posthogKey,
   posthogHost,
 } from "./secrets";
-import { kitBucket } from "./storage";
+import { kitBucket, kitCdn } from "./storage";
 
 // --- DynamoDB Tables ---
 // Kit Registry moved to main Turso DB (kit_registry table)
@@ -86,6 +86,7 @@ export const mcpRouter = new sst.aws.Function("McpRouter", {
   url: true,
   link: [
     kitBucket,
+    kitCdn,
     userKitDbs,
     oauthStore,
     kitMeeting,
