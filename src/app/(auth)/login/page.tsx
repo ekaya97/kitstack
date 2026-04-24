@@ -30,12 +30,13 @@ export default function LoginPage() {
   const [loading, setLoading] = useState(false);
   const [autoRedirected, setAutoRedirected] = useState(false);
 
+  const isOAuthCallback = !!(oauthCallback && oauthSessionId);
+
   // If user is already logged in and this is an MCP OAuth callback, skip the form
   if (
     !sessionLoading &&
     existingSession?.user &&
-    oauthCallback &&
-    oauthSessionId &&
+    isOAuthCallback &&
     !autoRedirected
   ) {
     setAutoRedirected(true);
@@ -43,7 +44,19 @@ export default function LoginPage() {
     callbackUrl.searchParams.set("user_id", existingSession.user.id);
     callbackUrl.searchParams.set("session_id", oauthSessionId);
     window.location.href = callbackUrl.toString();
-    return null;
+  }
+
+  // Show loading state while session is being checked during OAuth callback,
+  // or while redirecting back to the MCP server
+  if (isOAuthCallback && (sessionLoading || autoRedirected)) {
+    return (
+      <div className="flex flex-col items-center justify-center gap-4 py-16">
+        <div className="h-8 w-8 animate-spin rounded-full border-2 border-ks-hair border-t-ks-accent" />
+        <p className="font-sans text-[15px] text-ks-muted">
+          Connecting your account...
+        </p>
+      </div>
+    );
   }
 
   const checkEmail = async (e: React.FormEvent) => {
