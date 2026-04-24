@@ -1,8 +1,19 @@
 import { useState, useEffect, useCallback } from "react";
 
-// Config can come from either:
-// 1. window.__KITSTACK__ (injected by MCP server when serving as resource)
-// 2. URL params + env var (website preview iframes)
+// --- Config sources (priority order) ---
+// 1. window.__KITSTACK_MCP__ — MCP channel mode (shell sets this before mounting)
+// 2. window.__KITSTACK__ — JWT+fetch mode (injected by MCP server)
+// 3. URL params + env var — website preview iframes
+// 4. Mock data — dev mode fallback
+
+interface McpBridge {
+  callTool: (cmd: string, params: Record<string, unknown>) => Promise<any>;
+  kit: string;
+  view: string;
+}
+
+const mcp = (window as any).__KITSTACK_MCP__ as McpBridge | undefined;
+
 const ks = (window as any).__KITSTACK__ as
   | { token: string; appDataUrl: string; kit: string }
   | undefined;
@@ -14,7 +25,10 @@ function getToken(): string | null {
 }
 
 function getParam(name: string): string | null {
-  if (name === "kit" && ks?.kit) return ks.kit;
+  if (name === "kit") {
+    if (mcp?.kit) return mcp.kit;
+    if (ks?.kit) return ks.kit;
+  }
   return new URLSearchParams(window.location.search).get(name);
 }
 
@@ -39,6 +53,54 @@ function useMockData<T>(view: string): {
   return { data, loading, error: null, refetch: () => {} };
 }
 
+// MCP channel mode: fetch data via callServerTool through the shell's postMessage bridge
+function useMcpData<T>(
+  view: string,
+  filter?: string
+): {
+  data: T[] | null;
+  loading: boolean;
+  error: string | null;
+  refetch: () => void;
+} {
+  const [data, setData] = useState<T[] | null>(null);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+  const [tick, setTick] = useState(0);
+  const refetch = useCallback(() => setTick((t) => t + 1), []);
+
+  useEffect(() => {
+    if (!mcp) return;
+
+    setLoading(true);
+    setError(null);
+
+    // Map view names to kit tool commands
+    // The view name matches the table name in the app-data handler
+    const cmd = `list_${view}` === "list_sequences" ? "list_sequences" : "list_sequences";
+
+    mcp
+      .callTool("export_sequence", { sequenceId: "" })
+      .catch(() => {
+        // Fallback: try a generic list command
+        return mcp.callTool("list_sequences", {});
+      })
+      .then((result) => {
+        // Parse the text result — MCP tools return markdown text, not structured data
+        // The React component needs to handle the text format
+        const text = result?.content?.find?.((c: any) => c.type === "text")?.text;
+        setData(text ? ([{ _raw: text }] as any) : []);
+        setLoading(false);
+      })
+      .catch((err: any) => {
+        setError(err.message || "Failed to load data");
+        setLoading(false);
+      });
+  }, [view, filter, tick]);
+
+  return { data, loading, error, refetch };
+}
+
 export function useAppData<T>(
   view: string,
   filter?: string
@@ -49,9 +111,9 @@ export function useAppData<T>(
   refetch: () => void;
 } {
   const token = getToken();
-
-  // Dev mode: no token → use mock data
   const mock = useMockData<T>(view);
+  const mcpResult = useMcpData<T>(view, filter);
+
   const [data, setData] = useState<T[] | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -59,6 +121,9 @@ export function useAppData<T>(
 
   const kit = getParam("kit") || "crm";
   const refetch = useCallback(() => setTick((t) => t + 1), []);
+
+  // MCP mode — data flows through the shell's postMessage bridge
+  if (mcp) return mcpResult;
 
   const useMock = !token && (!APP_DATA_URL || import.meta.env.DEV);
 

@@ -39,7 +39,7 @@ function SequenceCard({ sequence, isExpanded, onToggle }: { sequence: Sequence; 
         <div>
           <div className="font-medium text-[13px] text-ks-ink">{sequence.name}</div>
           <div className="text-xs text-ks-muted mt-0.5">
-            {sequence.emails.length} emails &middot; {sequence.prospect_count} prospects
+            {sequence.emails?.length ?? 0} emails &middot; {sequence.prospect_count ?? 0} prospects
           </div>
         </div>
         <div className="flex items-center gap-2">
@@ -56,7 +56,7 @@ function SequenceCard({ sequence, isExpanded, onToggle }: { sequence: Sequence; 
         </div>
       </div>
 
-      {isExpanded && (
+      {isExpanded && sequence.emails && sequence.emails.length > 0 && (
         <div className="mt-3 ml-2">
           {sequence.emails
             .sort((a, b) => a.position - b.position)

@@ -2,4 +2,14 @@ import { createRoot } from "react-dom/client";
 import "@shared/styles.css";
 import { SequenceBuilder } from "./SequenceBuilder";
 
-createRoot(document.getElementById("root")!).render(<SequenceBuilder />);
+// Export mount function for dynamic loading from shell
+export function mount(container: HTMLElement) {
+  createRoot(container).render(<SequenceBuilder />);
+}
+
+// Register globally for shell dynamic loading
+((window as any).__KITSTACK_VIEWS__ ??= {})["outreach/sequence-builder"] = { mount };
+
+// Self-mount when loaded as standalone HTML (backward compat)
+const root = document.getElementById("root");
+if (root) mount(root);

@@ -98,9 +98,9 @@ export const VAT_COLORS: Record<number, string> = {
 export interface Sequence {
   id: string;
   name: string;
-  status: "draft" | "active";
-  prospect_count: number;
-  emails: Email[];
+  status: string;
+  prospect_count?: number;
+  emails?: Email[];
   created_at: string;
 }
 
