@@ -36,6 +36,7 @@ async function seedKit(kit: KitDefinition) {
       inputSchema: JSON.stringify(zodToJsonSchema(tool.args)),
       lambdaArn: arn,
       kitName: kit.name,
+      kitDescription: kit.description,
     };
     await putRegistryItem(item);
     console.log(`  ✓ ${tool.name}`);
@@ -49,6 +50,7 @@ async function seedKit(kit: KitDefinition) {
     inputSchema: JSON.stringify({ type: "object", properties: {} }),
     lambdaArn: arn,
     kitName: kit.name,
+    kitDescription: kit.description,
   };
   await putRegistryItem(instructionItem);
   console.log(`  ✓ kitstack_${kit.id}_instructions`);

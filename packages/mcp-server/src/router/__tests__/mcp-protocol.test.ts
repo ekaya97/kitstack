@@ -1,6 +1,6 @@
 import { describe, it, expect, vi } from "vitest";
-import { handleMcpRequest } from "../mcp-protocol";
-import type { KitRegistryItem, JsonRpcRequest } from "../../framework/types";
+import { handleMcpRequest, ONION_MODE_THRESHOLD } from "../mcp-protocol";
+import type { KitRegistryItem, UserKitDbItem, JsonRpcRequest } from "../../framework/types";
 
 const mockTools: KitRegistryItem[] = [
   {
@@ -14,23 +14,54 @@ const mockTools: KitRegistryItem[] = [
     }),
     lambdaArn: "arn:aws:lambda:eu-central-1:123:function:KitMeeting",
     kitName: "Meeting Action Tracker Kit",
+    kitDescription: "Track action items across meetings",
   },
   {
     kitId: "kit-meeting",
     toolName: "list_meetings",
     toolDescription: "List all meetings",
-    inputSchema: JSON.stringify({
-      type: "object",
-      properties: {},
-    }),
+    inputSchema: JSON.stringify({ type: "object", properties: {} }),
     lambdaArn: "arn:aws:lambda:eu-central-1:123:function:KitMeeting",
     kitName: "Meeting Action Tracker Kit",
+    kitDescription: "Track action items across meetings",
+  },
+  {
+    kitId: "kit-crm",
+    toolName: "add_contact",
+    toolDescription: "Add a new contact",
+    inputSchema: JSON.stringify({
+      type: "object",
+      properties: { name: { type: "string" } },
+      required: ["name"],
+    }),
+    lambdaArn: "arn:aws:lambda:eu-central-1:123:function:KitCrm",
+    kitName: "CRM Kit",
+    kitDescription: "Full CRM with contacts and deals",
+  },
+];
+
+// User has only activated kit-meeting, NOT kit-crm
+const mockUserDbs: UserKitDbItem[] = [
+  {
+    userId: "user-1",
+    kitId: "kit-meeting",
+    dbUrl: "libsql://test.turso.io",
+    dbToken: "tok",
+    provisionedAt: "2026-01-01",
   },
 ];
 
 const getAllTools = vi.fn(async () => mockTools);
+const getUserKitDbs = vi.fn(async () => mockUserDbs);
 const invokeKitLambda = vi.fn(async () => ({
   content: [{ type: "text", text: "Meeting processed" }],
+}));
+
+vi.mock("../../framework/dynamo", () => ({
+  getUserKitDb: vi.fn(async (userId: string, kitId: string) => {
+    return mockUserDbs.find((d) => d.userId === userId && d.kitId === kitId) ?? null;
+  }),
+  checkAndClearToolsChanged: vi.fn(async () => false),
 }));
 
 function rpc(method: string, params?: Record<string, unknown>): JsonRpcRequest {
@@ -44,53 +75,70 @@ describe("handleMcpRequest", () => {
         rpc("initialize"),
         "user-1",
         getAllTools,
+        getUserKitDbs,
         invokeKitLambda
       );
-      expect(res.result).toBeDefined();
-      const result = res.result as any;
-      expect(result.serverInfo.name).toBe("kitstack-mcp");
+      expect(res.response.result).toBeDefined();
+      const result = res.response.result as any;
+      expect(result.serverInfo.name).toBe("kitstack");
       expect(result.capabilities.tools).toBeDefined();
     });
   });
 
-  describe("tools/list", () => {
-    it("returns tool definitions from registry", async () => {
+  describe("tools/list — entitlement filtering", () => {
+    it("only returns tools for activated kits", async () => {
       const res = await handleMcpRequest(
         rpc("tools/list"),
         "user-1",
         getAllTools,
+        getUserKitDbs,
         invokeKitLambda
       );
-      const result = res.result as any;
+      const result = res.response.result as any;
+      // User only has kit-meeting activated, so only meeting tools returned
       expect(result.tools).toHaveLength(2);
-      expect(result.tools[0].name).toBe("process_meeting");
-      expect(result.tools[0].inputSchema.type).toBe("object");
+      expect(result.tools.every((t: any) => t.name.includes("meeting") || t.name.includes("list_meetings") || t.name.includes("process_meeting"))).toBe(true);
+    });
+
+    it("does not return tools for non-activated kits", async () => {
+      const res = await handleMcpRequest(
+        rpc("tools/list"),
+        "user-1",
+        getAllTools,
+        getUserKitDbs,
+        invokeKitLambda
+      );
+      const result = res.response.result as any;
+      const names = result.tools.map((t: any) => t.name);
+      expect(names).not.toContain("add_contact");
+    });
+
+    it("returns empty tools for user with no activations", async () => {
+      const noKits = vi.fn(async () => [] as UserKitDbItem[]);
+      const res = await handleMcpRequest(
+        rpc("tools/list"),
+        "user-1",
+        getAllTools,
+        noKits,
+        invokeKitLambda
+      );
+      const result = res.response.result as any;
+      expect(result.tools).toHaveLength(0);
     });
   });
 
   describe("tools/call", () => {
-    it("dispatches to the correct kit lambda", async () => {
-      // Mock getUserKitDb via the dispatcher
-      vi.mock("../../framework/dynamo", () => ({
-        getUserKitDb: vi.fn(async () => ({
-          userId: "user-1",
-          kitId: "kit-meeting",
-          dbUrl: "libsql://test.turso.io",
-          dbToken: "tok",
-          provisionedAt: "2026-01-01",
-        })),
-        getAllRegistryItems: vi.fn(async () => mockTools),
-      }));
-
+    it("dispatches to the correct kit lambda for activated kit", async () => {
       const res = await handleMcpRequest(
         rpc("tools/call", { name: "process_meeting", arguments: { title: "Test" } }),
         "user-1",
         getAllTools,
+        getUserKitDbs,
         invokeKitLambda
       );
 
-      expect(res.error).toBeUndefined();
-      const result = res.result as any;
+      expect(res.response.error).toBeUndefined();
+      const result = res.response.result as any;
       expect(result.content[0].text).toContain("Meeting processed");
     });
 
@@ -99,10 +147,11 @@ describe("handleMcpRequest", () => {
         rpc("tools/call", {}),
         "user-1",
         getAllTools,
+        getUserKitDbs,
         invokeKitLambda
       );
-      expect(res.error).toBeDefined();
-      expect(res.error!.message).toContain("Missing tool name");
+      expect(res.response.error).toBeDefined();
+      expect(res.response.error!.message).toContain("Missing tool name");
     });
   });
 
@@ -112,10 +161,11 @@ describe("handleMcpRequest", () => {
         rpc("unknown/method"),
         "user-1",
         getAllTools,
+        getUserKitDbs,
         invokeKitLambda
       );
-      expect(res.error).toBeDefined();
-      expect(res.error!.code).toBe(-32601);
+      expect(res.response.error).toBeDefined();
+      expect(res.response.error!.code).toBe(-32601);
     });
   });
 });

@@ -35,6 +35,14 @@ export interface KitDefinition {
   tools: ToolDefinition[];
 }
 
+// --- Onion Mode (progressive enhancement) ---
+
+export interface OnionToolInput {
+  action: "discover" | "describe" | "execute";
+  name?: string;
+  params?: Record<string, unknown>;
+}
+
 // --- DynamoDB Items ---
 
 export interface KitRegistryItem {
@@ -44,6 +52,7 @@ export interface KitRegistryItem {
   inputSchema: string; // JSON-serialized Zod-to-JSON-Schema
   lambdaArn: string;
   kitName: string;
+  kitDescription?: string;
 }
 
 export interface UserKitDbItem {
