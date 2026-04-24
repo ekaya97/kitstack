@@ -36,23 +36,31 @@ function processZodType(schema: z.ZodType): Record<string, unknown> {
   if (schema instanceof z.ZodBoolean) return { type: "boolean", ...descProp };
 
   if (schema instanceof z.ZodArray) {
-    return { type: "array", items: processZodType(schema.element), ...descProp };
+    return { type: "array", items: processZodType((schema as any).element), ...descProp };
   }
 
   if (schema instanceof z.ZodEnum) {
     return { type: "string", enum: schema.options, ...descProp };
   }
 
+  if (schema instanceof z.ZodRecord) {
+    return {
+      type: "object",
+      additionalProperties: processZodType((schema as any)._def.valueType),
+      ...descProp,
+    };
+  }
+
   if (schema instanceof z.ZodOptional) {
-    return processZodType(schema.unwrap());
+    return processZodType((schema as any).unwrap());
   }
 
   if (schema instanceof z.ZodDefault) {
     return {
-      ...processZodType(schema.removeDefault()),
-      default: typeof schema._def.defaultValue === "function"
-        ? schema._def.defaultValue()
-        : schema._def.defaultValue,
+      ...processZodType((schema as any).removeDefault()),
+      default: typeof (schema as any)._def.defaultValue === "function"
+        ? (schema as any)._def.defaultValue()
+        : (schema as any)._def.defaultValue,
     };
   }
 

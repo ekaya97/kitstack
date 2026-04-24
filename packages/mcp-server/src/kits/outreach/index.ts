@@ -9,6 +9,10 @@ import { addProspect } from "./tools/add-prospect";
 import { personalizeForProspect } from "./tools/personalize-for-prospect";
 import { editEmail } from "./tools/edit-email";
 import { exportSequence } from "./tools/export-sequence";
+import { updateSequence } from "./tools/update-sequence";
+import { deleteSequence } from "./tools/delete-sequence";
+import { deleteEmail } from "./tools/delete-email";
+import { removeProspect } from "./tools/remove-prospect";
 
 export default defineKit({
   id: "cold-outreach",
@@ -25,5 +29,9 @@ export default defineKit({
     personalizeForProspect,
     editEmail,
     exportSequence,
+    updateSequence,
+    deleteSequence,
+    deleteEmail,
+    removeProspect,
   ],
 });

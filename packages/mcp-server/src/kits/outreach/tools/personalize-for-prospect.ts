@@ -4,8 +4,8 @@ import { defineTool } from "../../../framework";
 import { prospects } from "../schema";
 
 export const personalizeForProspect = defineTool({
-  name: "personalize_for_prospect",
-  description: "Store personalization hooks for a prospect (e.g., recent posts, company news, mutual connections)",
+  name: "set_prospect_hooks",
+  description: "Store personalization research for a prospect — recent posts, company news, mutual connections, or any key-value context for email personalization",
   args: z.object({
     prospectId: z.string().describe("Prospect ID"),
     hooks: z.record(z.string(), z.string()).describe("Key-value pairs of personalization hooks (e.g., { 'recent_post': 'Wrote about AI in sales', 'mutual': 'John from Acme' })"),
@@ -13,10 +13,9 @@ export const personalizeForProspect = defineTool({
   handler: async (db, args) => {
     const prospect = await db.select().from(prospects).where(eq(prospects.id, args.prospectId)).then((r: any[]) => r[0]);
     if (!prospect) {
-      return { content: [{ type: "text" as const, text: "Prospect not found." }], isError: true };
+      return { content: [{ type: "text" as const, text: `Prospect not found. Use export_sequence to see prospect IDs.` }], isError: true };
     }
 
-    // Merge with existing hooks if any
     let existingHooks: Record<string, string> = {};
     if (prospect.personalizationHooks) {
       try {
@@ -31,8 +30,9 @@ export const personalizeForProspect = defineTool({
 
     const hookCount = Object.keys(merged).length;
     const hookSummary = Object.entries(args.hooks).map(([k, v]) => `${k}: ${v}`).join(", ");
-    return {
-      content: [{ type: "text" as const, text: `Personalization hooks updated for "${prospect.name}" (${hookCount} total). Added: ${hookSummary}.` }],
-    };
+    let text = `Personalization hooks updated for "${prospect.name}" (${hookCount} total). Added: ${hookSummary}.`;
+    text += `\n\n**Next:** \`export_sequence\` to see the full sequence with hooks, or \`show_app\` with view \`prospect-list\`.`;
+
+    return { content: [{ type: "text" as const, text }] };
   },
 });

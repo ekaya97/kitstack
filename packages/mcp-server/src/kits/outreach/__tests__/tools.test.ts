@@ -6,6 +6,7 @@ import { sequences, emails, prospects } from "../schema";
 import { createKitHandler } from "../../../framework";
 import outreachKit from "../index";
 import type { KitToolInvocation } from "../../../framework/types";
+import { textOf } from "../../../test/helpers";
 
 let db: Awaited<ReturnType<typeof createKitTestDb>>;
 let handler: ReturnType<typeof createKitHandler>;
@@ -28,8 +29,8 @@ function invoke(toolName: string, args: Record<string, unknown> = {}): KitToolIn
 describe("create_sequence", () => {
   it("creates a sequence", async () => {
     const result = await handler(invoke("create_sequence", { name: "Series A Founders", targetPersona: "VP Engineering", tone: "conversational" }));
-    expect(result.content[0].text).toContain("Series A Founders");
-    expect(result.content[0].text).toContain("draft");
+    expect(textOf(result)).toContain("Series A Founders");
+    expect(textOf(result)).toContain("draft");
 
     const all = await db.select().from(sequences);
     expect(all).toHaveLength(1);
@@ -43,32 +44,32 @@ describe("list_sequences", () => {
     await handler(invoke("create_sequence", { name: "Seq A" }));
     await handler(invoke("create_sequence", { name: "Seq B" }));
     const result = await handler(invoke("list_sequences"));
-    expect(result.content[0].text).toContain("2 sequence(s)");
+    expect(textOf(result)).toContain("2 sequence(s)");
   });
 
   it("filters by status", async () => {
     await handler(invoke("create_sequence", { name: "Draft Seq", status: "draft" }));
     await handler(invoke("create_sequence", { name: "Active Seq", status: "active" }));
     const result = await handler(invoke("list_sequences", { status: "active" }));
-    expect(result.content[0].text).toContain("Active Seq");
-    expect(result.content[0].text).not.toContain("Draft Seq");
+    expect(textOf(result)).toContain("Active Seq");
+    expect(textOf(result)).not.toContain("Draft Seq");
   });
 
   it("returns empty message when no sequences", async () => {
     const result = await handler(invoke("list_sequences"));
-    expect(result.content[0].text).toContain("No sequences found");
+    expect(textOf(result)).toContain("No sequences found");
   });
 });
 
 // --- Emails ---
 
-describe("generate_emails", () => {
+describe("add_emails", () => {
   it("adds emails to a sequence", async () => {
     await handler(invoke("create_sequence", { name: "Test Seq" }));
     const allSeqs = await db.select().from(sequences);
     const seqId = allSeqs[0].id;
 
-    const result = await handler(invoke("generate_emails", {
+    const result = await handler(invoke("add_emails", {
       sequenceId: seqId,
       emails: [
         { subject: "Quick question", body: "Hi {{name}}, saw your post about...", delayDays: 0 },
@@ -76,8 +77,8 @@ describe("generate_emails", () => {
         { subject: "Last one", body: "Breakup email...", delayDays: 7 },
       ],
     }));
-    expect(result.content[0].text).toContain("3 email(s)");
-    expect(result.content[0].text).toContain("Test Seq");
+    expect(textOf(result)).toContain("3 email(s)");
+    expect(textOf(result)).toContain("Test Seq");
 
     const allEmails = await db.select().from(emails);
     expect(allEmails).toHaveLength(3);
@@ -88,7 +89,7 @@ describe("generate_emails", () => {
   });
 
   it("returns error for nonexistent sequence", async () => {
-    const result = await handler(invoke("generate_emails", { sequenceId: "nope", emails: [{ subject: "Hi", body: "Test" }] }));
+    const result = await handler(invoke("add_emails", { sequenceId: "nope", emails: [{ subject: "Hi", body: "Test" }] }));
     expect(result.isError).toBe(true);
   });
 
@@ -97,8 +98,8 @@ describe("generate_emails", () => {
     const allSeqs = await db.select().from(sequences);
     const seqId = allSeqs[0].id;
 
-    await handler(invoke("generate_emails", { sequenceId: seqId, emails: [{ subject: "First", body: "Body 1" }] }));
-    await handler(invoke("generate_emails", { sequenceId: seqId, emails: [{ subject: "Second", body: "Body 2" }] }));
+    await handler(invoke("add_emails", { sequenceId: seqId, emails: [{ subject: "First", body: "Body 1" }] }));
+    await handler(invoke("add_emails", { sequenceId: seqId, emails: [{ subject: "Second", body: "Body 2" }] }));
 
     const allEmails = await db.select().from(emails);
     expect(allEmails).toHaveLength(2);
@@ -112,12 +113,12 @@ describe("edit_email", () => {
     const allSeqs = await db.select().from(sequences);
     const seqId = allSeqs[0].id;
 
-    await handler(invoke("generate_emails", { sequenceId: seqId, emails: [{ subject: "Old subject", body: "Old body" }] }));
+    await handler(invoke("add_emails", { sequenceId: seqId, emails: [{ subject: "Old subject", body: "Old body" }] }));
     const allEmails = await db.select().from(emails);
     const emailId = allEmails[0].id;
 
     const result = await handler(invoke("edit_email", { emailId, subject: "New subject", body: "New body" }));
-    expect(result.content[0].text).toContain("updated");
+    expect(textOf(result)).toContain("updated");
 
     const updated = await db.select().from(emails).where(eq(emails.id, emailId));
     expect(updated[0].subject).toBe("New subject");
@@ -132,11 +133,11 @@ describe("edit_email", () => {
   it("returns message when no changes specified", async () => {
     await handler(invoke("create_sequence", { name: "Seq" }));
     const allSeqs = await db.select().from(sequences);
-    await handler(invoke("generate_emails", { sequenceId: allSeqs[0].id, emails: [{ subject: "Sub", body: "Body" }] }));
+    await handler(invoke("add_emails", { sequenceId: allSeqs[0].id, emails: [{ subject: "Sub", body: "Body" }] }));
     const allEmails = await db.select().from(emails);
 
     const result = await handler(invoke("edit_email", { emailId: allEmails[0].id }));
-    expect(result.content[0].text).toContain("No changes");
+    expect(textOf(result)).toContain("No changes");
   });
 });
 
@@ -155,8 +156,8 @@ describe("add_prospect", () => {
       email: "jane@techcorp.com",
       linkedinUrl: "https://linkedin.com/in/janedoe",
     }));
-    expect(result.content[0].text).toContain("Jane Doe");
-    expect(result.content[0].text).toContain("TechCorp");
+    expect(textOf(result)).toContain("Jane Doe");
+    expect(textOf(result)).toContain("TechCorp");
 
     const all = await db.select().from(prospects);
     expect(all).toHaveLength(1);
@@ -171,7 +172,7 @@ describe("add_prospect", () => {
   });
 });
 
-describe("personalize_for_prospect", () => {
+describe("set_prospect_hooks", () => {
   it("stores personalization hooks", async () => {
     await handler(invoke("create_sequence", { name: "Seq" }));
     const allSeqs = await db.select().from(sequences);
@@ -181,13 +182,13 @@ describe("personalize_for_prospect", () => {
     const allProspects = await db.select().from(prospects);
     const prospectId = allProspects[0].id;
 
-    const result = await handler(invoke("personalize_for_prospect", {
+    const result = await handler(invoke("set_prospect_hooks", {
       prospectId,
       hooks: { recent_post: "Wrote about AI in sales", mutual_connection: "John from Acme" },
     }));
-    expect(result.content[0].text).toContain("Jane Doe");
-    expect(result.content[0].text).toContain("2 total");
-    expect(result.content[0].text).toContain("recent_post");
+    expect(textOf(result)).toContain("Jane Doe");
+    expect(textOf(result)).toContain("2 total");
+    expect(textOf(result)).toContain("recent_post");
 
     const updated = await db.select().from(prospects).where(eq(prospects.id, prospectId));
     const hooks = JSON.parse(updated[0].personalizationHooks!);
@@ -202,8 +203,8 @@ describe("personalize_for_prospect", () => {
     const allProspects = await db.select().from(prospects);
     const prospectId = allProspects[0].id;
 
-    await handler(invoke("personalize_for_prospect", { prospectId, hooks: { key1: "val1" } }));
-    await handler(invoke("personalize_for_prospect", { prospectId, hooks: { key2: "val2" } }));
+    await handler(invoke("set_prospect_hooks", { prospectId, hooks: { key1: "val1" } }));
+    await handler(invoke("set_prospect_hooks", { prospectId, hooks: { key2: "val2" } }));
 
     const updated = await db.select().from(prospects).where(eq(prospects.id, prospectId));
     const hooks = JSON.parse(updated[0].personalizationHooks!);
@@ -212,7 +213,7 @@ describe("personalize_for_prospect", () => {
   });
 
   it("returns error for nonexistent prospect", async () => {
-    const result = await handler(invoke("personalize_for_prospect", { prospectId: "nope", hooks: { a: "b" } }));
+    const result = await handler(invoke("set_prospect_hooks", { prospectId: "nope", hooks: { a: "b" } }));
     expect(result.isError).toBe(true);
   });
 });
@@ -225,7 +226,7 @@ describe("export_sequence", () => {
     const allSeqs = await db.select().from(sequences);
     const seqId = allSeqs[0].id;
 
-    await handler(invoke("generate_emails", {
+    await handler(invoke("add_emails", {
       sequenceId: seqId,
       emails: [
         { subject: "Intro", body: "Hello, I noticed...", delayDays: 0 },
@@ -236,7 +237,7 @@ describe("export_sequence", () => {
     await handler(invoke("add_prospect", { sequenceId: seqId, name: "Alice", company: "BigCo", email: "alice@bigco.com" }));
 
     const result = await handler(invoke("export_sequence", { sequenceId: seqId }));
-    const text = result.content[0].text;
+    const text = textOf(result);
     expect(text).toContain("Enterprise Q2");
     expect(text).toContain("CTO");
     expect(text).toContain("formal");
@@ -256,6 +257,6 @@ describe("export_sequence", () => {
     await handler(invoke("create_sequence", { name: "Empty Seq" }));
     const allSeqs = await db.select().from(sequences);
     const result = await handler(invoke("export_sequence", { sequenceId: allSeqs[0].id }));
-    expect(result.content[0].text).toContain("No emails");
+    expect(textOf(result)).toContain("No emails");
   });
 });
