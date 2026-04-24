@@ -15,6 +15,7 @@ export default $config({
     };
   },
   async run() {
+    await import("./infra/secrets");
     await import("./infra/storage");
     const { mcpRouter, appData } = await import("./infra/mcp");
     const { web } = await import("./infra/web");

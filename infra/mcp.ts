@@ -1,3 +1,15 @@
+import {
+  tursoPlatformApiToken,
+  tursoOrgName,
+  betterAuthSecret,
+  betterAuthUrl,
+  mcpJwtSecret,
+  mcpAllowedOrigins,
+  mcpInternalApiKey,
+  posthogKey,
+  posthogHost,
+} from "./secrets";
+
 // --- DynamoDB Tables ---
 
 export const kitRegistry = new sst.aws.Dynamo("KitRegistry", {
@@ -18,17 +30,12 @@ export const oauthStore = new sst.aws.Dynamo("OAuthStore", {
 
 // --- Kit Lambdas (one per kit, lean cold starts) ---
 
-const posthogEnv = {
-  POSTHOG_KEY: process.env.NEXT_PUBLIC_POSTHOG_KEY || "",
-  POSTHOG_HOST: process.env.POSTHOG_HOST || "https://eu.i.posthog.com",
-};
-
 const kitLambdaDefaults = {
   timeout: "30 seconds" as const,
   memory: "256 MB" as const,
   runtime: "nodejs22.x" as const,
   architecture: "arm64" as const,
-  environment: posthogEnv,
+  link: [posthogKey, posthogHost],
 };
 
 export const kitMeeting = new sst.aws.Function("KitMeeting", {
@@ -60,22 +67,24 @@ export const mcpRouter = new sst.aws.Function("McpRouter", {
   runtime: "nodejs22.x",
   architecture: "arm64",
   url: true,
-  link: [kitRegistry, userKitDbs, oauthStore],
-  environment: {
-    ...posthogEnv,
-    TURSO_PLATFORM_API_TOKEN: process.env.TURSO_PLATFORM_API_TOKEN || "",
-    TURSO_ORG_NAME: process.env.TURSO_ORG_NAME || "",
-    BETTER_AUTH_SECRET: process.env.BETTER_AUTH_SECRET || "",
-    BETTER_AUTH_URL: process.env.BETTER_AUTH_URL || "http://localhost:3000",
-    MCP_JWT_SECRET: process.env.MCP_JWT_SECRET || "",
-    KIT_REGISTRY_TABLE: kitRegistry.name,
-    USER_KIT_DBS_TABLE: userKitDbs.name,
-    OAUTH_STORE_TABLE: oauthStore.name,
-    KIT_MEETING_ARN: kitMeeting.arn,
-    KIT_CRM_ARN: kitCrm.arn,
-    KIT_EXPENSE_ARN: kitExpense.arn,
-    KIT_OUTREACH_ARN: kitOutreach.arn,
-  },
+  link: [
+    kitRegistry,
+    userKitDbs,
+    oauthStore,
+    kitMeeting,
+    kitCrm,
+    kitExpense,
+    kitOutreach,
+    tursoPlatformApiToken,
+    tursoOrgName,
+    betterAuthSecret,
+    betterAuthUrl,
+    mcpJwtSecret,
+    mcpAllowedOrigins,
+    mcpInternalApiKey,
+    posthogKey,
+    posthogHost,
+  ],
   permissions: [
     {
       actions: ["lambda:InvokeFunction"],
@@ -102,10 +111,11 @@ export const appData = new sst.aws.Function("AppData", {
   runtime: "nodejs22.x",
   architecture: "arm64",
   url: true,
-  link: [userKitDbs],
-  environment: {
-    ...posthogEnv,
-    MCP_JWT_SECRET: process.env.MCP_JWT_SECRET || "",
-    USER_KIT_DBS_TABLE: userKitDbs.name,
-  },
+  link: [
+    userKitDbs,
+    mcpJwtSecret,
+    mcpAllowedOrigins,
+    posthogKey,
+    posthogHost,
+  ],
 });
