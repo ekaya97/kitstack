@@ -14,9 +14,12 @@
     "db:migrate": "drizzle-kit migrate",
     "db:push": "drizzle-kit push",
     "db:studio": "drizzle-kit studio",
+    "dev:db": "turso dev --db-file databases/local.db",
     "db:seed": "tsx src/db/seed.ts",
     "postbuild": "next-sitemap",
-    "upload": "sst shell tsx scripts/upload-assets.ts"
+    "upload": "sst shell tsx scripts/upload-assets.ts",
+    "upload:apps": "sst shell -- npx tsx packages/mcp-apps/upload-apps.ts",
+    "seed:registry": "sst shell -- npx tsx packages/mcp-server/src/scripts/seed-registry.ts"
   },
   "dependencies": {
     "@aws-sdk/client-dynamodb": "^3.1035.0",
@@ -28,6 +31,8 @@
     "@heroui/theme": "^2",
     "@lemonsqueezy/lemonsqueezy.js": "^4.0.0",
     "@libsql/client": "^0.14",
+    "@modelcontextprotocol/ext-apps": "^1.7.0",
+    "@modelcontextprotocol/sdk": "^1.29.0",
     "@opentelemetry/api-logs": "^0.215.0",
     "@opentelemetry/exporter-logs-otlp-http": "^0.215.0",
     "@opentelemetry/resources": "^2.7.0",
