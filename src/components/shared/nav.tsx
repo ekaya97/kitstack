@@ -10,6 +10,7 @@ const items = [
   { label: "Kits", href: "/kits" },
   { label: "How it works", href: "/how-it-works" },
   { label: "Pricing", href: "/pricing" },
+  { label: "Blog", href: "/blog" },
 ];
 
 export function Nav({ active }: { active?: string }) {

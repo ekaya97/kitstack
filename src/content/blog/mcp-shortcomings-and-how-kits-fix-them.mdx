@@ -1,0 +1,135 @@
+---
+title: "Five Hard Problems in MCP (and How We Solve Them)"
+excerpt: "MCP is a solid protocol. But building real products on it exposes gaps that no protocol should have to solve. Here's what we hit and how we think about each one."
+date: "2026-04-22"
+author: "KitStack"
+authorHandle: "kitstack"
+tags: ["mcp", "architecture", "opinion"]
+---
+
+MCP is genuinely well designed for what it does: letting AI models call external tools over a standard protocol. We use it. We like it.
+
+But building real, multi-user products on top of it exposed problems that MCP was never meant to solve. These aren't protocol bugs — they're infrastructure gaps that sit between "AI can call a function" and "AI can run a real application."
+
+This is a field report from building KitStack. Five problems, five solutions.
+
+## 1. Building an MCP app is a non-starter for non-technical users
+
+Let's be honest about the current state of MCP adoption. If you want to use an MCP server today, you need to:
+
+- Find a GitHub repo
+- Clone it locally
+- Install dependencies
+- Configure environment variables
+- Run a process
+- Point your AI client at localhost
+
+This is fine for developers experimenting on a weekend. It is completely unreasonable for a freelancer who wants a CRM, or a consultant who wants to track expenses, or anyone who just wants their AI to *do* something useful beyond generating text.
+
+The iPhone didn't succeed because people learned to write Objective-C. It succeeded because the App Store made installation a single tap. MCP needs its App Store moment.
+
+**What we built.** KitStack is a catalogue. Browse kits, read what they do, activate with one click. One connector URL, pasted once into your AI assistant's settings. No repos, no Docker, no terminal. Every kit is maintained, versioned, and updated automatically.
+
+<Callout type="info">
+We think of LLMs as the new human-machine interface — like the iPhone was for mobile computing. It's on us to build the apps for it. The user shouldn't have to understand the plumbing.
+</Callout>
+
+## 2. Persistence is real infrastructure, not a text file
+
+MCP tools are stateless by design. A tool receives arguments, does something, returns a result. There's no built-in concept of "remember this for later." That's correct — a protocol shouldn't mandate a storage layer.
+
+But every useful application needs state. A CRM needs to remember contacts. An expense tracker needs to accumulate transactions across months. A meeting tracker needs to persist action items between sessions.
+
+The current ecosystem's answer to this is often a `memory.md` file or some JSON dumped to disk. This is not a real solution. A markdown file is not a database. It doesn't handle concurrent writes, it doesn't scale, it doesn't give you queries, indexes, or transactions. You wouldn't build a CRM on a text file — and your AI assistant shouldn't have to either.
+
+**What we built.** Every KitStack subscriber gets an isolated database per kit — automatically provisioned, schema-managed, and backed up. When you add a contact on Monday, it's there on Friday. No configuration. No file management. Real infrastructure.
+
+<CodeBlock filename="what-the-user-experiences.txt">
+```
+Monday:   "Add John Smith from Acme Corp as a lead"
+          → Contact saved to your database. ✓
+
+Friday:   "Show me all my leads"
+          → John Smith, Acme Corp — added Monday.
+          → 3 other contacts you added this week.
+```
+</CodeBlock>
+
+Under the hood: per-user database isolation, automatic schema provisioning, session-aware routing, zero-downtime migrations. MCP provides none of this — and it shouldn't. This is application infrastructure. We build it so kit authors don't have to.
+
+## 3. MCP is verbose and fills up the context window
+
+This is the problem nobody talks about, and it might be the most important one.
+
+Every MCP server exposes a tool catalogue: names, descriptions, parameter schemas, return types. Your AI client loads this entire catalogue into the system prompt at the start of every conversation. For a single server with 5 tools, this is fine. For a platform with dozens of tools across multiple kits, it's a disaster.
+
+A large tool catalogue in the system prompt is actively counter-productive. It confuses the model. It competes for attention with the actual conversation. It burns tokens before the user has said a single word. This is antithetical to how attention mechanisms work — you're filling the context window with reference material the model may never need.
+
+**What we built.** We call it **progressive enhancement**. KitStack doesn't dump the entire tool catalogue into the system prompt. Instead, we expose a minimal surface — just enough for the model to know what's available. As the conversation progresses and the model needs specific tools, we feed it details on demand.
+
+Think of it as lazy loading for AI context. The model gets crumbs, not the whole loaf. It requests more when it needs more. The context window stays clean, focused, and minimal.
+
+<Callout type="tip">
+Progressive enhancement isn't just about saving tokens. A focused context window produces better tool selection, fewer hallucinated parameters, and more accurate responses. Less noise, better signal.
+</Callout>
+
+This same principle extends to data. Our tools don't return entire datasets. They support pagination, filtering, and sorting out of the box. Ask for "my top 5 deals" and you get 5 deals — not 500 deals that the model has to wade through and summarize.
+
+## 4. MCP doesn't support composability
+
+Unix got this right fifty years ago. Small tools that do one thing well, connected by pipes: `cat file | grep pattern | sort | head -5`. Each tool transforms data and passes it along. The output of one is the input of the next.
+
+MCP has no equivalent. Tools are isolated function calls. There's no standard way to chain them, no pipe operator, no way to say "take the output of `list_deals` and feed it into `generate_report`." Every composition has to be orchestrated by the model through multiple round-trips, and the model has to hold intermediate results in context.
+
+This makes complex workflows expensive (in tokens), slow (in round-trips), and fragile (the model might drop or transform intermediate data).
+
+**What we built.** We can't fix MCP's lack of composability at the protocol level. But we can sidestep it by making each tool self-sufficient. Every KitStack tool has pagination, filtering, and sorting built in. You don't need to chain `list_deals | filter stage=proposal | sort value desc` as three separate calls. You make one call: `list_deals(stage="proposal", sort="value_desc", limit=5)`.
+
+<CodeBlock filename="one-call-not-three.json">
+```json
+{
+  "tool": "list_deals",
+  "arguments": {
+    "stage": "proposal",
+    "sort": "value_desc",
+    "limit": 5,
+    "include": ["contact", "last_activity"]
+  }
+}
+```
+</CodeBlock>
+
+This is progressive enhancement on the data side. Each tool is rich enough that you rarely need to chain. And when you do, the model can do it in two calls instead of five, because each call returns exactly what was asked for — no over-fetching, no post-processing.
+
+## 5. Secure AI agents need defense in depth
+
+Here's a problem the industry is only starting to take seriously: when an AI agent can call tools that read and write real data, security isn't optional. It's existential.
+
+Prompt injection, privilege escalation, data leakage between users, unauthorized actions — these aren't theoretical risks. They're active attack surfaces the moment you give an AI write access to anything that matters.
+
+Most MCP implementations handle this with... nothing. Maybe an API key. Maybe a permission check in the tool handler. There's no standard for scoped access, no audit trails, no delegation limits.
+
+**What we built.** We solve this with defense in depth — the same patterns that have worked in security for decades, applied to AI tool use.
+
+- **Total database isolation.** Each user gets their own database. Not row-level security, not tenant IDs in a WHERE clause — a completely separate database. You can't escalate privilege to data you physically can't access.
+- **Scoped tool access.** Tools are scoped to the user's subscription and activated kits. Calling a tool you haven't activated returns nothing, not an error with information leakage.
+- **Audit trails.** Every tool call is logged with the authenticated user, timestamp, arguments, and result. If something goes wrong, there's a complete record.
+- **Delegation limits.** The AI can only perform actions within the boundaries of what the user has explicitly activated. No ambient authority, no implicit permissions.
+
+<Callout type="warning">
+The last line of defense is always isolation. We don't share databases between users. We don't share schemas between kits. A compromised tool in one kit cannot access data from another kit, because they're different databases on different infrastructure. Defense in depth means the failure of any single layer doesn't compromise the system.
+</Callout>
+
+This isn't glamorous work. It's the same authz patterns that have protected banking systems and medical records for decades. But someone has to apply them to AI tool use, because the alternative — giving a language model unscoped write access to a shared database — is genuinely dangerous.
+
+---
+
+## Where this leaves us
+
+MCP is the right protocol. Tool calling over a standard interface is exactly what the ecosystem needs. But a protocol is not a platform.
+
+The gap between "AI can call a function" and "AI can run a real application" requires infrastructure that no protocol should try to mandate: persistence, identity, progressive context management, composable tools, and defense-in-depth security.
+
+That's what KitStack builds. Not a replacement for MCP — the application layer on top of it.
+
+Browse the [kit catalogue](/kits) to see what's available, or read [How Kits Work](/blog/how-kits-work) for the full architecture breakdown.

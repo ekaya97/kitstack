@@ -1,0 +1,164 @@
+---
+title: "How Kits Work"
+excerpt: "A technical deep dive into what makes a kit more than a prompt — from persistent databases to interactive UI rendered inside your chat."
+date: "2026-04-20"
+author: "KitStack"
+authorHandle: "kitstack"
+tags: ["architecture", "technical"]
+---
+
+Most AI tools give you a smarter chat. KitStack gives you applications that live inside your chat.
+
+This post breaks down what a kit actually is under the hood, how it differs from a free skill, and what happens technically when you type something like "Show me my pipeline" into your AI assistant.
+
+## What is a Kit?
+
+Start with what a **skill** does. A skill is a static set of instructions — a system prompt, maybe some reference files — that makes your AI assistant better at a specific task. Write a proposal. Draft a cold email. Score a lead. Skills are free on KitStack, and they work well for tasks that don't need memory.
+
+A **kit** is a full application. Same domain expertise as the skill, but with a database, server-side tools, and interactive UI.
+
+Here is the difference in one sentence: a skill makes your AI smarter for one task. A kit makes it remember, track, and show you things.
+
+A CRM skill can help you write better follow-up emails. A CRM kit tracks every contact, logs every interaction, shows you a pipeline board, and remembers it all next week.
+
+<Callout type="info">
+Every kit includes the same domain knowledge as its corresponding free skill. The subscription adds persistence, tools, and interactive views on top.
+</Callout>
+
+## The Three Layers
+
+Every kit is built from three layers. Understanding them explains why kits can do things that prompts alone cannot.
+
+### 1. Instruction Layer
+
+This is the domain expertise. A CRM kit knows what BANT qualification is. An expense tracker kit knows how to categorize business expenses by tax code. A recruitment kit knows what a competency-based interview looks like.
+
+This layer is identical to what you get in the free skill. It shapes how your AI thinks about the domain.
+
+### 2. Tool Layer
+
+Tools are actions your AI can take on your behalf. They are functions exposed via the Model Context Protocol (MCP) that your AI assistant calls when it recognizes the right intent.
+
+A CRM kit might expose tools like:
+
+- `add_contact` — create a new contact record
+- `log_interaction` — record a call, email, or meeting
+- `move_deal` — advance a deal to the next pipeline stage
+- `pipeline_dashboard` — render the full pipeline view
+- `search_contacts` — find contacts by name, company, or tag
+
+These are not prompt tricks. They are real server-side functions that read and write data.
+
+### 3. Data Layer
+
+This is the part that makes kits fundamentally different from prompts. Every subscriber gets their own isolated database. When you add a contact on Monday, it is there on Friday. When you log a deal, it persists across sessions, across devices, across AI assistants.
+
+Your data is stored in EU-based infrastructure. It belongs to you. Export it anytime. Delete it anytime.
+
+<Callout type="tip">
+The three layers are independent. The instruction layer improves AI reasoning. The tool layer enables actions. The data layer provides memory. Together, they turn a chat into an application.
+</Callout>
+
+## How Activation Works
+
+Setting up a kit takes about two minutes. Four steps:
+
+1. **Subscribe** — pick the kits you want on KitStack. One subscription covers all of them.
+2. **Add the connector URL** — copy a single MCP connector URL into your AI assistant's settings (Claude, ChatGPT, Cursor, or any MCP-compatible client).
+3. **Sign in** — the first time your AI calls a kit tool, you will be prompted to authenticate via OAuth. One-time step.
+4. **Start chatting** — talk to your AI normally. It now has access to your kit tools.
+
+One URL. All kits. No per-kit installation. No Docker containers. No API keys to manage.
+
+## What Happens When You Talk
+
+Let's trace what happens when you type: **"Show me my pipeline"**
+
+**Step 1: Intent recognition.** Your AI assistant (Claude, ChatGPT, etc.) reads your message. Based on the kit's tool descriptions, it determines that `pipeline_dashboard` is the right tool to call.
+
+**Step 2: Tool call.** Your AI sends a structured tool call to KitStack via MCP:
+
+<CodeBlock filename="tool-call.json">
+```json
+{
+  "name": "pipeline_dashboard",
+  "arguments": {
+    "view": "kanban",
+    "filters": {}
+  }
+}
+```
+</CodeBlock>
+
+**Step 3: Authentication and query.** KitStack receives the call, identifies you via your OAuth session, and queries your isolated database. No other subscriber's data is touched.
+
+**Step 4: Response with UI.** KitStack returns structured data along with a view annotation that tells the client how to render it:
+
+<CodeBlock filename="tool-response.json">
+```json
+{
+  "content": [
+    {
+      "type": "text",
+      "text": "Here's your pipeline. 4 deals in Discovery, 2 in Proposal, 1 in Negotiation."
+    }
+  ],
+  "annotations": {
+    "view": "kanban",
+    "columns": ["Discovery", "Proposal", "Negotiation", "Closed Won"],
+    "deals": [
+      { "name": "Acme Corp", "value": 24000, "stage": "Proposal" },
+      { "name": "Globex", "value": 18000, "stage": "Discovery" }
+    ]
+  }
+}
+```
+</CodeBlock>
+
+**Step 5: Rendering.** Your AI assistant displays the text summary and renders an interactive kanban board inline in the chat.
+
+The entire round trip — from your message to an interactive board on screen — takes under two seconds.
+
+## Interactive Views
+
+This is where kits diverge most from every other AI tool integration.
+
+MCP tool responses are typically text or JSON. Your AI formats them into a markdown table or a bullet list. That works for simple data. It falls apart for anything visual or interactive.
+
+Kit views are **live React components** rendered inline in the chat. They are not screenshots. They are not markdown tables. They are interactive UI elements.
+
+What this looks like in practice:
+
+- **Pipeline kanban** — drag deals between stages, click to expand details, filter by owner or value
+- **Expense table** — sortable columns, inline editing, category filters, running totals
+- **Contact timeline** — chronological view of every interaction with a contact, clickable entries
+- **Sequence builder** — step-by-step email sequence with delay settings and template previews
+- **Reports and charts** — bar charts, conversion funnels, trend lines with date range selectors
+
+These views update in real time. Move a deal on the kanban board and the underlying data changes. Edit an expense amount in the table and the total recalculates. It is a real application.
+
+<Callout type="info">
+Interactive views work in AI clients that support MCP tool annotations. In clients that don't, you still get the full text/JSON response — the data is always accessible, the rendering is progressive.
+</Callout>
+
+## Why This Matters
+
+A few things that are easy to overlook but matter when you are evaluating tools:
+
+**Your data stays in the EU.** KitStack infrastructure runs in EU data centers. For European companies dealing with GDPR, this is not optional. It is a requirement.
+
+**Export anytime.** Every piece of data you put into a kit can be exported as CSV or JSON. Full export, any time, no restrictions. This is not a promise — it is a feature in the product.
+
+**No vendor lock-in.** Kits work with Claude, ChatGPT, Gemini, Cursor, and any other MCP-compatible client. Switch AI assistants whenever you want. Your data and tools come with you.
+
+**Cancel and take your data.** If you cancel your subscription, you get a full data export. We do not hold your data hostage.
+
+**One subscription, all kits.** You don't pay per kit. One flat subscription gives you access to every kit in the catalogue, current and future.
+
+## Getting Started
+
+KitStack kits are live today. Browse the [catalogue](/dashboard), subscribe, and add the connector URL to your AI assistant. The whole setup takes less than two minutes.
+
+If you want to understand the protocol layer underneath, read our companion post on [what MCP gets wrong and how we fixed it](/blog/mcp-shortcomings-and-how-kits-fix-them).
+
+If you are building tools for AI and want to publish on KitStack, [get in touch](mailto:hello@kitstack.ai). We are looking for domain experts who want to turn their knowledge into products.

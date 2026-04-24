@@ -108,6 +108,55 @@
   .legal-content td {
     @apply font-sans text-ks-ink2 px-3 py-2 border-b border-ks-hair/50;
   }
+  /* Blog prose */
+  .prose-ks h1 {
+    @apply font-serif text-[28px] sm:text-[36px] tracking-tight text-ks-ink mt-12 mb-4 leading-tight;
+  }
+  .prose-ks h2 {
+    @apply font-serif text-[22px] sm:text-[28px] tracking-tight text-ks-ink mt-10 mb-3 leading-tight;
+  }
+  .prose-ks h3 {
+    @apply font-serif text-[18px] sm:text-[22px] text-ks-ink mt-8 mb-2;
+  }
+  .prose-ks p {
+    @apply font-sans text-[15px] text-ks-ink2 leading-[1.8] mb-5;
+  }
+  .prose-ks ul, .prose-ks ol {
+    @apply pl-5 mb-5;
+  }
+  .prose-ks ul li {
+    @apply font-sans text-[15px] text-ks-ink2 leading-[1.8] mb-1 list-disc;
+  }
+  .prose-ks ol li {
+    @apply font-sans text-[15px] text-ks-ink2 leading-[1.8] mb-1 list-decimal;
+  }
+  .prose-ks a {
+    @apply text-ks-accent underline decoration-ks-accent/30 hover:decoration-ks-accent;
+  }
+  .prose-ks strong {
+    @apply text-ks-ink font-semibold;
+  }
+  .prose-ks blockquote {
+    @apply border-l-[3px] border-ks-accent pl-5 my-6 italic;
+  }
+  .prose-ks blockquote p {
+    @apply text-ks-muted;
+  }
+  .prose-ks code {
+    @apply font-mono text-[13px] bg-ks-paper-warm px-1.5 py-0.5 rounded text-ks-ink;
+  }
+  .prose-ks pre {
+    @apply bg-ks-ink text-ks-paper rounded-xl p-5 my-6 overflow-x-auto;
+  }
+  .prose-ks pre code {
+    @apply bg-transparent p-0 text-[13px] leading-relaxed text-ks-paper;
+  }
+  .prose-ks hr {
+    @apply border-ks-hair my-10;
+  }
+  .prose-ks img {
+    @apply rounded-xl border border-ks-hair my-6;
+  }
 }
 
 @keyframes slideIn {
