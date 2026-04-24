@@ -2,6 +2,10 @@ import { GetObjectCommand, S3Client } from "@aws-sdk/client-s3";
 import { Resource } from "sst";
 import { RESOURCE_MIME_TYPE } from "@modelcontextprotocol/ext-apps/server";
 
+function getCdnUrl(): string {
+  return (Resource as any).KitCdn?.url?.replace(/\/$/, "") || "";
+}
+
 const s3 = new S3Client({});
 
 /** The single app shell resource URI. Declared in KIT_TOOL_DEFINITION._meta.ui. */
@@ -78,12 +82,26 @@ export function listAppResources(activatedKitIds: Set<string>) {
     mimeType: string;
   }> = [];
 
-  // Always include the universal app shell
+  const cdnUrl = getCdnUrl();
   resources.push({
     uri: APP_SHELL_URI,
     name: "KitStack App",
     mimeType: RESOURCE_MIME_TYPE,
-  });
+    _meta: {
+      ui: {
+        csp: {
+          resourceDomains: [
+            ...(cdnUrl ? [cdnUrl] : []),
+            "https://fonts.googleapis.com",
+            "https://fonts.gstatic.com",
+          ],
+          connectDomains: [
+            ...(cdnUrl ? [cdnUrl] : []),
+          ],
+        },
+      },
+    },
+  } as any);
 
   return resources;
 }
@@ -92,12 +110,32 @@ export async function readAppResource(
   uri: string,
   userId: string,
   activatedKitIds: Set<string>
-): Promise<{ uri: string; mimeType: string; text: string } | null> {
+): Promise<{ uri: string; mimeType: string; text: string; _meta?: any } | null> {
   // Universal app shell
   if (uri === APP_SHELL_URI) {
     const html = await fetchFromS3("apps/app-shell.html");
     if (!html) return null;
-    return { uri, mimeType: RESOURCE_MIME_TYPE, text: html };
+
+    const cdnUrl = getCdnUrl();
+    return {
+      uri,
+      mimeType: RESOURCE_MIME_TYPE,
+      text: html,
+      _meta: {
+        ui: {
+          csp: {
+            resourceDomains: [
+              ...(cdnUrl ? [cdnUrl] : []),
+              "https://fonts.googleapis.com",
+              "https://fonts.gstatic.com",
+            ],
+            connectDomains: [
+              ...(cdnUrl ? [cdnUrl] : []),
+            ],
+          },
+        },
+      },
+    };
   }
 
   return null;

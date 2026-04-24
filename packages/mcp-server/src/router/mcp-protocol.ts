@@ -122,6 +122,9 @@ async function handleToolsCall(
   if (params?.name === "kit_view") {
     const args = (params.arguments || {}) as { id?: string; view?: string };
     const result = await handleKitViewCall(args, userId, getUserKitDbs);
+    const serialized = JSON.stringify(result);
+    console.log("[MCP] kit_view _meta present:", serialized.includes("resourceDomains"));
+    console.log("[MCP] kit_view __KITSTACK_CDN__ present:", serialized.includes("__KITSTACK_CDN__"));
     return { jsonrpc: "2.0" as const, id: request.id, result };
   }
 

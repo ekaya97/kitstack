@@ -1,9 +1,21 @@
-// Minimal MCP Apps client — implements the sandbox proxy handshake
-// and tool result protocol without the full ext-apps SDK.
+// Minimal MCP Apps client (7KB) — handles sandbox handshake, loads React views from CDN.
 
 const root = document.getElementById("root")!;
 let requestId = 0;
 const pending = new Map<number, { resolve: (v: any) => void; reject: (e: any) => void }>();
+
+// CDN base URL — set at build time via env var, baked into the bundle
+const CDN_BASE = import.meta.env.VITE_CDN_URL || "";
+
+// Kit folder mapping
+const KIT_FOLDER: Record<string, string> = {
+  crm: "crm",
+  "cold-outreach": "outreach",
+  "expense-tax-prep": "expense",
+  "meeting-action-tracker": "meeting",
+};
+
+// --- postMessage transport ---
 
 function send(msg: Record<string, unknown>) {
   window.parent.postMessage(msg, "*");
@@ -25,7 +37,6 @@ window.addEventListener("message", (event) => {
   const msg = event.data;
   if (!msg || msg.jsonrpc !== "2.0") return;
 
-  // Response to a request we sent
   if ("id" in msg && pending.has(msg.id)) {
     const { resolve, reject } = pending.get(msg.id)!;
     pending.delete(msg.id);
@@ -34,25 +45,18 @@ window.addEventListener("message", (event) => {
     return;
   }
 
-  // Sandbox proxy handshake — the proxy sends this when it's ready
   if (msg.method === "ui/notifications/sandbox-proxy-ready") {
-    // Respond with the resource ready signal containing our HTML
     sendNotification("ui/notifications/sandbox-resource-ready", {
       html: document.documentElement.outerHTML,
     });
     return;
   }
 
-  // Tool result from the host
-  if (msg.method === "ui/notifications/tool-result") {
-    handleToolResult(msg.params);
-  }
-  if (msg.method === "ui/notifications/tool-input") {
+  if (msg.method === "ui/notifications/tool-result" || msg.method === "ui/notifications/tool-input") {
     handleToolResult(msg.params);
   }
 });
 
-// Initialize the MCP Apps connection
 async function init() {
   try {
     await sendRequest("ui/initialize", {
@@ -69,18 +73,13 @@ async function init() {
 // --- Tool result handler ---
 
 function handleToolResult(params: any) {
-  const candidates = [
-    params?.result?.content,
-    params?.content,
-  ];
-
+  const candidates = [params?.result?.content, params?.content];
   for (const content of candidates) {
     if (!Array.isArray(content)) continue;
-    const textBlock = content.find((c: any) => c.type === "text");
-    if (!textBlock?.text) continue;
-
+    const tb = content.find((c: any) => c.type === "text");
+    if (!tb?.text) continue;
     try {
-      const data = JSON.parse(textBlock.text);
+      const data = JSON.parse(tb.text);
       if (data.kit && data.view && data.cmd) {
         loadView(data);
         return;
@@ -97,10 +96,34 @@ interface ViewData {
   cmd: string;
   params?: Record<string, unknown>;
   app?: string;
+  cdn?: string;
+}
+
+const loadedScripts = new Set<string>();
+
+function loadScript(url: string): Promise<void> {
+  if (loadedScripts.has(url)) return Promise.resolve();
+  return new Promise((resolve, reject) => {
+    const script = document.createElement("script");
+    script.type = "module";
+    script.src = url;
+    script.onload = () => { loadedScripts.add(url); resolve(); };
+    script.onerror = () => reject(new Error(`Failed to load ${url}`));
+    document.head.appendChild(script);
+  });
+}
+
+function loadCSS(url: string) {
+  if (document.querySelector(`link[href="${url}"]`)) return;
+  const link = document.createElement("link");
+  link.rel = "stylesheet";
+  link.href = url;
+  document.head.appendChild(link);
 }
 
 async function loadView(data: ViewData) {
   const title = data.app || data.view.replace(/-/g, " ").replace(/\b\w/g, (c) => c.toUpperCase());
+  const folder = KIT_FOLDER[data.kit];
 
   root.innerHTML = `
     <div class="ks-shell">
@@ -113,6 +136,60 @@ async function loadView(data: ViewData) {
   `;
   (window as any).__ksRefresh = () => loadView(data);
 
+  const cdn = CDN_BASE;
+  if (!cdn || !folder) {
+    // No CDN configured — fall back to markdown rendering via MCP
+    await loadViewMarkdown(data);
+    return;
+  }
+
+  // Set up the MCP data bridge for React components
+  (window as any).__KITSTACK_MCP__ = {
+    callTool: (cmd: string, params: Record<string, unknown>) =>
+      sendRequest("tools/call", {
+        name: "kit",
+        arguments: { id: data.kit, cmd, params },
+      }),
+    kit: data.kit,
+    view: data.view,
+  };
+
+  try {
+    // Load shared CSS
+    loadCSS(`${cdn}/style.css`);
+
+    // Load vendor (React) + shared chunks, then view module
+    await loadScript(`${cdn}/vendor.js`);
+    await loadScript(`${cdn}/shared.js`);
+    await loadScript(`${cdn}/${folder}/${data.view}.js`);
+
+    // The view module should have auto-mounted into #ks-content
+    // If it exported mount() via a global registry, call it
+    const views = (window as any).__KITSTACK_VIEWS__;
+    if (views?.[`${folder}/${data.view}`]) {
+      const container = document.getElementById("ks-content")!;
+      container.innerHTML = "";
+      container.className = "";
+      views[`${folder}/${data.view}`].mount(container);
+
+      // Notify host of content size after render
+      requestAnimationFrame(() => {
+        const height = document.body.scrollHeight;
+        sendNotification("ui/notifications/size-changed", {
+          width: document.body.scrollWidth,
+          height: Math.max(height, 400),
+        });
+      });
+    }
+  } catch (err: any) {
+    console.error("[KitStack] View load failed:", err);
+    // Fall back to markdown rendering
+    await loadViewMarkdown(data);
+  }
+}
+
+// Markdown fallback — fetch data via MCP tool call and render as formatted text
+async function loadViewMarkdown(data: ViewData) {
   try {
     const result = await sendRequest("tools/call", {
       name: "kit",
@@ -120,9 +197,8 @@ async function loadView(data: ViewData) {
     });
 
     let text = "";
-    const content = result?.content;
-    if (Array.isArray(content)) {
-      const tb = content.find((c: any) => c.type === "text");
+    if (Array.isArray(result?.content)) {
+      const tb = result.content.find((c: any) => c.type === "text");
       if (tb) text = tb.text;
     }
 

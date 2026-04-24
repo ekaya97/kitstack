@@ -5,6 +5,7 @@ import type {
   KitToolInput,
   UserKitDbItem,
 } from "../framework/types";
+import { Resource } from "sst";
 import { dispatchToolCall } from "./tool-dispatcher";
 import { getKitApps, readAppResource } from "./app-resources";
 
@@ -388,6 +389,8 @@ async function handleShowApp(
     };
   }
 
+  const shellHtml = resource.text;
+
   return {
     content: [
       { type: "text", text: dataPayload },
@@ -396,7 +399,7 @@ async function handleShowApp(
         resource: {
           uri: viewUri,
           mimeType: "text/html;profile=mcp-app",
-          text: resource.text,
+          text: shellHtml,
         },
       },
     ],
