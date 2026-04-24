@@ -58,6 +58,24 @@ export const kitOutreach = new sst.aws.Function("KitOutreach", {
   handler: "packages/mcp-server/src/kits/outreach/handler.handler",
 });
 
+// --- App Data Lambda (JWT → Turso → JSON for iframe apps) ---
+
+export const appData = new sst.aws.Function("AppData", {
+  handler: "packages/mcp-server/src/app-data/handler.handler",
+  timeout: "15 seconds",
+  memory: "256 MB",
+  runtime: "nodejs22.x",
+  architecture: "arm64",
+  url: true,
+  link: [
+    userKitDbs,
+    mcpJwtSecret,
+    mcpAllowedOrigins,
+    posthogKey,
+    posthogHost,
+  ],
+});
+
 // --- Router Lambda (MCP protocol + OAuth + dispatch) ---
 
 export const mcpRouter = new sst.aws.Function("McpRouter", {
@@ -75,6 +93,7 @@ export const mcpRouter = new sst.aws.Function("McpRouter", {
     kitCrm,
     kitExpense,
     kitOutreach,
+    appData,
     tursoPlatformApiToken,
     tursoOrgName,
     betterAuthSecret,
@@ -100,22 +119,4 @@ export const mcpDomain = new sst.aws.Router("McpDomain", {
   routes: {
     "/*": mcpRouter.url,
   },
-});
-
-// --- App Data Lambda (JWT → Turso → JSON for iframe apps) ---
-
-export const appData = new sst.aws.Function("AppData", {
-  handler: "packages/mcp-server/src/app-data/handler.handler",
-  timeout: "15 seconds",
-  memory: "256 MB",
-  runtime: "nodejs22.x",
-  architecture: "arm64",
-  url: true,
-  link: [
-    userKitDbs,
-    mcpJwtSecret,
-    mcpAllowedOrigins,
-    posthogKey,
-    posthogHost,
-  ],
 });

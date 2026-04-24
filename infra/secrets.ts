@@ -5,7 +5,7 @@ export const tursoPlatformApiToken = new sst.Secret("TursoPlatformApiToken", "")
 export const tursoOrgName = new sst.Secret("TursoOrgName", "");
 
 // ── Auth ────────────────────────────────────────────────────────
-export const betterAuthSecret = new sst.Secret("BetterAuthSecret");
+export const betterAuthSecret = new sst.Secret("BetterAuthSecret", "");
 export const betterAuthUrl = new sst.Secret("BetterAuthUrl", "http://localhost:3000");
 export const googleClientId = new sst.Secret("GoogleClientId", "");
 export const googleClientSecret = new sst.Secret("GoogleClientSecret", "");
@@ -13,7 +13,7 @@ export const githubClientId = new sst.Secret("GithubClientId", "");
 export const githubClientSecret = new sst.Secret("GithubClientSecret", "");
 
 // ── MCP ─────────────────────────────────────────────────────────
-export const mcpJwtSecret = new sst.Secret("McpJwtSecret");
+export const mcpJwtSecret = new sst.Secret("McpJwtSecret", "");
 export const mcpAllowedOrigins = new sst.Secret("McpAllowedOrigins", "http://localhost:3000");
 export const mcpInternalApiKey = new sst.Secret("McpInternalApiKey", "");
 

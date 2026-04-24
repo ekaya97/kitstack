@@ -67,6 +67,7 @@
     "sst": "^3",
     "tailwindcss": "^3",
     "typescript": "^5",
+    "vite-plugin-singlefile": "^2.3.3",
     "vitest": "^2"
   }
 }

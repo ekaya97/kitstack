@@ -15,6 +15,30 @@ declare module "sst" {
       "name": string
       "type": "sst.aws.Bucket"
     }
+    "BetterAuthSecret": {
+      "type": "sst.sst.Secret"
+      "value": string
+    }
+    "BetterAuthUrl": {
+      "type": "sst.sst.Secret"
+      "value": string
+    }
+    "GithubClientId": {
+      "type": "sst.sst.Secret"
+      "value": string
+    }
+    "GithubClientSecret": {
+      "type": "sst.sst.Secret"
+      "value": string
+    }
+    "GoogleClientId": {
+      "type": "sst.sst.Secret"
+      "value": string
+    }
+    "GoogleClientSecret": {
+      "type": "sst.sst.Secret"
+      "value": string
+    }
     "KitCrm": {
       "name": string
       "type": "sst.aws.Function"
@@ -35,9 +59,33 @@ declare module "sst" {
       "name": string
       "type": "sst.aws.Dynamo"
     }
+    "LemonsqueezyApiKey": {
+      "type": "sst.sst.Secret"
+      "value": string
+    }
+    "LemonsqueezyStoreId": {
+      "type": "sst.sst.Secret"
+      "value": string
+    }
+    "LemonsqueezyWebhookSecret": {
+      "type": "sst.sst.Secret"
+      "value": string
+    }
+    "McpAllowedOrigins": {
+      "type": "sst.sst.Secret"
+      "value": string
+    }
     "McpDomain": {
       "type": "sst.aws.Router"
       "url": string
+    }
+    "McpInternalApiKey": {
+      "type": "sst.sst.Secret"
+      "value": string
+    }
+    "McpJwtSecret": {
+      "type": "sst.sst.Secret"
+      "value": string
     }
     "McpRouter": {
       "name": string
@@ -47,6 +95,30 @@ declare module "sst" {
     "OAuthStore": {
       "name": string
       "type": "sst.aws.Dynamo"
+    }
+    "PosthogHost": {
+      "type": "sst.sst.Secret"
+      "value": string
+    }
+    "PosthogKey": {
+      "type": "sst.sst.Secret"
+      "value": string
+    }
+    "TursoAuthToken": {
+      "type": "sst.sst.Secret"
+      "value": string
+    }
+    "TursoDbUrl": {
+      "type": "sst.sst.Secret"
+      "value": string
+    }
+    "TursoOrgName": {
+      "type": "sst.sst.Secret"
+      "value": string
+    }
+    "TursoPlatformApiToken": {
+      "type": "sst.sst.Secret"
+      "value": string
     }
     "UserKitDbs": {
       "name": string

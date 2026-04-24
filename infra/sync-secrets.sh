@@ -4,15 +4,17 @@ set -euo pipefail
 # Sync secrets from a .env file to SST secrets for a given stage.
 #
 # Usage:
-#   ./scripts/sync-secrets.sh <stage>
+#   ./infra/sync-secrets.sh <stage>
 #
 # Examples:
-#   ./scripts/sync-secrets.sh eneskaya   # reads .env.eneskaya
-#   ./scripts/sync-secrets.sh production # reads .env.production
+#   ./infra/sync-secrets.sh eneskaya   # reads .env.eneskaya
+#   ./infra/sync-secrets.sh production # reads .env.production
 #
 # The env file should use SST secret names as keys (PascalCase):
 #   BetterAuthSecret=my-secret-value
 #   McpJwtSecret=another-secret
+#
+# Missing or empty values are set as empty string (SST requires all secrets to have a value).
 
 STAGE="${1:?Usage: $0 <stage>}"
 ENV_FILE=".env.${STAGE}"
@@ -51,15 +53,15 @@ count=0
 
 for name in "${SST_SECRETS[@]}"; do
   # Extract value from env file (supports KEY=value, ignores comments/empty lines)
-  value=$(grep -E "^${name}=" "$ENV_FILE" 2>/dev/null | head -1 | cut -d'=' -f2-)
+  value=$(grep -E "^${name}=" "$ENV_FILE" 2>/dev/null | head -1 | cut -d'=' -f2- || true)
 
   if [[ -z "$value" ]]; then
-    echo "  skip  $name (empty or not in $ENV_FILE)"
-    continue
+    echo "  set   $name (empty)"
+  else
+    echo "  set   $name"
   fi
 
-  echo "  set   $name"
-  npx sst secret set "$name" "$value" --stage "$STAGE" 2>/dev/null
+  printf '%s' "${value:-}" | npx sst secret set "$name" --stage "$STAGE" 2>/dev/null
   ((count++))
 done
 
