@@ -2,6 +2,7 @@ import type { KitRegistryItem, KitToolInvocation, KitToolResult } from "../frame
 import { getUserKitDb } from "../framework/dynamo";
 import { audit } from "../framework/audit";
 import { log } from "../framework/logger";
+import { getToolAppUri } from "./app-resources";
 
 export async function dispatchToolCall(
   toolName: string,
@@ -62,6 +63,14 @@ export async function dispatchToolCall(
     durationMs: Date.now() - start,
     ...(result.isError ? { detail: result.content[0]?.text } : {}),
   });
+
+  // Attach UI resource reference for write tools
+  if (!result.isError) {
+    const appUri = getToolAppUri(toolName);
+    if (appUri) {
+      (result as any)._meta = { ui: { resourceUri: appUri } };
+    }
+  }
 
   return result;
 }

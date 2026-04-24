@@ -6,6 +6,7 @@ import type {
   UserKitDbItem,
 } from "../framework/types";
 import { dispatchToolCall } from "./tool-dispatcher";
+import { getKitApps, getResourceUri } from "./app-resources";
 
 /**
  * The single static tool definition returned by tools/list.
@@ -79,6 +80,11 @@ export async function handleKitCall(
   // kit(id, cmd) → describe
   if (!params) {
     return handleDescribe(id, cmd, kitTools);
+  }
+
+  // kit(id, cmd="show_app", params) → show UI
+  if (cmd === "show_app") {
+    return handleShowApp(id, params);
   }
 
   // kit(id, cmd, params) → run
@@ -158,6 +164,12 @@ function handleDiscover(
     text += `| \`${tool.toolName}\` | ${tool.toolDescription} |\n`;
   }
 
+  // Add show_app if kit has apps
+  const apps = getKitApps(kitId);
+  if (apps.length > 0) {
+    text += `| \`show_app\` | Show interactive UI (${apps.map((a) => a.name).join(", ")}) |\n`;
+  }
+
   text += "\n**Run directly:** `kit(id=\"" + kitId + "\", cmd=\"<action>\", params={...})`\n";
   text += "**Describe first:** `kit(id=\"" + kitId + "\", cmd=\"<action>\")` to see parameter schema";
 
@@ -189,6 +201,48 @@ function handleDescribe(
   text += `**Run:** \`kit(id="${kitId}", cmd="${tool.toolName}", params={...})\``;
 
   return { content: [{ type: "text", text }] };
+}
+
+// --- Show App ---
+
+function handleShowApp(
+  kitId: string,
+  params: Record<string, unknown>
+): KitToolResult {
+  const view = params.view as string | undefined;
+  const apps = getKitApps(kitId);
+
+  if (!apps.length) {
+    return {
+      content: [{ type: "text", text: `Kit "${kitId}" has no apps.` }],
+      isError: true,
+    };
+  }
+
+  // If no view specified, show available apps
+  if (!view) {
+    const list = apps.map((a) => `- \`${a.slug}\`: ${a.name}`).join("\n");
+    return {
+      content: [{
+        type: "text",
+        text: `## Available Apps\n\n${list}\n\n**Usage:** \`kit(id="${kitId}", cmd="show_app", params={view:"${apps[0].slug}"})\``,
+      }],
+    };
+  }
+
+  const app = apps.find((a) => a.slug === view);
+  if (!app) {
+    const available = apps.map((a) => a.slug).join(", ");
+    return {
+      content: [{ type: "text", text: `Unknown app "${view}". Available: ${available}` }],
+      isError: true,
+    };
+  }
+
+  return {
+    content: [{ type: "text", text: `Showing ${app.name}` }],
+    _meta: { ui: { resourceUri: getResourceUri(kitId, app.slug) } },
+  } as any;
 }
 
 // --- Run ---

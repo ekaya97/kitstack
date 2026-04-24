@@ -1,12 +1,20 @@
 import { useState, useEffect, useCallback } from "react";
 
-const APP_DATA_URL = import.meta.env.VITE_APP_DATA_URL || "";
+// Config can come from either:
+// 1. window.__KITSTACK__ (injected by MCP server when serving as resource)
+// 2. URL params + env var (website preview iframes)
+const ks = (window as any).__KITSTACK__ as
+  | { token: string; appDataUrl: string; kit: string }
+  | undefined;
+
+const APP_DATA_URL = ks?.appDataUrl || import.meta.env.VITE_APP_DATA_URL || "";
 
 function getToken(): string | null {
-  return new URLSearchParams(window.location.search).get("token");
+  return ks?.token || new URLSearchParams(window.location.search).get("token");
 }
 
 function getParam(name: string): string | null {
+  if (name === "kit" && ks?.kit) return ks.kit;
   return new URLSearchParams(window.location.search).get(name);
 }
 
