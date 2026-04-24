@@ -1,27 +1,17 @@
 import type {
   JsonRpcRequest,
   JsonRpcResponse,
-  McpToolDefinition,
   KitRegistryItem,
   UserKitDbItem,
-  OnionToolInput,
+  KitToolInput,
 } from "../framework/types";
-import { dispatchToolCall } from "./tool-dispatcher";
-import { buildOnionTools, handleOnionCall } from "./onion-handler";
-import { checkAndClearToolsChanged } from "../framework/dynamo";
-
-/**
- * When total entitled tools exceed this threshold, switch to onion mode.
- * Set to 0 to force onion mode (for testing).
- * Set to Infinity to always use flat mode.
- */
-export const ONION_MODE_THRESHOLD = parseInt(process.env.ONION_MODE_THRESHOLD || "40", 10);
+import { KIT_TOOL_DEFINITION, handleKitCall } from "./kit-handler";
 
 const ICON_SVG = '<svg xmlns="http://www.w3.org/2000/svg" width="32" height="32" viewBox="0 0 28 28" fill="none"><rect x="2.5" y="11.5" width="23" height="13" rx="2.5" stroke="#1a1814" stroke-width="1.5" fill="#faf7f1"/><rect x="5.5" y="7.5" width="17" height="4" rx="1.5" stroke="#1a1814" stroke-width="1.3" fill="#f7d9c8"/><rect x="8.5" y="3.5" width="11" height="4" rx="1.5" stroke="#1a1814" stroke-width="1.3" fill="#d65a2f"/></svg>';
 
 const SERVER_INFO = {
   name: "kitstack",
-  version: "0.2.0",
+  version: "0.3.0",
   title: "KitStack",
   description: "AI tool kits with persistence, interactive UI, and cross-session memory. Skills are free. Kits replace your SaaS.",
   websiteUrl: "https://kitstack.co",
@@ -39,7 +29,6 @@ const SERVER_CAPABILITIES = {
 
 export interface McpResponse {
   response: JsonRpcResponse;
-  notifications?: Array<{ method: string; params?: Record<string, unknown> }>;
 }
 
 export async function handleMcpRequest(
@@ -50,13 +39,6 @@ export async function handleMcpRequest(
   invokeKitLambda: (arn: string, payload: unknown) => Promise<unknown>
 ): Promise<McpResponse> {
   try {
-    // Check if tools have changed since last request
-    const toolsChanged = await checkAndClearToolsChanged(userId);
-    const notifications: McpResponse["notifications"] = [];
-    if (toolsChanged) {
-      notifications.push({ method: "notifications/tools/list_changed" });
-    }
-
     let response: JsonRpcResponse;
 
     switch (request.method) {
@@ -65,7 +47,7 @@ export async function handleMcpRequest(
           jsonrpc: "2.0",
           id: request.id,
           result: {
-            protocolVersion: "2025-03-26",
+            protocolVersion: "2025-11-25",
             serverInfo: SERVER_INFO,
             capabilities: SERVER_CAPABILITIES,
           },
@@ -73,11 +55,21 @@ export async function handleMcpRequest(
         break;
 
       case "tools/list":
-        response = await handleToolsList(request, userId, getAllTools, getUserKitDbs);
+        response = {
+          jsonrpc: "2.0",
+          id: request.id,
+          result: { tools: [KIT_TOOL_DEFINITION] },
+        };
         break;
 
       case "tools/call":
-        response = await handleToolsCall(request, userId, getAllTools, getUserKitDbs, invokeKitLambda);
+        response = await handleToolsCall(
+          request,
+          userId,
+          getAllTools,
+          getUserKitDbs,
+          invokeKitLambda
+        );
         break;
 
       default:
@@ -88,7 +80,7 @@ export async function handleMcpRequest(
         };
     }
 
-    return { response, notifications: notifications.length > 0 ? notifications : undefined };
+    return { response };
   } catch (err: any) {
     return {
       response: {
@@ -98,51 +90,6 @@ export async function handleMcpRequest(
       },
     };
   }
-}
-
-/**
- * Filter registry items to only tools for kits the user has activated.
- */
-function filterByEntitlement(
-  registryItems: KitRegistryItem[],
-  userKitDbs: UserKitDbItem[]
-): KitRegistryItem[] {
-  const activatedKitIds = new Set(userKitDbs.map((db) => db.kitId));
-  return registryItems.filter((item) => activatedKitIds.has(item.kitId));
-}
-
-async function handleToolsList(
-  request: JsonRpcRequest,
-  userId: string,
-  getAllTools: () => Promise<KitRegistryItem[]>,
-  getUserKitDbs: (userId: string) => Promise<UserKitDbItem[]>
-): Promise<JsonRpcResponse> {
-  const [allRegistryItems, userDbs] = await Promise.all([
-    getAllTools(),
-    getUserKitDbs(userId),
-  ]);
-
-  const entitledItems = filterByEntitlement(allRegistryItems, userDbs);
-
-  let tools: McpToolDefinition[];
-
-  if (entitledItems.length <= ONION_MODE_THRESHOLD) {
-    // Flat mode: return all entitled tools directly
-    tools = entitledItems.map((item) => ({
-      name: item.toolName,
-      description: item.toolDescription,
-      inputSchema: JSON.parse(item.inputSchema),
-    }));
-  } else {
-    // Onion mode: return 1 meta-tool per kit
-    tools = buildOnionTools(entitledItems);
-  }
-
-  return {
-    jsonrpc: "2.0",
-    id: request.id,
-    result: { tools },
-  };
 }
 
 async function handleToolsCall(
@@ -157,53 +104,23 @@ async function handleToolsCall(
     arguments?: Record<string, unknown>;
   };
 
-  if (!params?.name) {
+  if (params?.name !== "kit") {
     return {
       jsonrpc: "2.0",
       id: request.id,
-      error: { code: -32602, message: "Missing tool name" },
+      error: { code: -32602, message: `Unknown tool: ${params?.name}. Use "kit".` },
     };
   }
 
-  const [allRegistryItems, userDbs] = await Promise.all([
-    getAllTools(),
-    getUserKitDbs(userId),
-  ]);
+  const input = (params.arguments || {}) as KitToolInput;
 
-  const entitledItems = filterByEntitlement(allRegistryItems, userDbs);
-
-  // Check if this is an onion-mode kit call (tool name matches a kitId)
-  const kitIds = new Set(entitledItems.map((t) => t.kitId));
-  const isOnionCall = kitIds.has(params.name) && !entitledItems.some((t) => t.toolName === params.name);
-
-  let result;
-
-  if (isOnionCall) {
-    const input = params.arguments as unknown as OnionToolInput;
-    if (!input?.action) {
-      return {
-        jsonrpc: "2.0",
-        id: request.id,
-        error: { code: -32602, message: "Missing 'action' parameter. Use discover, describe, or execute." },
-      };
-    }
-    result = await handleOnionCall(
-      params.name,
-      input,
-      userId,
-      async () => entitledItems,
-      invokeKitLambda
-    );
-  } else {
-    // Flat mode or direct tool call
-    result = await dispatchToolCall(
-      params.name,
-      params.arguments || {},
-      userId,
-      async () => entitledItems,
-      invokeKitLambda
-    );
-  }
+  const result = await handleKitCall(
+    input,
+    userId,
+    getAllTools,
+    getUserKitDbs,
+    invokeKitLambda
+  );
 
   return {
     jsonrpc: "2.0",

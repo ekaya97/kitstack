@@ -3,6 +3,7 @@ import { nanoid } from "nanoid";
 import { db } from "@/lib/db";
 import { subscriptions, type Subscription } from "@/db/schema";
 
+
 export async function getSubscription(userId: string): Promise<Subscription | null> {
   const results = await db
     .select()
@@ -18,16 +19,11 @@ export async function createSubscription(
   userId: string,
   plan: "starter" | "pro"
 ): Promise<Subscription> {
-  // Check for existing active subscription
   const existing = await getSubscription(userId);
-  if (existing) {
-    return existing;
-  }
+  if (existing) return existing;
 
   const id = nanoid();
-  const now = new Date();
-  // Mock billing: set period end to 30 days from now
-  const periodEnd = new Date(now.getTime() + 30 * 24 * 60 * 60 * 1000);
+  const periodEnd = new Date(Date.now() + 30 * 24 * 60 * 60 * 1000);
 
   await db.insert(subscriptions).values({
     id,
@@ -51,4 +47,5 @@ export async function cancelSubscription(userId: string): Promise<void> {
     .where(
       and(eq(subscriptions.userId, userId), eq(subscriptions.status, "active"))
     );
+
 }

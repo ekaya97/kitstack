@@ -361,27 +361,13 @@ export async function handler(
       if (!body) return json({ error: "Invalid request body" }, 400, origin);
       const request = body as JsonRpcRequest;
 
-      const { response, notifications } = await handleMcpRequest(
+      const { response } = await handleMcpRequest(
         request,
         userId,
         getAllRegistryItems,
         getUserKitDbs,
         invokeKitLambda
       );
-
-      // If there are pending notifications, send them as a JSON array
-      // containing the response + notifications (MCP batch format)
-      if (notifications && notifications.length > 0) {
-        const batch = [
-          response,
-          ...notifications.map((n) => ({
-            jsonrpc: "2.0" as const,
-            method: n.method,
-            params: n.params,
-          })),
-        ];
-        return json(batch, 200, origin);
-      }
 
       return json(response, 200, origin);
     }

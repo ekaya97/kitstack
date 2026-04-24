@@ -68,7 +68,6 @@ export const mcpRouter = new sst.aws.Function("McpRouter", {
     KIT_CRM_ARN: kitCrm.arn,
     KIT_EXPENSE_ARN: kitExpense.arn,
     KIT_OUTREACH_ARN: kitOutreach.arn,
-    ONION_MODE_THRESHOLD: process.env.ONION_MODE_THRESHOLD || "40",
   },
   permissions: [
     {

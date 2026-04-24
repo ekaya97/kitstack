@@ -35,11 +35,11 @@ export interface KitDefinition {
   tools: ToolDefinition[];
 }
 
-// --- Onion Mode (progressive enhancement) ---
+// --- Kit Tool Input (onion pattern) ---
 
-export interface OnionToolInput {
-  action: "discover" | "describe" | "execute";
-  name?: string;
+export interface KitToolInput {
+  id?: string;
+  cmd?: string;
   params?: Record<string, unknown>;
 }
 
@@ -61,6 +61,7 @@ export interface UserKitDbItem {
   dbUrl: string;
   dbToken: string;
   provisionedAt: string;
+  status?: "active" | "deactivated";
 }
 
 export interface OAuthStoreItem {

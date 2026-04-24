@@ -2,10 +2,11 @@ import {
   DynamoDBClient,
   GetItemCommand,
   PutItemCommand,
-  DeleteItemCommand,
   QueryCommand,
   ScanCommand,
+  UpdateItemCommand,
 } from "@aws-sdk/client-dynamodb";
+
 import { marshall, unmarshall } from "@aws-sdk/util-dynamodb";
 import type { KitRegistryItem, UserKitDbItem } from "./types";
 
@@ -70,6 +71,22 @@ export async function putUserKitDb(item: UserKitDbItem): Promise<void> {
   );
 }
 
+export async function updateUserKitDbStatus(
+  userId: string,
+  kitId: string,
+  status: "active" | "deactivated"
+): Promise<void> {
+  await client.send(
+    new UpdateItemCommand({
+      TableName: tableName("USER_KIT_DBS_TABLE"),
+      Key: marshall({ userId, kitId }),
+      UpdateExpression: "SET #s = :status",
+      ExpressionAttributeNames: { "#s": "status" },
+      ExpressionAttributeValues: marshall({ ":status": status }),
+    })
+  );
+}
+
 export async function getUserKitDbs(userId: string): Promise<UserKitDbItem[]> {
   const result = await client.send(
     new QueryCommand({
@@ -80,45 +97,5 @@ export async function getUserKitDbs(userId: string): Promise<UserKitDbItem[]> {
   );
   return (result.Items || [])
     .map((item) => unmarshall(item) as UserKitDbItem)
-    .filter((item) => item.kitId !== TOOLS_CHANGED_KIT_ID);
-}
-
-// --- Tools Changed Flag ---
-
-const TOOLS_CHANGED_KIT_ID = "__tools_changed";
-
-export async function setToolsChanged(userId: string): Promise<void> {
-  await client.send(
-    new PutItemCommand({
-      TableName: tableName("USER_KIT_DBS_TABLE"),
-      Item: marshall({
-        userId,
-        kitId: TOOLS_CHANGED_KIT_ID,
-        dbUrl: "flag",
-        dbToken: "",
-        provisionedAt: new Date().toISOString(),
-      }),
-    })
-  );
-}
-
-export async function checkAndClearToolsChanged(userId: string): Promise<boolean> {
-  const result = await client.send(
-    new GetItemCommand({
-      TableName: tableName("USER_KIT_DBS_TABLE"),
-      Key: marshall({ userId, kitId: TOOLS_CHANGED_KIT_ID }),
-    })
-  );
-
-  if (!result.Item) return false;
-
-  // Clear the flag
-  await client.send(
-    new DeleteItemCommand({
-      TableName: tableName("USER_KIT_DBS_TABLE"),
-      Key: marshall({ userId, kitId: TOOLS_CHANGED_KIT_ID }),
-    })
-  );
-
-  return true;
+    .filter((item) => item.status !== "deactivated");
 }
