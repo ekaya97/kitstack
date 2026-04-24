@@ -25,6 +25,7 @@ import {
   trackKitDeactivated,
   trackKitDeactivationFailed,
 } from "@/lib/analytics-server";
+import { log } from "@/lib/logger";
 
 // Kit migrations
 import { migrationSql as meetingMigrations } from "../../packages/mcp-server/src/kits/meeting/migrations";
@@ -121,7 +122,7 @@ export async function activateKit(
   try {
     await provisionKit(userId, kitId, migrationSql);
   } catch (err: any) {
-    console.error("[kit-lifecycle] Provisioning failed:", err.message);
+    log.error("Kit provisioning failed", { userId, kitSlug, error: err.message });
     trackKitActivationFailed(userId, kitSlug, err.message, "provision_failed");
     return { ok: false, status: 500, error: "Failed to provision kit database. Please try again." };
   }
@@ -150,7 +151,7 @@ export async function activateKit(
     }
   } catch (err: any) {
     // Non-critical — DynamoDB is authoritative, UI will catch up
-    console.error("[kit-lifecycle] SQLite write failed (non-critical):", err.message);
+    log.warn("Kit SQLite write failed (non-critical)", { userId, kitSlug, error: err.message });
   }
 
   trackKitActivated(userId, kitSlug, !!existing);
@@ -178,7 +179,7 @@ export async function deactivateKit(
   try {
     await deactivateKitDb(userId, kitId);
   } catch (err: any) {
-    console.error("[kit-lifecycle] DynamoDB deactivation failed:", err.message);
+    log.error("Kit DynamoDB deactivation failed", { userId, kitSlug, error: err.message });
     trackKitDeactivationFailed(userId, kitSlug, err.message);
     return { ok: false, status: 500, error: "Failed to deactivate kit. Please try again." };
   }
@@ -199,7 +200,7 @@ export async function deactivateKit(
         )
       );
   } catch (err: any) {
-    console.error("[kit-lifecycle] SQLite deactivation failed (non-critical):", err.message);
+    log.warn("Kit SQLite deactivation failed (non-critical)", { userId, kitSlug, error: err.message });
   }
 
   trackKitDeactivated(userId, kitSlug);

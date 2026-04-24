@@ -14,6 +14,7 @@ import {
 } from "../../packages/mcp-server/src/framework/dynamo";
 import { provisionKitDatabase } from "../../packages/mcp-server/src/framework/db-provisioner";
 import type { UserKitDbItem } from "../../packages/mcp-server/src/framework/types";
+import { log } from "@/lib/logger";
 
 const MAX_RETRIES = 3;
 const RETRY_DELAY_MS = 200;
@@ -26,7 +27,7 @@ async function withRetry<T>(
     try {
       return await fn();
     } catch (err: any) {
-      console.error(`[mcp-sync] ${label} attempt ${attempt}/${MAX_RETRIES} failed:`, err.message);
+      log.warn(`[mcp-sync] ${label} attempt ${attempt}/${MAX_RETRIES} failed`, { error: err.message });
       if (attempt === MAX_RETRIES) throw err;
       await new Promise((r) => setTimeout(r, RETRY_DELAY_MS * attempt));
     }

@@ -10,6 +10,7 @@ import { verifyAccessToken } from "./oauth/helpers";
 import { handleMcpRequest } from "./mcp-protocol";
 import { getAllRegistryItems, getUserKitDbs } from "../framework/dynamo";
 import { audit } from "../framework/audit";
+import { log, flushLogs } from "../framework/logger";
 import {
   getOAuthItem,
   putOAuthItem,
@@ -222,22 +223,21 @@ export async function handler(
         return json({ error: "invalid_request: missing token" }, 400, origin);
       }
 
-      console.log("[revoke] received token type hint:", body.token_type_hint ?? "none");
-      console.log("[revoke] token prefix:", token.substring(0, 12) + "...");
+      log.debug("Revoke received", { tokenTypeHint: body.token_type_hint ?? "none", tokenPrefix: token.substring(0, 12) });
 
       // Attempt to delete the refresh token (idempotent — no error if not found)
       try {
         // First, try direct delete assuming it's a refresh token
         await deleteOAuthItem(`REFRESH#${token}`, "TOKEN");
-        console.log("[revoke] deleted refresh token directly");
+        log.debug("Revoke: deleted refresh token directly");
         audit({ action: "auth.token.revoked" });
       } catch (err: any) {
-        console.log("[revoke] direct refresh delete missed:", err.message);
+        log.debug("Revoke: direct refresh delete missed", { error: err.message });
         // If that missed, the client may have sent an access token (JWT).
         // Decode it to get the userId, then purge their refresh tokens.
         try {
           const auth = await verifyAccessToken(token);
-          console.log("[revoke] token is a valid JWT for userId:", auth.userId);
+          log.debug("Revoke: token is a valid JWT", { userId: auth.userId });
           const oauthTable = process.env.OAUTH_STORE_TABLE;
           if (auth.userId && oauthTable) {
             const scan = await dynamo.send(
@@ -262,11 +262,11 @@ export async function handler(
                 }
               } catch { /* skip malformed */ }
             }
-            console.log("[revoke] purged refresh tokens for user:", matchedTokens.length);
+            log.debug("Revoke: purged refresh tokens", { count: matchedTokens.length });
             audit({ action: "auth.token.revoked" });
           }
         } catch (jwtErr: any) {
-          console.log("[revoke] token is not a valid JWT either:", jwtErr.message);
+          log.debug("Revoke: token is not a valid JWT either", { error: jwtErr.message });
           // RFC 7009: revocation endpoint always returns 200
         }
       }
@@ -374,9 +374,10 @@ export async function handler(
 
     return json({ error: "Not found" }, 404, origin);
   } catch (err: any) {
-    console.error("Router error:", err);
-    // Never leak internal error details to clients
+    log.error("Router error", { error: err.message });
     return json({ error: "Internal server error" }, 500, origin);
+  } finally {
+    await flushLogs();
   }
 }
 

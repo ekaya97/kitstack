@@ -3,6 +3,7 @@ import { verifyAppToken } from "../framework/app-token";
 import { getUserKitDb } from "../framework/dynamo";
 import { createKitDbClient } from "../framework/kit-db";
 import { audit } from "../framework/audit";
+import { log, flushLogs } from "../framework/logger";
 import { sql } from "drizzle-orm";
 
 const ALLOWED_ORIGINS = (process.env.MCP_ALLOWED_ORIGINS || "https://kitstack.co,https://www.kitstack.co")
@@ -101,7 +102,9 @@ export async function handler(
       count: result.rows.length,
     }, 200, origin);
   } catch (err: any) {
-    console.error("App Data error:", err);
+    log.error("App Data error", { error: err.message });
     return json({ error: "Internal server error" }, 500, origin);
+  } finally {
+    await flushLogs();
   }
 }

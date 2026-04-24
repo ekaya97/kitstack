@@ -1,6 +1,8 @@
 import { NextRequest, NextResponse } from "next/server";
+import { after } from "next/server";
 import { getSessionOrNull } from "@/lib/auth-session";
 import { deactivateKit } from "@/services/kit-lifecycle.service";
+import { flushLogs } from "@/lib/logger";
 
 export async function POST(request: NextRequest) {
   const session = await getSessionOrNull();
@@ -12,6 +14,8 @@ export async function POST(request: NextRequest) {
   if (!kitSlug) {
     return NextResponse.json({ error: "kitSlug is required" }, { status: 400 });
   }
+
+  after(() => flushLogs());
 
   const result = await deactivateKit(session.user.id, kitSlug);
 

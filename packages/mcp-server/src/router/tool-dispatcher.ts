@@ -1,6 +1,7 @@
 import type { KitRegistryItem, KitToolInvocation, KitToolResult } from "../framework/types";
 import { getUserKitDb } from "../framework/dynamo";
 import { audit } from "../framework/audit";
+import { log } from "../framework/logger";
 
 export async function dispatchToolCall(
   toolName: string,
@@ -16,6 +17,7 @@ export async function dispatchToolCall(
   const tool = allTools.find((t) => t.toolName === toolName);
 
   if (!tool) {
+    log.warn("Unknown tool requested", { userId, toolName });
     audit({ action: "tool.call.error", userId, toolName, detail: "unknown tool" });
     return {
       content: [{ type: "text", text: `Unknown tool: ${toolName}` }],
@@ -26,6 +28,7 @@ export async function dispatchToolCall(
   // Look up user's database for this kit
   const userDb = await getUserKitDb(userId, tool.kitId);
   if (!userDb) {
+    log.warn("Kit not activated for user", { userId, toolName, kitId: tool.kitId });
     audit({ action: "tool.call.error", userId, toolName, kitId: tool.kitId, detail: "kit not activated" });
     return {
       content: [

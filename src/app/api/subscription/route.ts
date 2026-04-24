@@ -1,4 +1,4 @@
-import { NextRequest, NextResponse } from "next/server";
+import { NextRequest, NextResponse, after } from "next/server";
 import { getSessionOrNull } from "@/lib/auth-session";
 import {
   getSubscription,
@@ -9,6 +9,7 @@ import {
   trackSubscriptionCreated,
   trackSubscriptionCancelled,
 } from "@/lib/analytics-server";
+import { flushLogs } from "@/lib/logger";
 
 // GET /api/subscription — get current user's subscription
 export async function GET() {
@@ -35,6 +36,8 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ error: "Invalid plan" }, { status: 400 });
   }
 
+  after(() => flushLogs());
+
   const subscription = await createSubscription(session.user.id, plan);
   trackSubscriptionCreated(session.user.id, plan);
   return NextResponse.json({ subscription });
@@ -46,6 +49,8 @@ export async function DELETE() {
   if (!session?.user) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
+
+  after(() => flushLogs());
 
   const sub = await getSubscription(session.user.id);
   await cancelSubscription(session.user.id);
