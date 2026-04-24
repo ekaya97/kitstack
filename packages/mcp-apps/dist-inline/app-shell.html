@@ -1,0 +1,46 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>KitStack</title>
+    <style>
+      * { margin: 0; padding: 0; box-sizing: border-box; }
+      body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; background: #faf7f1; color: #1a1814; font-size: 13px; line-height: 1.5; }
+      .ks-shell { padding: 16px 20px; max-width: 900px; }
+      .ks-header { display: flex; align-items: center; justify-content: space-between; margin-bottom: 12px; border-bottom: 1px solid #e8e4de; padding-bottom: 10px; }
+      .ks-header h2 { font-size: 15px; font-weight: 600; color: #d65a2f; }
+      .ks-btn { font-size: 11px; padding: 4px 10px; border: 1px solid #d4cfc8; border-radius: 4px; background: #fff; color: #5c5650; cursor: pointer; }
+      .ks-btn:hover { background: #f5f2ec; }
+      .ks-loading { text-align: center; color: #8c8680; padding: 32px; }
+      .ks-empty { text-align: center; color: #8c8680; padding: 24px; font-style: italic; }
+      .ks-error { text-align: center; color: #c0392b; padding: 24px; }
+      .ks-muted { color: #8c8680; font-style: italic; margin: 4px 0; }
+      .ks-list-item { padding-left: 12px; margin: 2px 0; }
+      .ks-list-item::before { content: "·"; margin-right: 6px; color: #d65a2f; }
+      h3 { font-size: 14px; font-weight: 600; margin: 16px 0 6px; }
+      h4 { font-size: 13px; font-weight: 600; margin: 14px 0 4px; color: #5c5650; }
+      h5 { font-size: 12px; font-weight: 600; margin: 10px 0 4px; color: #8c8680; }
+      p { margin: 4px 0; }
+      code { background: #f0ece6; padding: 1px 4px; border-radius: 3px; font-size: 12px; font-family: 'SF Mono', Menlo, monospace; }
+      table { width: 100%; border-collapse: collapse; margin: 8px 0 16px; font-size: 12px; }
+      thead th { text-align: left; padding: 6px 10px; background: #f5f2ec; border-bottom: 2px solid #d4cfc8; font-weight: 600; color: #5c5650; white-space: nowrap; }
+      tbody td { padding: 6px 10px; border-bottom: 1px solid #e8e4de; vertical-align: top; }
+      tbody tr:hover { background: #f9f6f0; }
+      #root { min-height: 100px; }
+    </style>
+    <script type="module" crossorigin>(function(){const n=document.createElement("link").relList;if(n&&n.supports&&n.supports("modulepreload"))return;for(const e of document.querySelectorAll('link[rel="modulepreload"]'))r(e);new MutationObserver(e=>{for(const o of e)if(o.type==="childList")for(const t of o.addedNodes)t.tagName==="LINK"&&t.rel==="modulepreload"&&r(t)}).observe(document,{childList:!0,subtree:!0});function s(e){const o={};return e.integrity&&(o.integrity=e.integrity),e.referrerPolicy&&(o.referrerPolicy=e.referrerPolicy),e.crossOrigin==="use-credentials"?o.credentials="include":e.crossOrigin==="anonymous"?o.credentials="omit":o.credentials="same-origin",o}function r(e){if(e.ep)return;e.ep=!0;const o=s(e);fetch(e.href,o)}})();const m=document.getElementById("root");let g=0;const u=new Map;function f(i){window.parent.postMessage(i,"*")}function p(i,n){const s=++g;return new Promise((r,e)=>{u.set(s,{resolve:r,reject:e}),f({jsonrpc:"2.0",id:s,method:i,params:n})})}function y(i,n){f({jsonrpc:"2.0",method:i,params:n})}window.addEventListener("message",i=>{const n=i.data;if(!(!n||n.jsonrpc!=="2.0")){if("id"in n&&u.has(n.id)){const{resolve:s,reject:r}=u.get(n.id);u.delete(n.id),n.error?r(n.error):s(n.result);return}n.method==="ui/notifications/tool-result"&&w(n.params)}});async function v(){try{await p("ui/initialize",{protocolVersion:"2026-01-26",capabilities:{},clientInfo:{name:"KitStack",version:"1.0.0"}}),y("ui/notifications/initialized")}catch(i){console.error("[KitStack] Init failed:",i)}}function w(i){var r,e,o;const n=(i==null?void 0:i.result)??i,s=(o=(e=(r=n==null?void 0:n.content)==null?void 0:r.find)==null?void 0:e.call(r,t=>t.type==="text"))==null?void 0:o.text;if(s)try{const t=JSON.parse(s);t.kit&&t.view&&t.cmd&&h(t)}catch{}}async function h(i){var s,r,e;const n=i.app||i.view.replace(/-/g," ").replace(/\b\w/g,o=>o.toUpperCase());m.innerHTML=`
+    <div class="ks-shell">
+      <div class="ks-header">
+        <h2>${c(n)}</h2>
+        <button onclick="window.__ksRefresh()" class="ks-btn">Refresh</button>
+      </div>
+      <div id="ks-content" class="ks-loading">Loading...</div>
+    </div>
+  `,window.__ksRefresh=()=>h(i);try{const o=await p("tools/call",{name:"kit",arguments:{id:i.kit,cmd:i.cmd,params:i.params||{}}}),t=((e=(r=(s=o==null?void 0:o.content)==null?void 0:s.find)==null?void 0:r.call(s,l=>l.type==="text"))==null?void 0:e.text)||"";d("ks-content").innerHTML=k(t),d("ks-content").className=""}catch(o){d("ks-content").innerHTML=`<div class="ks-error">${c(o.message||String(o))}</div>`,d("ks-content").className=""}}function k(i){const n=i.split(`
+`);let s="",r=!1;for(const o of n){const t=o.trim();if(t.startsWith("# ")){e(),s+=`<h3>${c(t.slice(2))}</h3>`;continue}if(t.startsWith("## ")){e(),s+=`<h4>${c(t.slice(3))}</h4>`;continue}if(t.startsWith("### ")){e(),s+=`<h5>${c(t.slice(4))}</h5>`;continue}if(t.startsWith("**")&&t.includes(":**")){const l=t.indexOf(":**");s+=`<p><strong>${c(t.slice(2,l))}:</strong> ${c(t.slice(l+3))}</p>`;continue}if(t.startsWith("**")&&t.endsWith("**")&&!t.includes("|")){s+=`<p><strong>${c(t.slice(2,-2))}</strong></p>`;continue}if(t.startsWith("|")&&t.endsWith("|")){const l=t.split("|").slice(1,-1).map(a=>a.trim());if(l.every(a=>/^[-:]+$/.test(a)))continue;if(!r){s+=`<table><thead><tr>${l.map(a=>`<th>${c(a)}</th>`).join("")}</tr></thead><tbody>`,r=!0;continue}s+=`<tr>${l.map(a=>`<td>${c(a)}</td>`).join("")}</tr>`;continue}if(r&&!t.startsWith("|")&&e(),t.startsWith("*")&&t.endsWith("*")&&!t.startsWith("**")){s+=`<p class="ks-muted">${c(t.slice(1,-1))}</p>`;continue}if(t.startsWith("- ")){s+=`<p class="ks-list-item">${c(t.slice(2))}</p>`;continue}t&&(s+=`<p>${c(t)}</p>`)}return e(),s||'<div class="ks-empty">No data yet.</div>';function e(){r&&(s+="</tbody></table>",r=!1)}}function c(i){return i.replace(/&/g,"&amp;").replace(/</g,"&lt;").replace(/>/g,"&gt;").replace(/"/g,"&quot;").replace(/`([^`]+)`/g,"<code>$1</code>")}function d(i){return document.getElementById(i)}v();</script>
+  </head>
+  <body>
+    <div id="root"><div class="ks-loading">Waiting for data...</div></div>
+  </body>
+</html>

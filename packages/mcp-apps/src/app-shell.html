@@ -1,0 +1,37 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>KitStack</title>
+    <style>
+      * { margin: 0; padding: 0; box-sizing: border-box; }
+      body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; background: #faf7f1; color: #1a1814; font-size: 13px; line-height: 1.5; }
+      .ks-shell { padding: 16px 20px; max-width: 900px; }
+      .ks-header { display: flex; align-items: center; justify-content: space-between; margin-bottom: 12px; border-bottom: 1px solid #e8e4de; padding-bottom: 10px; }
+      .ks-header h2 { font-size: 15px; font-weight: 600; color: #d65a2f; }
+      .ks-btn { font-size: 11px; padding: 4px 10px; border: 1px solid #d4cfc8; border-radius: 4px; background: #fff; color: #5c5650; cursor: pointer; }
+      .ks-btn:hover { background: #f5f2ec; }
+      .ks-loading { text-align: center; color: #8c8680; padding: 32px; }
+      .ks-empty { text-align: center; color: #8c8680; padding: 24px; font-style: italic; }
+      .ks-error { text-align: center; color: #c0392b; padding: 24px; }
+      .ks-muted { color: #8c8680; font-style: italic; margin: 4px 0; }
+      .ks-list-item { padding-left: 12px; margin: 2px 0; }
+      .ks-list-item::before { content: "·"; margin-right: 6px; color: #d65a2f; }
+      h3 { font-size: 14px; font-weight: 600; margin: 16px 0 6px; }
+      h4 { font-size: 13px; font-weight: 600; margin: 14px 0 4px; color: #5c5650; }
+      h5 { font-size: 12px; font-weight: 600; margin: 10px 0 4px; color: #8c8680; }
+      p { margin: 4px 0; }
+      code { background: #f0ece6; padding: 1px 4px; border-radius: 3px; font-size: 12px; font-family: 'SF Mono', Menlo, monospace; }
+      table { width: 100%; border-collapse: collapse; margin: 8px 0 16px; font-size: 12px; }
+      thead th { text-align: left; padding: 6px 10px; background: #f5f2ec; border-bottom: 2px solid #d4cfc8; font-weight: 600; color: #5c5650; white-space: nowrap; }
+      tbody td { padding: 6px 10px; border-bottom: 1px solid #e8e4de; vertical-align: top; }
+      tbody tr:hover { background: #f9f6f0; }
+      #root { min-height: 100px; }
+    </style>
+  </head>
+  <body>
+    <div id="root"><div class="ks-loading">Waiting for data...</div></div>
+    <script type="module" src="/src/app-shell.ts"></script>
+  </body>
+</html>

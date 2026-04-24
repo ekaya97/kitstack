@@ -43,6 +43,16 @@ done
 
 rm -rf "$TMPDIR_BASE"
 
+# Build the universal app shell (uses separate vite config for flat entry)
+echo ""
+echo "Building app shell..."
+npx vite build \
+  --config vite.shell.config.ts \
+  --outDir "$TMPDIR_BASE/shell" 2>/dev/null
+cp "$TMPDIR_BASE/shell/src/app-shell.html" "$OUTDIR/app-shell.html"
+rm -rf "$TMPDIR_BASE"
+echo "  app-shell.html"
+
 echo ""
 echo "Done. Output:"
-ls -lhS "$OUTDIR"/*/*.html | awk '{print "  " $5 "  " $9}'
+ls -lhS "$OUTDIR"/*.html "$OUTDIR"/*/*.html 2>/dev/null | awk '{print "  " $5 "  " $9}'
