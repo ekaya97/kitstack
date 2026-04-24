@@ -108,6 +108,7 @@ export async function provisionKitDatabase(
     dbUrl,
     dbToken,
     provisionedAt: new Date().toISOString(),
+    status: "active",
   });
 
   return { dbUrl, dbToken };

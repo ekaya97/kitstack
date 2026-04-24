@@ -6,6 +6,7 @@ import {
   getRatingDistribution,
   createReview,
 } from "@/services/review.service";
+import { trackReviewSubmitted } from "@/lib/analytics-server";
 
 export async function GET(request: NextRequest) {
   const targetType = request.nextUrl.searchParams.get("targetType");
@@ -59,6 +60,8 @@ export async function POST(request: NextRequest) {
       rating,
       text,
     });
+
+    trackReviewSubmitted(session.user.id, targetType, targetSlug, rating);
 
     return NextResponse.json({ ok: true }, { status: 201 });
   } catch {

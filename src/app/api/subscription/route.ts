@@ -5,6 +5,10 @@ import {
   createSubscription,
   cancelSubscription,
 } from "@/services/subscription.service";
+import {
+  trackSubscriptionCreated,
+  trackSubscriptionCancelled,
+} from "@/lib/analytics-server";
 
 // GET /api/subscription — get current user's subscription
 export async function GET() {
@@ -32,6 +36,7 @@ export async function POST(request: NextRequest) {
   }
 
   const subscription = await createSubscription(session.user.id, plan);
+  trackSubscriptionCreated(session.user.id, plan);
   return NextResponse.json({ subscription });
 }
 
@@ -42,6 +47,8 @@ export async function DELETE() {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
 
+  const sub = await getSubscription(session.user.id);
   await cancelSubscription(session.user.id);
+  trackSubscriptionCancelled(session.user.id, sub?.plan ?? "unknown");
   return NextResponse.json({ cancelled: true });
 }

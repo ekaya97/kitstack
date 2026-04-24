@@ -7,6 +7,10 @@ import {
   isWishlisted,
   getUserWishlist,
 } from "@/services/wishlist.service";
+import {
+  trackWishlistItemAdded,
+  trackWishlistItemRemoved,
+} from "@/lib/analytics-server";
 
 export async function GET(request: NextRequest) {
   const session = await auth.api.getSession({ headers: await headers() });
@@ -41,6 +45,7 @@ export async function POST(request: NextRequest) {
   }
 
   await addToWishlist(session.user.id, targetType, targetSlug);
+  trackWishlistItemAdded(session.user.id, targetType, targetSlug);
   return NextResponse.json({ ok: true }, { status: 201 });
 }
 
@@ -59,5 +64,6 @@ export async function DELETE(request: NextRequest) {
   }
 
   await removeFromWishlist(session.user.id, targetType, targetSlug);
+  trackWishlistItemRemoved(session.user.id, targetType, targetSlug);
   return NextResponse.json({ ok: true });
 }

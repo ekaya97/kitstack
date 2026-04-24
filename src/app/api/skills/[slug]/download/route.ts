@@ -6,6 +6,7 @@ import { headers } from "next/headers";
 import { db } from "@/lib/db";
 import { skillDownloads } from "@/db/schema";
 import { nanoid } from "nanoid";
+import { trackSkillDownloaded } from "@/lib/analytics-server";
 
 export async function GET(
   _request: NextRequest,
@@ -42,6 +43,8 @@ export async function GET(
     userId,
     skillSlug: slug,
   });
+
+  trackSkillDownloaded(userId, slug);
 
   return NextResponse.json({ downloadUrl });
 }
