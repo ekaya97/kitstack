@@ -94,3 +94,22 @@ export function useDeactivateKit() {
     },
   });
 }
+
+export function useDeleteKit() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: async (kitSlug: string) => {
+      const res = await fetch("/api/delete-kit", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ kitSlug }),
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || "Deletion failed");
+      return data;
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["myKits"] });
+    },
+  });
+}

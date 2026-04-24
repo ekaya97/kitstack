@@ -14,7 +14,7 @@ import {
   useSubscribe,
   useCancelSubscription,
 } from "@/hooks/use-subscription";
-import { useMyKits, useActivateKit, useDeactivateKit } from "@/hooks/use-my-kits";
+import { useMyKits, useActivateKit, useDeactivateKit, useDeleteKit } from "@/hooks/use-my-kits";
 import { useMcpConnection } from "@/hooks/use-mcp-connection";
 import { useWishlists } from "@/hooks/use-wishlists";
 
@@ -37,8 +37,10 @@ export default function DashboardPage() {
   const cancelSub = useCancelSubscription();
   const activateKit = useActivateKit();
   const deactivateKit = useDeactivateKit();
+  const deleteKitMut = useDeleteKit();
 
   const [showCancelModal, setShowCancelModal] = useState(false);
+  const [deleteTarget, setDeleteTarget] = useState<string | null>(null);
 
   useEffect(() => {
     if (!isPending && !session?.user) {
@@ -275,12 +277,20 @@ export default function DashboardPage() {
                         </div>
                       </div>
                     </div>
-                    <button
-                      onClick={() => activateKit.mutate(kit.kitSlug)}
-                      className="ks-btn !py-2 !px-3.5 !text-[12px]"
-                    >
-                      Reactivate
-                    </button>
+                    <div className="flex gap-2">
+                      <button
+                        onClick={() => activateKit.mutate(kit.kitSlug)}
+                        className="ks-btn hover:ks-btn-accent !py-2 !px-3.5 !text-[12px]"
+                      >
+                        Reactivate
+                      </button>
+                      <button
+                        onClick={() => setDeleteTarget(kit.kitSlug)}
+                        className="ks-btn !py-2 !px-3.5 !text-[12px] !text-ks-muted hover:!text-red-600 hover:!border-red-200"
+                      >
+                        Delete
+                      </button>
+                    </div>
                   </div>
                 </div>
               ))}
@@ -481,6 +491,47 @@ export default function DashboardPage() {
                 className="flex-1 font-sans text-[13px] font-medium py-3 px-4 rounded-full border border-red-200 text-red-600 hover:bg-red-50 transition-colors disabled:opacity-50"
               >
                 {cancelSub.isPending ? "Cancelling..." : "Yes, cancel"}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Delete kit confirmation modal */}
+      {deleteTarget && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center">
+          <div
+            className="absolute inset-0 bg-ks-ink/40 backdrop-blur-sm"
+            onClick={() => setDeleteTarget(null)}
+          />
+          <div className="relative bg-ks-paper border border-ks-hair rounded-2xl shadow-xl w-full max-w-md p-8">
+            <h2 className="font-serif text-[28px] tracking-tight mb-3">
+              Delete kit permanently?
+            </h2>
+            <p className="font-sans text-[14px] text-ks-muted leading-relaxed mb-6">
+              This will permanently destroy the database and all data for{" "}
+              <span className="font-semibold text-ks-ink">
+                {deleteTarget.replace(/-/g, " ").replace(/\b\w/g, (c) => c.toUpperCase())}
+              </span>
+              . This action cannot be undone.
+            </p>
+            <div className="flex gap-2.5">
+              <button
+                onClick={() => setDeleteTarget(null)}
+                className="ks-btn flex-1 justify-center !py-3 !text-[13px]"
+              >
+                Cancel
+              </button>
+              <button
+                disabled={deleteKitMut.isPending}
+                onClick={() => {
+                  deleteKitMut.mutate(deleteTarget, {
+                    onSuccess: () => setDeleteTarget(null),
+                  });
+                }}
+                className="flex-1 font-sans text-[13px] font-medium py-3 px-4 rounded-full border border-red-200 text-red-600 hover:bg-red-50 transition-colors disabled:opacity-50"
+              >
+                {deleteKitMut.isPending ? "Deleting..." : "Yes, delete permanently"}
               </button>
             </div>
           </div>

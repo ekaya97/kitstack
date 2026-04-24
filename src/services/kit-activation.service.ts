@@ -67,3 +67,18 @@ export async function reactivateKit(
     );
   return true;
 }
+
+export async function deleteKitActivation(
+  userId: string,
+  kitSlug: string
+): Promise<boolean> {
+  await db
+    .delete(kitActivations)
+    .where(
+      and(
+        eq(kitActivations.userId, userId),
+        eq(kitActivations.kitSlug, kitSlug)
+      )
+    );
+  return true;
+}
