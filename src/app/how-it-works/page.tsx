@@ -2,25 +2,26 @@ import type { Metadata } from "next";
 import Link from "next/link";
 import { Nav } from "@/components/shared/nav";
 import { Footer } from "@/components/shared/footer";
+import { SkillZipContents } from "@/components/how-it-works/skill-zip-contents";
+import { SkillOutputMock } from "@/components/how-it-works/skill-output-mock";
+import { KitPipelineMock } from "@/components/how-it-works/kit-pipeline-mock";
+import { KitPersistenceMock } from "@/components/how-it-works/kit-persistence-mock";
+import { ClaudeCustomizeSidebar } from "@/components/how-it-works/claude-customize-sidebar";
+import { ClaudeSkillsTab } from "@/components/how-it-works/claude-skills-tab";
+import { ClaudeConnectorsPage } from "@/components/how-it-works/claude-connectors-page";
+import { ClaudeAddConnectorModal } from "@/components/how-it-works/claude-add-connector-modal";
+import { ChatGPTAppsSettings } from "@/components/how-it-works/chatgpt-apps-settings";
+import { ChatGPTNewAppModal } from "@/components/how-it-works/chatgpt-new-app-modal";
+import { GeminiGemManager } from "@/components/how-it-works/gemini-gem-manager";
+import { GeminiGemEditor } from "@/components/how-it-works/gemini-gem-editor";
+import { ChatGPTCreateGPT } from "@/components/how-it-works/chatgpt-create-gpt";
+import { ChatGPTUploadFiles } from "@/components/how-it-works/chatgpt-upload-files";
 
 export const metadata: Metadata = {
   title: "How it works",
   description:
     "Learn what KitStack skills and kits are, and how to set them up on Claude, ChatGPT, and Gemini.",
 };
-
-function Screenshot({ alt, caption }: { alt: string; caption: string }) {
-  return (
-    <div className="rounded-xl border border-ks-hair overflow-hidden bg-ks-paper-warm">
-      <div className="aspect-[16/10] bg-ks-paper-deep flex items-center justify-center">
-        <span className="font-mono text-[11px] text-ks-faint">[{alt}]</span>
-      </div>
-      <div className="px-4 py-2.5 text-center font-sans text-[12px] text-ks-muted">
-        {caption}
-      </div>
-    </div>
-  );
-}
 
 function Step({
   n,
@@ -120,14 +121,8 @@ export default function HowItWorksPage() {
             </div>
 
             <div className="flex flex-col gap-4">
-              <Screenshot
-                alt="Skill .zip contents"
-                caption="Each skill is a .zip with SKILL.md, references, and examples"
-              />
-              <Screenshot
-                alt="Skill output in Claude"
-                caption="Claude produces expert-level output with the skill installed"
-              />
+              <SkillZipContents />
+              <SkillOutputMock />
             </div>
           </div>
         </div>
@@ -138,14 +133,8 @@ export default function HowItWorksPage() {
         <div className="max-w-4xl mx-auto">
           <div className="grid grid-cols-[1fr_1fr] gap-12 items-start">
             <div className="flex flex-col gap-4">
-              <Screenshot
-                alt="Kit pipeline in Claude"
-                caption="An interactive pipeline board rendered inside Claude's chat"
-              />
-              <Screenshot
-                alt="Kit data persistence"
-                caption="Your data persists across conversations — pick up where you left off"
-              />
+              <KitPipelineMock />
+              <KitPersistenceMock />
             </div>
 
             <div>
@@ -289,14 +278,13 @@ export default function HowItWorksPage() {
                   Find a skill on KitStack and click the download button. You&apos;ll
                   get a .zip file &mdash; no need to unzip it.
                 </Step>
-                <Step n="02" title="Open Claude Settings">
-                  In Claude, click your profile icon, then go to{" "}
-                  <b className="text-ks-ink">Settings</b>.
+                <Step n="02" title="Open Customize">
+                  In Claude&apos;s sidebar, click{" "}
+                  <b className="text-ks-ink">Customize</b>.
                 </Step>
                 <Step n="03" title="Go to Skills">
-                  Select the <b className="text-ks-ink">Skills</b> tab in
-                  settings. Click{" "}
-                  <b className="text-ks-ink">Add skill</b>.
+                  Select the <b className="text-ks-ink">Skills</b> tab, then
+                  click <b className="text-ks-ink">Add skill</b>.
                 </Step>
                 <Step n="04" title="Upload the .zip">
                   Select the downloaded .zip file. Claude will load the skill
@@ -304,14 +292,8 @@ export default function HowItWorksPage() {
                 </Step>
               </div>
               <div className="flex flex-col gap-4">
-                <Screenshot
-                  alt="Claude Settings menu"
-                  caption="Step 2: Open Settings from your profile"
-                />
-                <Screenshot
-                  alt="Claude Skills tab with upload"
-                  caption="Step 3–4: Upload the .zip in the Skills tab"
-                />
+                <ClaudeCustomizeSidebar />
+                <ClaudeSkillsTab />
               </div>
             </div>
           </div>
@@ -334,35 +316,30 @@ export default function HowItWorksPage() {
                   </code>
                   . Copy it from your dashboard.
                 </Step>
-                <Step n="03" title="Add connector in Claude">
-                  In Claude, go to <b className="text-ks-ink">Settings</b>{" "}
+                <Step n="03" title="Add custom connector">
+                  In Claude, go to <b className="text-ks-ink">Customize</b>{" "}
                   &rarr; <b className="text-ks-ink">Connectors</b> &rarr;{" "}
-                  <b className="text-ks-ink">Add connection</b>. Paste the URL.
+                  click the <b className="text-ks-ink">+</b> button &rarr;{" "}
+                  <b className="text-ks-ink">Add custom connector</b>.
                 </Step>
-                <Step n="04" title="Authorize">
+                <Step n="04" title="Enter name and URL">
+                  Enter <b className="text-ks-ink">KitStack</b> as the name and
+                  paste{" "}
+                  <code className="font-mono text-[12px] bg-ks-paper-warm px-1.5 py-0.5 rounded">
+                    mcp.kitstack.co
+                  </code>{" "}
+                  as the Remote MCP server URL. Click{" "}
+                  <b className="text-ks-ink">Add</b>.
+                </Step>
+                <Step n="05" title="Authorize and use">
                   Claude will open a sign-in window. Use the same KitStack
-                  account. Once authorized, all your active kits appear as tools.
-                </Step>
-                <Step n="05" title="Start using kits">
-                  In any new conversation, just ask Claude naturally:{" "}
-                  <em>&quot;Show my pipeline&quot;</em>,{" "}
-                  <em>&quot;Add this expense&quot;</em>,{" "}
-                  <em>&quot;What&apos;s overdue?&quot;</em>
+                  account. Once authorized, all your active kits appear as tools
+                  automatically.
                 </Step>
               </div>
               <div className="flex flex-col gap-4">
-                <Screenshot
-                  alt="Claude Connectors settings"
-                  caption="Step 3: Add connector in Claude settings"
-                />
-                <Screenshot
-                  alt="Claude authorize KitStack"
-                  caption="Step 4: Authorize with your KitStack account"
-                />
-                <Screenshot
-                  alt="Kit tools in Claude"
-                  caption="Step 5: Your kit tools appear automatically"
-                />
+                <ClaudeConnectorsPage />
+                <ClaudeAddConnectorModal />
               </div>
             </div>
           </div>
@@ -411,14 +388,8 @@ export default function HowItWorksPage() {
                 </Step>
               </div>
               <div className="flex flex-col gap-4">
-                <Screenshot
-                  alt="ChatGPT Create a GPT"
-                  caption="Step 2: Create a custom GPT with the skill files"
-                />
-                <Screenshot
-                  alt="ChatGPT upload files"
-                  caption="Step 3: Upload SKILL.md and reference files"
-                />
+                <ChatGPTCreateGPT />
+                <ChatGPTUploadFiles />
               </div>
             </div>
           </div>
@@ -432,30 +403,36 @@ export default function HowItWorksPage() {
                 <Step n="01" title="Subscribe on KitStack">
                   Same as Claude &mdash; sign up and activate your kits.
                 </Step>
-                <Step n="02" title="Add MCP connector">
-                  In ChatGPT, go to{" "}
-                  <b className="text-ks-ink">Settings</b> &rarr;{" "}
-                  <b className="text-ks-ink">Connected apps</b> &rarr;{" "}
-                  <b className="text-ks-ink">Add MCP server</b>. Paste{" "}
+                <Step n="02" title="Open Settings &rarr; Apps">
+                  Click your profile in the sidebar, then{" "}
+                  <b className="text-ks-ink">Settings</b>. Select the{" "}
+                  <b className="text-ks-ink">Apps</b> tab.
+                </Step>
+                <Step n="03" title="Enable Developer mode">
+                  Click <b className="text-ks-ink">Advanced settings</b> at the
+                  bottom. Toggle on{" "}
+                  <b className="text-ks-ink">Developer mode</b>. A{" "}
+                  <b className="text-ks-ink">Create app</b> button appears in
+                  the header.
+                </Step>
+                <Step n="04" title="Create the app">
+                  Click <b className="text-ks-ink">Create app</b>. Enter{" "}
+                  <b className="text-ks-ink">KitStack</b> as the name and{" "}
                   <code className="font-mono text-[12px] bg-ks-paper-deep px-1.5 py-0.5 rounded">
                     mcp.kitstack.co
-                  </code>
-                  .
+                  </code>{" "}
+                  as the MCP Server URL. Set authentication to{" "}
+                  <b className="text-ks-ink">OAuth</b> and click{" "}
+                  <b className="text-ks-ink">Create</b>.
                 </Step>
-                <Step n="03" title="Authorize and use">
+                <Step n="05" title="Authorize and use">
                   Sign in with your KitStack account. Your kits appear as tools
                   in ChatGPT conversations.
                 </Step>
               </div>
               <div className="flex flex-col gap-4">
-                <Screenshot
-                  alt="ChatGPT MCP settings"
-                  caption="Step 2: Add MCP server in ChatGPT settings"
-                />
-                <Screenshot
-                  alt="ChatGPT with KitStack tools"
-                  caption="Step 3: Kit tools available in conversations"
-                />
+                <ChatGPTAppsSettings />
+                <ChatGPTNewAppModal />
               </div>
             </div>
           </div>
@@ -486,29 +463,30 @@ export default function HowItWorksPage() {
                 <Step n="01" title="Download and unzip">
                   Download the skill .zip from KitStack and unzip it.
                 </Step>
-                <Step n="02" title="Create a Gem">
-                  In Gemini, go to <b className="text-ks-ink">Gems</b> &rarr;{" "}
-                  <b className="text-ks-ink">Create Gem</b>. Paste the contents
-                  of SKILL.md into the instructions field.
+                <Step n="02" title="Open Gems">
+                  In Gemini&apos;s sidebar, click{" "}
+                  <b className="text-ks-ink">Gems</b>. Then click{" "}
+                  <b className="text-ks-ink">+ New Gem</b>.
                 </Step>
-                <Step n="03" title="Upload reference files">
-                  Attach the reference files from the skill folder. Gemini will
-                  use them as context for every conversation.
+                <Step n="03" title="Name and add instructions">
+                  Name the Gem after the skill (e.g. &quot;Client Proposal
+                  Skill&quot;). Copy the entire contents of{" "}
+                  <b className="text-ks-ink">SKILL.md</b> into the{" "}
+                  <b className="text-ks-ink">Instructions</b> field.
                 </Step>
-                <Step n="04" title="Save and chat">
-                  Save the Gem and start a conversation. Gemini follows the
-                  skill&apos;s methodology and references.
+                <Step n="04" title="Add reference files">
+                  Drag individual reference files from the unzipped folder into
+                  the <b className="text-ks-ink">Knowledge</b> section. Gemini
+                  doesn&apos;t accept folders &mdash; add files one by one.
+                </Step>
+                <Step n="05" title="Save and chat">
+                  Click <b className="text-ks-ink">Save</b> and start a
+                  conversation. Gemini follows the skill&apos;s methodology.
                 </Step>
               </div>
               <div className="flex flex-col gap-4">
-                <Screenshot
-                  alt="Gemini Create Gem"
-                  caption="Step 2: Create a Gem with skill instructions"
-                />
-                <Screenshot
-                  alt="Gemini attach files"
-                  caption="Step 3: Attach reference files to the Gem"
-                />
+                <GeminiGemManager />
+                <GeminiGemEditor />
               </div>
             </div>
           </div>
