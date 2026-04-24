@@ -16,9 +16,10 @@ import { BatchLogRecordProcessor, LoggerProvider } from "@opentelemetry/sdk-logs
 import { OTLPLogExporter } from "@opentelemetry/exporter-logs-otlp-http";
 import { SeverityNumber } from "@opentelemetry/api-logs";
 import { resourceFromAttributes } from "@opentelemetry/resources";
+import { resource } from "./resource";
 
-const posthogKey = process.env.POSTHOG_KEY;
-const posthogHost = process.env.POSTHOG_HOST ?? "https://eu.i.posthog.com";
+const posthogKey: string | undefined = resource("PosthogKey")?.value || undefined;
+const posthogHost: string = resource("PosthogHost")?.value ?? "https://eu.i.posthog.com";
 
 let _provider: LoggerProvider | null = null;
 

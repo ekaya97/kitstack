@@ -4,11 +4,12 @@ import { getUserKitDb } from "../framework/dynamo";
 import { createKitDbClient } from "../framework/kit-db";
 import { audit } from "../framework/audit";
 import { log, flushLogs } from "../framework/logger";
+import { resource } from "../framework/resource";
 import { sql } from "drizzle-orm";
 
-const ALLOWED_ORIGINS = (process.env.MCP_ALLOWED_ORIGINS || "https://kitstack.co,https://www.kitstack.co")
+const ALLOWED_ORIGINS = (resource("McpAllowedOrigins")?.value || "https://kitstack.co,https://www.kitstack.co")
   .split(",")
-  .map((o) => o.trim());
+  .map((o: string) => o.trim());
 
 function getAllowedOrigin(requestOrigin: string | undefined): string {
   if (!requestOrigin) return ALLOWED_ORIGINS[0];

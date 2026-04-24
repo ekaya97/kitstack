@@ -1,10 +1,7 @@
 import { SignJWT, jwtVerify } from "jose";
+import { resource } from "./resource";
 
-const getSecret = () => {
-  const secret = process.env.MCP_JWT_SECRET;
-  if (!secret) throw new Error("MCP_JWT_SECRET is not set");
-  return new TextEncoder().encode(secret);
-};
+const getSecret = () => new TextEncoder().encode(resource("McpJwtSecret").value);
 
 export interface AppTokenPayload {
   sub: string; // userId

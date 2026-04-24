@@ -1,5 +1,6 @@
 import { zodToJsonSchema } from "../shared/zod-to-json-schema";
 import { putRegistryItem } from "../framework/dynamo";
+import { resource } from "../framework/resource";
 import type { KitDefinition, KitRegistryItem } from "../framework/types";
 
 // Import all kit definitions
@@ -8,20 +9,20 @@ import crmKit from "../kits/crm/index";
 import expenseKit from "../kits/expense/index";
 import outreachKit from "../kits/outreach/index";
 
-// Kit ID → Lambda ARN env var mapping
-const KIT_ARN_MAP: Record<string, string> = {
-  "meeting-action-tracker": "KIT_MEETING_ARN",
-  crm: "KIT_CRM_ARN",
-  "expense-tax-prep": "KIT_EXPENSE_ARN",
-  "cold-outreach": "KIT_OUTREACH_ARN",
+// Kit ID → SST Resource name mapping
+const KIT_RESOURCE_MAP: Record<string, string> = {
+  "meeting-action-tracker": "KitMeeting",
+  crm: "KitCrm",
+  "expense-tax-prep": "KitExpense",
+  "cold-outreach": "KitOutreach",
 };
 
 function getArn(kitId: string): string {
-  const envKey = KIT_ARN_MAP[kitId];
-  if (!envKey) throw new Error(`No ARN mapping for kit: ${kitId}`);
-  const arn = process.env[envKey];
-  if (!arn) throw new Error(`${envKey} env var not set`);
-  return arn;
+  const resourceName = KIT_RESOURCE_MAP[kitId];
+  if (!resourceName) throw new Error(`No resource mapping for kit: ${kitId}`);
+  const fn = resource(resourceName);
+  if (!fn?.arn) throw new Error(`Resource ${resourceName} not linked or missing ARN`);
+  return fn.arn;
 }
 
 async function seedKit(kit: KitDefinition) {

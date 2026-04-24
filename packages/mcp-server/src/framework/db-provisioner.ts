@@ -1,5 +1,5 @@
 import { putUserKitDb } from "./dynamo";
-import { Resource } from "sst";
+import { resource } from "./resource";
 import { createClient } from "@libsql/client";
 import { mkdirSync } from "node:fs";
 import { resolve } from "node:path";
@@ -7,14 +7,15 @@ import { resolve } from "node:path";
 const TURSO_API_BASE = "https://api.turso.tech/v1";
 
 function isDevMode(): boolean {
-  return (Resource as any).App?.stage === "dev" || !!(Resource as any).App?.local;
+  const app = resource("App");
+  return app?.stage === "dev" || !!app?.local;
 }
 
 function getTursoConfig() {
-  const token = process.env.TURSO_PLATFORM_API_TOKEN;
-  const org = process.env.TURSO_ORG_NAME;
+  const token = resource("TursoPlatformApiToken")?.value;
+  const org = resource("TursoOrgName")?.value;
   if (!token || !org) {
-    throw new Error("TURSO_PLATFORM_API_TOKEN and TURSO_ORG_NAME must be set");
+    throw new Error("TursoPlatformApiToken and TursoOrgName secrets must be set");
   }
   return { token, org };
 }
@@ -91,6 +92,31 @@ async function provisionTurso(
   await runMigrations(dbUrl, dbToken, migrationSql);
 
   return { dbUrl, dbToken };
+}
+
+export async function destroyKitDatabase(
+  userId: string,
+  kitId: string
+): Promise<void> {
+  const token = resource("TursoPlatformApiToken")?.value;
+  const org = resource("TursoOrgName")?.value;
+  const dbName = `ks-${userId}-${kitId}`.replace(/[^a-z0-9-]/g, "-");
+
+  // No Turso credentials → local mode, delete the file
+  if (!token || !org) {
+    const { unlinkSync } = await import("node:fs");
+    const dbPath = resolve(process.cwd(), "databases", `${dbName}.db`);
+    try {
+      unlinkSync(dbPath);
+    } catch {
+      // File may not exist
+    }
+    return;
+  }
+
+  await tursoFetch(`/organizations/${org}/databases/${dbName}`, {
+    method: "DELETE",
+  });
 }
 
 export async function provisionKitDatabase(
