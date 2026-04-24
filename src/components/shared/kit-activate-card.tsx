@@ -21,6 +21,7 @@ type ActivationState =
   | "not-logged-in"
   | "no-subscription"
   | "not-activated"
+  | "deactivated"
   | "connecting"    // showing MCP connect modal
   | "activating"
   | "active";
@@ -53,10 +54,12 @@ export function KitActivateCard({
         setState("no-subscription");
         return;
       }
-      const isActive = kitsData.kits?.some(
+      const kit = kitsData.kits?.find(
         (k: { kitSlug: string }) => k.kitSlug === kitSlug
       );
-      setState(isActive ? "active" : "not-activated");
+      if (kit?.status === "active") setState("active");
+      else if (kit?.status === "deactivated") setState("deactivated");
+      else setState("not-activated");
     });
   }, [session, sessionPending, kitSlug]);
 
@@ -165,6 +168,23 @@ export function KitActivateCard({
           </button>
         )}
 
+        {state === "deactivated" && (
+          <>
+            <div className="flex items-center gap-2 bg-ks-paper-warm border border-ks-hair rounded-full px-4 py-2.5 mb-2.5">
+              <span className="text-ks-muted text-sm">&#9724;</span>
+              <span className="font-sans text-[13px] text-ks-muted">
+                Paused &mdash; data preserved
+              </span>
+            </div>
+            <button
+              onClick={handleStartActivation}
+              className="ks-btn ks-btn-accent w-full justify-center !py-3.5 !text-[15px] mb-2.5"
+            >
+              Reactivate {kitName} &rarr;
+            </button>
+          </>
+        )}
+
         {state === "activating" && (
           <button
             disabled
@@ -180,15 +200,17 @@ export function KitActivateCard({
             <div className="flex items-center gap-2 bg-emerald-50 border border-emerald-200 rounded-full px-4 py-3 mb-2.5">
               <span className="text-emerald-600 text-sm">&#10003;</span>
               <span className="font-sans text-[14px] text-emerald-800 font-medium">
-                Active &mdash; ready to use
+                Active &mdash; ready in Claude
               </span>
             </div>
-            <Link
-              href="/dashboard"
-              className="ks-btn w-full justify-center !py-3 !text-[13px] mb-2.5"
+            <a
+              href={`https://claude.ai/new?q=${encodeURIComponent(`Load my ${kitName} and show me what's inside.`)}`}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="ks-btn ks-btn-primary w-full justify-center !py-3 !text-[13px] mb-2.5"
             >
-              Go to dashboard
-            </Link>
+              Open in Claude &nearr;
+            </a>
           </>
         )}
 

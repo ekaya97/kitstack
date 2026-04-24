@@ -82,7 +82,7 @@ async function provisionTurso(
 
   const tokenResult = await tursoFetch(
     `/organizations/${org}/databases/${dbName}/auth/tokens`,
-    { method: "POST", body: JSON.stringify({ permissions: { read_attach: { databases: ["*"] } } }) }
+    { method: "POST", body: JSON.stringify({ permissions: { read_attach: { databases: [dbName] } } }) }
   );
 
   const dbToken = tokenResult.jwt;

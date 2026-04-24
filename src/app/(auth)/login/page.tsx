@@ -17,14 +17,34 @@ const fade = {
 export default function LoginPage() {
   const router = useRouter();
   const searchParams = useSearchParams();
+  const oauthCallback = searchParams.get("callback"); // MCP OAuth flow
+  const oauthSessionId = searchParams.get("session_id");
   const redirectTo = searchParams.get("redirect") || "/dashboard";
   const pendingAction = searchParams.get("action");
+  const { data: existingSession, isPending: sessionLoading } = authClient.useSession();
   const [step, setStep] = useState<Step>("email");
   const [email, setEmail] = useState("");
   const [name, setName] = useState("");
   const [password, setPassword] = useState("");
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(false);
+  const [autoRedirected, setAutoRedirected] = useState(false);
+
+  // If user is already logged in and this is an MCP OAuth callback, skip the form
+  if (
+    !sessionLoading &&
+    existingSession?.user &&
+    oauthCallback &&
+    oauthSessionId &&
+    !autoRedirected
+  ) {
+    setAutoRedirected(true);
+    const callbackUrl = new URL(oauthCallback);
+    callbackUrl.searchParams.set("user_id", existingSession.user.id);
+    callbackUrl.searchParams.set("session_id", oauthSessionId);
+    window.location.href = callbackUrl.toString();
+    return null;
+  }
 
   const checkEmail = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -74,6 +94,20 @@ export default function LoginPage() {
       }
     }
 
+    // If this login was triggered by the MCP OAuth flow, redirect back to the
+    // MCP router's /authorize/callback with the user ID and session ID
+    if (oauthCallback && oauthSessionId) {
+      const session = await authClient.getSession();
+      const userId = session?.data?.user?.id;
+      if (userId) {
+        const callbackUrl = new URL(oauthCallback);
+        callbackUrl.searchParams.set("user_id", userId);
+        callbackUrl.searchParams.set("session_id", oauthSessionId);
+        window.location.href = callbackUrl.toString();
+        return;
+      }
+    }
+
     const dest = pendingAction
       ? `${redirectTo}?action=${pendingAction}`
       : redirectTo;
@@ -81,6 +115,17 @@ export default function LoginPage() {
   };
 
   const handleOAuth = async (provider: "google" | "github") => {
+    // For OAuth social login during MCP flow, we need the callback to come
+    // back to this login page first, then redirect to MCP callback
+    if (oauthCallback && oauthSessionId) {
+      const returnUrl = `/login?callback=${encodeURIComponent(oauthCallback)}&session_id=${encodeURIComponent(oauthSessionId)}`;
+      await authClient.signIn.social({
+        provider,
+        callbackURL: returnUrl,
+      });
+      return;
+    }
+
     const dest = pendingAction
       ? `${redirectTo}?action=${pendingAction}`
       : redirectTo;

@@ -1,7 +1,8 @@
 import { bucket } from "./storage";
+import { mcpRouter } from "./mcp";
 
 export const web = new sst.aws.Nextjs("Web", {
-  link: [bucket],
+  link: [bucket, mcpRouter],
   domain: $dev ? undefined : {
     name: "kitstack.co",
     redirects: ["www.kitstack.co"],

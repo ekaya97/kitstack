@@ -16,8 +16,8 @@ export default $config({
   },
   async run() {
     await import("./infra/storage");
-    const { web } = await import("./infra/web");
     const { mcpRouter, appData } = await import("./infra/mcp");
+    const { web } = await import("./infra/web");
 
     return {
       url: web.url,

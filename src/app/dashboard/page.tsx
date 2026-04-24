@@ -167,6 +167,27 @@ export default function DashboardPage() {
         </div>
       </section>
 
+      {/* MCP connection banner */}
+      {subscription && !mcpConnected && (
+        <div className="mx-4 sm:mx-8 lg:mx-16 mb-2 flex items-center gap-3 rounded-xl border border-amber-200 bg-amber-50 px-5 py-3.5">
+          <span className="text-amber-600 text-lg leading-none">&#9888;</span>
+          <div className="flex-1 min-w-0">
+            <span className="font-sans text-[13px] font-semibold text-amber-900">
+              MCP connection unavailable
+            </span>
+            <span className="font-sans text-[13px] text-amber-700 ml-1.5">
+              &mdash; your kits won&apos;t respond until the connection is restored. Check your AI assistant&apos;s connector settings.
+            </span>
+          </div>
+          <button
+            onClick={() => navigator.clipboard.writeText("https://mcp.kitstack.co")}
+            className="shrink-0 font-mono text-[11px] font-medium text-amber-700 hover:text-amber-900 border border-amber-300 rounded-full px-3 py-1.5 transition-colors"
+          >
+            Copy MCP URL
+          </button>
+        </div>
+      )}
+
       <section className="px-4 sm:px-8 lg:px-16 pb-16 grid grid-cols-1 lg:grid-cols-[2fr_1fr] gap-6 items-start">
         {/* LEFT COLUMN */}
         <div className="flex flex-col gap-5">

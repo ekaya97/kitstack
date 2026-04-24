@@ -81,7 +81,7 @@ async function handleAuthCodeExchange(
   await putOAuthItem({
     pk: `REFRESH#${refreshToken}`,
     sk: "TOKEN",
-    data: JSON.stringify({ userId: codeData.userId, clientId: codeData.clientId }),
+    data: JSON.stringify({ userId: codeData.userId, clientId: codeData.clientId, refreshedAt: Date.now() }),
     ttl: Math.floor(Date.now() / 1000) + 30 * 24 * 60 * 60,
   });
 
@@ -115,7 +115,7 @@ async function handleRefreshTokenExchange(
   await putOAuthItem({
     pk: `REFRESH#${newRefreshToken}`,
     sk: "TOKEN",
-    data: JSON.stringify({ userId: tokenData.userId, clientId: tokenData.clientId }),
+    data: JSON.stringify({ userId: tokenData.userId, clientId: tokenData.clientId, refreshedAt: Date.now() }),
     ttl: Math.floor(Date.now() / 1000) + 30 * 24 * 60 * 60,
   });
 

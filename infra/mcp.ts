@@ -61,7 +61,6 @@ export const mcpRouter = new sst.aws.Function("McpRouter", {
     BETTER_AUTH_SECRET: process.env.BETTER_AUTH_SECRET || "",
     BETTER_AUTH_URL: process.env.BETTER_AUTH_URL || "http://localhost:3000",
     MCP_JWT_SECRET: process.env.MCP_JWT_SECRET || "",
-    MCP_SERVER_URL: process.env.MCP_SERVER_URL || "https://mcp.kitstack.co",
     KIT_REGISTRY_TABLE: kitRegistry.name,
     USER_KIT_DBS_TABLE: userKitDbs.name,
     OAUTH_STORE_TABLE: oauthStore.name,
@@ -69,6 +68,7 @@ export const mcpRouter = new sst.aws.Function("McpRouter", {
     KIT_CRM_ARN: kitCrm.arn,
     KIT_EXPENSE_ARN: kitExpense.arn,
     KIT_OUTREACH_ARN: kitOutreach.arn,
+    ONION_MODE_THRESHOLD: process.env.ONION_MODE_THRESHOLD || "40",
   },
   permissions: [
     {

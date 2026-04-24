@@ -59,7 +59,7 @@ Under the hood: per-user database isolation, automatic schema provisioning, sess
 
 ## 3. MCP is verbose and fills up the context window
 
-This is the problem nobody talks about, and it might be the most important one.
+This is the problem most talked about, and it might be the most important one.
 
 Every MCP server exposes a tool catalogue: names, descriptions, parameter schemas, return types. Your AI client loads this entire catalogue into the system prompt at the start of every conversation. For a single server with 5 tools, this is fine. For a platform with dozens of tools across multiple kits, it's a disaster.
 
@@ -103,15 +103,13 @@ This is progressive enhancement on the data side. Each tool is rich enough that 
 
 ## 5. Secure AI agents need defense in depth
 
-Here's a problem the industry is only starting to take seriously: when an AI agent can call tools that read and write real data, security isn't optional. It's existential.
-
-Prompt injection, privilege escalation, data leakage between users, unauthorized actions — these aren't theoretical risks. They're active attack surfaces the moment you give an AI write access to anything that matters.
+Prompt injection, privilege escalation, data leakage between users, unauthorized actions aren't theoretical risks but active attack surfaces the moment you give an AI write access to anything that matters.
 
 Most MCP implementations handle this with... nothing. Maybe an API key. Maybe a permission check in the tool handler. There's no standard for scoped access, no audit trails, no delegation limits.
 
 **What we built.** We solve this with defense in depth — the same patterns that have worked in security for decades, applied to AI tool use.
 
-- **Total database isolation.** Each user gets their own database. Not row-level security, not tenant IDs in a WHERE clause — a completely separate database. You can't escalate privilege to data you physically can't access.
+- **Total database isolation.** Each kit gets its own database. Not row-level security, not tenant IDs in a WHERE clause — a completely separate database. You can't escalate privilege to data you physically can't access.
 - **Scoped tool access.** Tools are scoped to the user's subscription and activated kits. Calling a tool you haven't activated returns nothing, not an error with information leakage.
 - **Audit trails.** Every tool call is logged with the authenticated user, timestamp, arguments, and result. If something goes wrong, there's a complete record.
 - **Delegation limits.** The AI can only perform actions within the boundaries of what the user has explicitly activated. No ambient authority, no implicit permissions.
@@ -120,7 +118,7 @@ Most MCP implementations handle this with... nothing. Maybe an API key. Maybe a 
 The last line of defense is always isolation. We don't share databases between users. We don't share schemas between kits. A compromised tool in one kit cannot access data from another kit, because they're different databases on different infrastructure. Defense in depth means the failure of any single layer doesn't compromise the system.
 </Callout>
 
-This isn't glamorous work. It's the same authz patterns that have protected banking systems and medical records for decades. But someone has to apply them to AI tool use, because the alternative — giving a language model unscoped write access to a shared database — is genuinely dangerous.
+There is nothing new under the sun - these are all the same patterns that have protected banking systems and medical records for decades. But someone has to apply them to AI tool use, because the alternative — giving a language model unscoped write access to a shared database — is genuinely dangerous.
 
 ---
 

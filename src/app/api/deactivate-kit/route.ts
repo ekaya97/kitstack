@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getSessionOrNull } from "@/lib/auth-session";
 import { deactivateKit } from "@/services/kit-activation.service";
+import { setToolsChanged } from "../../../../packages/mcp-server/src/framework/dynamo";
 
 export async function POST(request: NextRequest) {
   const session = await getSessionOrNull();
@@ -16,6 +17,7 @@ export async function POST(request: NextRequest) {
   }
 
   await deactivateKit(session.user.id, kitSlug);
+  await setToolsChanged(session.user.id);
 
   return NextResponse.json({ status: "deactivated", kitSlug });
 }

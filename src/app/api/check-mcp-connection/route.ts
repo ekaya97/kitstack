@@ -1,8 +1,6 @@
 import { NextResponse } from "next/server";
+import { Resource } from "sst";
 import { getSessionOrNull } from "@/lib/auth-session";
-
-const MCP_SERVER_URL =
-  process.env.MCP_SERVER_URL || "https://mcp.kitstack.co";
 
 export async function GET() {
   const session = await getSessionOrNull();
@@ -11,20 +9,24 @@ export async function GET() {
   }
 
   try {
-    // Ask the MCP router if this user has completed the OAuth flow
-    // The /connected endpoint checks OAuthStore for active refresh tokens
+    const mcpUrl = (Resource as any).McpRouter.url.replace(/\/$/, "");
     const res = await fetch(
-      `${MCP_SERVER_URL}/connected?userId=${encodeURIComponent(session.user.id)}`,
+      `${mcpUrl}/connected?userId=${encodeURIComponent(session.user.id)}`,
       { signal: AbortSignal.timeout(5000) }
     );
 
     if (!res.ok) {
-      return NextResponse.json({ connected: false, reason: "server_error" });
+      const body = await res.text();
+      return NextResponse.json({ connected: false, reason: "server_error", status: res.status, body });
     }
 
     const data = await res.json();
     return NextResponse.json({ connected: data.connected });
-  } catch {
-    return NextResponse.json({ connected: false, reason: "server_unreachable" });
+  } catch (err: any) {
+    return NextResponse.json({
+      connected: false,
+      reason: "server_unreachable",
+      debug: err.message,
+    });
   }
 }

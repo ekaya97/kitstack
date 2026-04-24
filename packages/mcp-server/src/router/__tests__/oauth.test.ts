@@ -8,7 +8,7 @@ import {
 } from "../oauth/helpers";
 import { getOAuthMetadata } from "../oauth/metadata";
 import { handleRegister } from "../oauth/register";
-import { validateAuthorizeRequest, issueAuthCode } from "../oauth/authorize";
+import { validateAuthorizeRequest, storeAuthorizeSession, issueAuthCode } from "../oauth/authorize";
 import { handleTokenExchange } from "../oauth/token";
 import type { OAuthStoreItem } from "../../framework/types";
 
@@ -89,33 +89,73 @@ describe("handleRegister", () => {
 // --- Authorize ---
 
 describe("validateAuthorizeRequest", () => {
-  it("validates a correct request", () => {
-    const result = validateAuthorizeRequest({
+  const mockGetOAuthItem = vi.fn(async (pk: string, _sk: string) => {
+    if (pk === "CLIENT#kitstack_abc") {
+      return {
+        pk,
+        sk: "REGISTRATION",
+        data: JSON.stringify({
+          client_id: "kitstack_abc",
+          redirect_uris: ["https://claude.ai/callback"],
+        }),
+        ttl: Math.floor(Date.now() / 1000) + 3600,
+      };
+    }
+    return null;
+  });
+
+  it("validates a correct request", async () => {
+    const result = await validateAuthorizeRequest({
       response_type: "code",
       client_id: "kitstack_abc",
       redirect_uri: "https://claude.ai/callback",
       code_challenge: "abc123",
       code_challenge_method: "S256",
-    });
+    }, mockGetOAuthItem);
     expect(result.valid).toBe(true);
   });
 
-  it("rejects missing code_challenge", () => {
-    const result = validateAuthorizeRequest({
+  it("rejects missing code_challenge", async () => {
+    const result = await validateAuthorizeRequest({
       response_type: "code",
       client_id: "kitstack_abc",
       redirect_uri: "https://claude.ai/callback",
       code_challenge: "",
       code_challenge_method: "S256",
-    });
+    }, mockGetOAuthItem);
     expect(result.valid).toBe(false);
+  });
+
+  it("rejects unregistered client_id", async () => {
+    const result = await validateAuthorizeRequest({
+      response_type: "code",
+      client_id: "kitstack_unknown",
+      redirect_uri: "https://claude.ai/callback",
+      code_challenge: "abc123",
+      code_challenge_method: "S256",
+    }, mockGetOAuthItem);
+    expect(result.valid).toBe(false);
+    expect(result.error).toContain("not registered");
+  });
+
+  it("rejects redirect_uri not in registered list", async () => {
+    const result = await validateAuthorizeRequest({
+      response_type: "code",
+      client_id: "kitstack_abc",
+      redirect_uri: "https://evil.com/steal",
+      code_challenge: "abc123",
+      code_challenge_method: "S256",
+    }, mockGetOAuthItem);
+    expect(result.valid).toBe(false);
+    expect(result.error).toContain("redirect_uri not registered");
   });
 });
 
 // --- Token Exchange (full flow) ---
 
 describe("handleTokenExchange", () => {
-  it("exchanges an auth code for tokens", async () => {
+  // Helper to create a shared store with put/get/delete
+  function createMockStore() {
     const store = new Map<string, OAuthStoreItem>();
     const putItem = vi.fn(async (item: OAuthStoreItem) => {
       store.set(`${item.pk}#${item.sk}`, item);
@@ -126,16 +166,20 @@ describe("handleTokenExchange", () => {
     const deleteItem = vi.fn(async (pk: string, sk: string) => {
       store.delete(`${pk}#${sk}`);
     });
+    return { store, putItem, getItem, deleteItem };
+  }
 
-    // Step 1: Issue an auth code
+  it("exchanges an auth code for tokens", async () => {
+    const { putItem, getItem, deleteItem } = createMockStore();
+
+    // Step 1: Store authorize session
     const codeVerifier = "test-verifier-that-is-long-enough-for-pkce";
     const codeChallenge = crypto
       .createHash("sha256")
       .update(codeVerifier)
       .digest("base64url");
 
-    const code = await issueAuthCode(
-      "user-456",
+    const sessionId = await storeAuthorizeSession(
       {
         response_type: "code",
         client_id: "kitstack_test",
@@ -146,7 +190,16 @@ describe("handleTokenExchange", () => {
       putItem
     );
 
-    // Step 2: Exchange code for tokens
+    // Step 2: Issue auth code from session
+    const { code } = await issueAuthCode(
+      "user-456",
+      sessionId,
+      getItem,
+      putItem,
+      deleteItem
+    );
+
+    // Step 3: Exchange code for tokens
     const result = await handleTokenExchange(
       {
         grant_type: "authorization_code",
@@ -171,22 +224,14 @@ describe("handleTokenExchange", () => {
   });
 
   it("rejects invalid code_verifier", async () => {
-    const store = new Map<string, OAuthStoreItem>();
-    const putItem = vi.fn(async (item: OAuthStoreItem) => {
-      store.set(`${item.pk}#${item.sk}`, item);
-    });
-    const getItem = vi.fn(async (pk: string, sk: string) => {
-      return store.get(`${pk}#${sk}`) || null;
-    });
-    const deleteItem = vi.fn();
+    const { putItem, getItem, deleteItem } = createMockStore();
 
     const codeChallenge = crypto
       .createHash("sha256")
       .update("correct-verifier")
       .digest("base64url");
 
-    const code = await issueAuthCode(
-      "user-789",
+    const sessionId = await storeAuthorizeSession(
       {
         response_type: "code",
         client_id: "kitstack_test",
@@ -195,6 +240,14 @@ describe("handleTokenExchange", () => {
         code_challenge_method: "S256",
       },
       putItem
+    );
+
+    const { code } = await issueAuthCode(
+      "user-789",
+      sessionId,
+      getItem,
+      putItem,
+      deleteItem
     );
 
     await expect(
@@ -227,5 +280,12 @@ describe("handleTokenExchange", () => {
         vi.fn()
       )
     ).rejects.toThrow("not found or expired");
+  });
+
+  it("rejects expired/missing authorize session", async () => {
+    const getItem = vi.fn(async () => null);
+    await expect(
+      issueAuthCode("user-123", "nonexistent-session", getItem, vi.fn(), vi.fn())
+    ).rejects.toThrow("session not found or expired");
   });
 });

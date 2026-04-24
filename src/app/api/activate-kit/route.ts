@@ -6,6 +6,17 @@ import { getSubscription } from "@/services/subscription.service";
 import { canActivateKit, reactivateKit } from "@/services/kit-activation.service";
 import { db } from "@/lib/db";
 import { kitActivations } from "@/db/schema";
+import {
+  provisionKitDatabase,
+} from "../../../../packages/mcp-server/src/framework/db-provisioner";
+import {
+  getUserKitDb,
+  setToolsChanged,
+} from "../../../../packages/mcp-server/src/framework/dynamo";
+import { migrationSql as meetingMigrations } from "../../../../packages/mcp-server/src/kits/meeting/migrations";
+import { migrationSql as crmMigrations } from "../../../../packages/mcp-server/src/kits/crm/migrations";
+import { migrationSql as expenseMigrations } from "../../../../packages/mcp-server/src/kits/expense/migrations";
+import { migrationSql as outreachMigrations } from "../../../../packages/mcp-server/src/kits/outreach/migrations";
 
 const VALID_KIT_SLUGS = [
   "crm-kit",
@@ -13,6 +24,20 @@ const VALID_KIT_SLUGS = [
   "cold-outreach-kit",
   "meeting-action-tracker-kit",
 ];
+
+const SLUG_TO_KIT_ID: Record<string, string> = {
+  "crm-kit": "crm",
+  "expense-tax-prep-kit": "expense-tax-prep",
+  "cold-outreach-kit": "cold-outreach",
+  "meeting-action-tracker-kit": "meeting-action-tracker",
+};
+
+const KIT_MIGRATIONS: Record<string, string> = {
+  crm: crmMigrations,
+  "expense-tax-prep": expenseMigrations,
+  "cold-outreach": outreachMigrations,
+  "meeting-action-tracker": meetingMigrations,
+};
 
 export async function POST(request: NextRequest) {
   const session = await getSessionOrNull();
@@ -39,6 +64,8 @@ export async function POST(request: NextRequest) {
     );
   }
 
+  const kitId = SLUG_TO_KIT_ID[kitSlug];
+
   // Check if already active
   const existing = await db
     .select()
@@ -55,7 +82,7 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ status: "already_active", kitSlug });
   }
 
-  // If previously deactivated/archived, reactivate (still counts against limit)
+  // If previously deactivated/archived, reactivate
   if (existing) {
     const { allowed, activeCount, limit } = await canActivateKit(
       session.user.id,
@@ -72,6 +99,7 @@ export async function POST(request: NextRequest) {
       );
     }
     await reactivateKit(session.user.id, kitSlug);
+    await setToolsChanged(session.user.id);
     return NextResponse.json({ status: "activated", kitSlug });
   }
 
@@ -91,12 +119,25 @@ export async function POST(request: NextRequest) {
     );
   }
 
+  // Provision the kit database if not already provisioned
+  const existingDb = await getUserKitDb(session.user.id, kitId);
+  if (!existingDb) {
+    const migrationSql = KIT_MIGRATIONS[kitId];
+    if (migrationSql) {
+      await provisionKitDatabase(session.user.id, kitId, migrationSql);
+    }
+  }
+
+  // Record activation locally
   await db.insert(kitActivations).values({
     id: nanoid(),
     userId: session.user.id,
     kitSlug,
     status: "active",
   });
+
+  // Signal the MCP router that this user's tool list has changed
+  await setToolsChanged(session.user.id);
 
   return NextResponse.json({ status: "activated", kitSlug });
 }

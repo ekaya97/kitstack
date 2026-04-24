@@ -1,12 +1,15 @@
 import type { APIGatewayProxyEventV2, APIGatewayProxyStructuredResultV2 } from "aws-lambda";
 import { LambdaClient, InvokeCommand } from "@aws-sdk/client-lambda";
+import { DynamoDBClient, ScanCommand, UpdateItemCommand } from "@aws-sdk/client-dynamodb";
+import { unmarshall } from "@aws-sdk/util-dynamodb";
 import { getOAuthMetadata } from "./oauth/metadata";
 import { handleRegister } from "./oauth/register";
-import { validateAuthorizeRequest, issueAuthCode } from "./oauth/authorize";
+import { validateAuthorizeRequest, storeAuthorizeSession, issueAuthCode } from "./oauth/authorize";
 import { handleTokenExchange } from "./oauth/token";
 import { verifyAccessToken } from "./oauth/helpers";
 import { handleMcpRequest } from "./mcp-protocol";
-import { getAllRegistryItems } from "../framework/dynamo";
+import { getAllRegistryItems, getUserKitDbs } from "../framework/dynamo";
+import { audit } from "../framework/audit";
 import {
   getOAuthItem,
   putOAuthItem,
@@ -15,17 +18,32 @@ import {
 import type { JsonRpcRequest } from "../framework/types";
 
 const lambda = new LambdaClient({});
+const dynamo = new DynamoDBClient({});
 
-const serverUrl = () => process.env.MCP_SERVER_URL || "https://mcp.kitstack.co";
+function serverUrlFromEvent(event: APIGatewayProxyEventV2): string {
+  // In production with custom domain: mcp.kitstack.co
+  // In dev with Function URL: xxx.lambda-url.eu-central-1.on.aws
+  return `https://${event.requestContext.domainName}`;
+}
 
-function json(body: unknown, status = 200): APIGatewayProxyStructuredResultV2 {
+const ALLOWED_ORIGINS = (process.env.MCP_ALLOWED_ORIGINS || "https://kitstack.co,https://www.kitstack.co")
+  .split(",")
+  .map((o) => o.trim());
+
+function getAllowedOrigin(requestOrigin: string | undefined): string {
+  if (!requestOrigin) return ALLOWED_ORIGINS[0];
+  return ALLOWED_ORIGINS.includes(requestOrigin) ? requestOrigin : ALLOWED_ORIGINS[0];
+}
+
+function json(body: unknown, status = 200, origin?: string): APIGatewayProxyStructuredResultV2 {
   return {
     statusCode: status,
     headers: {
       "Content-Type": "application/json",
-      "Access-Control-Allow-Origin": "*",
+      "Access-Control-Allow-Origin": getAllowedOrigin(origin),
       "Access-Control-Allow-Headers": "Authorization, Content-Type",
       "Access-Control-Allow-Methods": "GET, POST, OPTIONS",
+      "Vary": "Origin",
     },
     body: JSON.stringify(body),
   };
@@ -45,49 +63,93 @@ async function invokeKitLambda(arn: string, payload: unknown): Promise<unknown> 
   throw new Error("Kit Lambda returned no payload");
 }
 
+// --- Rate Limiting (DynamoDB-backed, per-userId, sliding window) ---
+
+const RATE_LIMIT_WINDOW_SEC = 60;
+const RATE_LIMIT_MAX_REQUESTS = 60; // 60 requests per minute per user
+
+async function checkRateLimit(userId: string): Promise<boolean> {
+  const oauthTable = process.env.OAUTH_STORE_TABLE;
+  if (!oauthTable) return true; // fail-open if table not configured
+
+  const windowKey = Math.floor(Date.now() / 1000 / RATE_LIMIT_WINDOW_SEC);
+  const pk = `RATE#${userId}#${windowKey}`;
+
+  try {
+    const result = await dynamo.send(
+      new UpdateItemCommand({
+        TableName: oauthTable,
+        Key: {
+          pk: { S: pk },
+          sk: { S: "COUNTER" },
+        },
+        UpdateExpression: "SET #cnt = if_not_exists(#cnt, :zero) + :one, #ttl = :ttl",
+        ExpressionAttributeNames: { "#cnt": "cnt", "#ttl": "ttl" },
+        ExpressionAttributeValues: {
+          ":zero": { N: "0" },
+          ":one": { N: "1" },
+          ":ttl": { N: String(Math.floor(Date.now() / 1000) + RATE_LIMIT_WINDOW_SEC * 2) },
+        },
+        ReturnValues: "ALL_NEW",
+      })
+    );
+
+    const count = parseInt(result.Attributes?.cnt?.N || "0", 10);
+    return count <= RATE_LIMIT_MAX_REQUESTS;
+  } catch {
+    return true; // fail-open on DynamoDB errors
+  }
+}
+
 export async function handler(
   event: APIGatewayProxyEventV2
 ): Promise<APIGatewayProxyStructuredResultV2> {
   const method = event.requestContext.http.method;
   const path = event.rawPath;
+  const origin = event.headers.origin;
 
   // CORS preflight
   if (method === "OPTIONS") {
-    return json({}, 204);
+    return json({}, 204, origin);
   }
 
   try {
     // --- OAuth Endpoints ---
 
     if (path === "/.well-known/oauth-authorization-server") {
-      return json(getOAuthMetadata(serverUrl()));
+      return json(getOAuthMetadata(serverUrlFromEvent(event)), 200, origin);
     }
 
     if (path === "/register" && method === "POST") {
-      const body = JSON.parse(event.body || "{}");
+      const body = safeParseBody(event.body, event.headers["content-type"]);
+      if (!body) return json({ error: "Invalid request body" }, 400, origin);
       const result = await handleRegister(body, putOAuthItem);
-      return json(result, 201);
+      return json(result, 201, origin);
     }
 
     if (path === "/authorize" && method === "GET") {
       const params = event.queryStringParameters || {};
-      const validation = validateAuthorizeRequest({
+      const authorizeParams = {
         response_type: params.response_type || "",
         client_id: params.client_id || "",
         redirect_uri: params.redirect_uri || "",
         code_challenge: params.code_challenge || "",
         code_challenge_method: params.code_challenge_method || "S256",
         state: params.state,
-      });
+      };
+
+      const validation = await validateAuthorizeRequest(authorizeParams, getOAuthItem);
 
       if (!validation.valid) {
-        return json({ error: validation.error }, 400);
+        return json({ error: validation.error }, 400, origin);
       }
 
-      // For now, redirect to BetterAuth login page with callback params
+      // Store params server-side to prevent tampering during login redirect
+      const sessionId = await storeAuthorizeSession(authorizeParams, putOAuthItem);
+
       const loginUrl = new URL(`${process.env.BETTER_AUTH_URL || "http://localhost:3000"}/login`);
-      loginUrl.searchParams.set("callback", `${serverUrl()}/authorize/callback`);
-      loginUrl.searchParams.set("mcp_params", JSON.stringify(params));
+      loginUrl.searchParams.set("callback", `${serverUrlFromEvent(event)}/authorize/callback`);
+      loginUrl.searchParams.set("session_id", sessionId);
 
       return {
         statusCode: 302,
@@ -99,16 +161,27 @@ export async function handler(
     if (path === "/authorize/callback" && method === "GET") {
       const params = event.queryStringParameters || {};
       const userId = params.user_id;
-      const mcpParams = JSON.parse(params.mcp_params || "{}");
+      const sessionId = params.session_id;
 
       if (!userId) {
-        return json({ error: "Authentication failed" }, 401);
+        audit({ action: "auth.failed", detail: "missing user_id in callback" });
+        return json({ error: "Authentication failed" }, 401, origin);
+      }
+      if (!sessionId) {
+        return json({ error: "Missing session_id" }, 400, origin);
       }
 
-      const code = await issueAuthCode(userId, mcpParams, putOAuthItem);
-      const redirectUrl = new URL(mcpParams.redirect_uri);
+      const { code, redirectUri, state } = await issueAuthCode(
+        userId,
+        sessionId,
+        getOAuthItem,
+        putOAuthItem,
+        deleteOAuthItem
+      );
+
+      const redirectUrl = new URL(redirectUri);
       redirectUrl.searchParams.set("code", code);
-      if (mcpParams.state) redirectUrl.searchParams.set("state", mcpParams.state);
+      if (state) redirectUrl.searchParams.set("state", state);
 
       return {
         statusCode: 302,
@@ -118,36 +191,111 @@ export async function handler(
     }
 
     if (path === "/token" && method === "POST") {
-      const body = JSON.parse(event.body || "{}");
+      const rawBody = event.isBase64Encoded
+        ? Buffer.from(event.body || "", "base64").toString()
+        : event.body;
+      const body = safeParseBody(rawBody, event.headers["content-type"]);
+      if (!body) return json({ error: "Invalid request body" }, 400, origin);
+
       const result = await handleTokenExchange(
         body,
         getOAuthItem,
         putOAuthItem,
         deleteOAuthItem
       );
-      return json(result);
+
+      audit({
+        action: body.grant_type === "refresh_token" ? "auth.token.refreshed" : "auth.token.issued",
+      });
+
+      return json(result, 200, origin);
     }
 
-    // --- Connection check (called by the marketing site) ---
+    // --- Token Revocation (RFC 7009) ---
+
+    if (path === "/revoke" && method === "POST") {
+      const body = safeParseBody(event.body);
+      if (!body) return json({ error: "Invalid request body" }, 400, origin);
+
+      const token = body.token;
+      if (!token || typeof token !== "string") {
+        return json({ error: "invalid_request: missing token" }, 400, origin);
+      }
+
+      console.log("[revoke] received token type hint:", body.token_type_hint ?? "none");
+      console.log("[revoke] token prefix:", token.substring(0, 12) + "...");
+
+      // Attempt to delete the refresh token (idempotent — no error if not found)
+      try {
+        // First, try direct delete assuming it's a refresh token
+        await deleteOAuthItem(`REFRESH#${token}`, "TOKEN");
+        console.log("[revoke] deleted refresh token directly");
+        audit({ action: "auth.token.revoked" });
+      } catch (err: any) {
+        console.log("[revoke] direct refresh delete missed:", err.message);
+        // If that missed, the client may have sent an access token (JWT).
+        // Decode it to get the userId, then purge their refresh tokens.
+        try {
+          const auth = await verifyAccessToken(token);
+          console.log("[revoke] token is a valid JWT for userId:", auth.userId);
+          const oauthTable = process.env.OAUTH_STORE_TABLE;
+          if (auth.userId && oauthTable) {
+            const scan = await dynamo.send(
+              new ScanCommand({
+                TableName: oauthTable,
+                FilterExpression: "begins_with(pk, :prefix) AND sk = :sk",
+                ExpressionAttributeValues: {
+                  ":prefix": { S: "REFRESH#" },
+                  ":sk": { S: "TOKEN" },
+                },
+                Limit: 50,
+              })
+            );
+            const matchedTokens = [];
+            for (const item of scan.Items || []) {
+              const parsed = unmarshall(item);
+              try {
+                const data = JSON.parse(parsed.data);
+                if (data.userId === auth.userId) {
+                  matchedTokens.push(parsed.pk);
+                  await deleteOAuthItem(parsed.pk, parsed.sk);
+                }
+              } catch { /* skip malformed */ }
+            }
+            console.log("[revoke] purged refresh tokens for user:", matchedTokens.length);
+            audit({ action: "auth.token.revoked" });
+          }
+        } catch (jwtErr: any) {
+          console.log("[revoke] token is not a valid JWT either:", jwtErr.message);
+          // RFC 7009: revocation endpoint always returns 200
+        }
+      }
+      return json({}, 200, origin);
+    }
+
+    // --- Connection check (called by the marketing site, requires internal API key) ---
 
     if (path === "/connected" && method === "GET") {
+      const internalKey = process.env.MCP_INTERNAL_API_KEY;
+      if (internalKey) {
+        const providedKey =
+          event.headers["x-internal-api-key"] || event.queryStringParameters?.api_key;
+        if (providedKey !== internalKey) {
+          return json({ error: "Unauthorized" }, 401, origin);
+        }
+      }
+
       const userId = event.queryStringParameters?.userId;
       if (!userId) {
-        return json({ connected: false, reason: "missing_userId" }, 400);
+        return json({ connected: false, reason: "missing_userId" }, 400, origin);
       }
 
-      // Check if this user has any refresh tokens in OAuthStore
-      // Refresh tokens are stored as REFRESH#{token} → { userId, clientId }
-      // We can't query by userId directly (it's in the data JSON), so we scan
-      // with a filter. At low scale this is fine.
-      const { DynamoDBClient, ScanCommand } = await import("@aws-sdk/client-dynamodb");
-      const { unmarshall } = await import("@aws-sdk/util-dynamodb");
-      const dynamo = new DynamoDBClient({});
       const oauthTable = process.env.OAUTH_STORE_TABLE;
-
       if (!oauthTable) {
-        return json({ connected: false, reason: "server_config_error" }, 500);
+        return json({ connected: false, reason: "server_config_error" }, 500, origin);
       }
+
+      const STALE_THRESHOLD_MS = 65 * 60 * 1000; // 65 min — just above the 1h access token expiry
 
       const scan = await dynamo.send(
         new ScanCommand({
@@ -161,17 +309,25 @@ export async function handler(
         })
       );
 
-      const hasToken = (scan.Items || []).some((item) => {
+      const now = Date.now();
+      const hasActiveToken = (scan.Items || []).some((item) => {
         const parsed = unmarshall(item);
         try {
           const data = JSON.parse(parsed.data);
-          return data.userId === userId;
+          if (data.userId !== userId) return false;
+          // If refreshedAt is present, check that the token was used recently.
+          // An active client refreshes every ~1h when the access token expires.
+          if (data.refreshedAt) {
+            return now - data.refreshedAt < STALE_THRESHOLD_MS;
+          }
+          // Legacy tokens without refreshedAt: fall back to existence check
+          return true;
         } catch {
           return false;
         }
       });
 
-      return json({ connected: hasToken });
+      return json({ connected: hasActiveToken }, 200, origin);
     }
 
     // --- MCP Protocol (POST /) ---
@@ -181,7 +337,8 @@ export async function handler(
       const authHeader = event.headers.authorization || event.headers.Authorization || "";
       const token = authHeader.replace("Bearer ", "");
       if (!token) {
-        return json({ error: "Missing Authorization header" }, 401);
+        audit({ action: "auth.failed", detail: "missing authorization header" });
+        return json({ error: "Missing Authorization header" }, 401, origin);
       }
 
       let userId: string;
@@ -189,24 +346,83 @@ export async function handler(
         const auth = await verifyAccessToken(token);
         userId = auth.userId;
       } catch {
-        return json({ error: "Invalid or expired token" }, 401);
+        audit({ action: "auth.failed", detail: "invalid or expired access token" });
+        return json({ error: "Invalid or expired token" }, 401, origin);
       }
 
-      const request = JSON.parse(event.body || "{}") as JsonRpcRequest;
+      // Rate limit per user
+      const allowed = await checkRateLimit(userId);
+      if (!allowed) {
+        audit({ action: "auth.failed", userId, detail: "rate limit exceeded" });
+        return json({ error: "Rate limit exceeded. Try again later." }, 429, origin);
+      }
 
-      const response = await handleMcpRequest(
+      const body = safeParseBody(event.body);
+      if (!body) return json({ error: "Invalid request body" }, 400, origin);
+      const request = body as JsonRpcRequest;
+
+      const { response, notifications } = await handleMcpRequest(
         request,
         userId,
         getAllRegistryItems,
+        getUserKitDbs,
         invokeKitLambda
       );
 
-      return json(response);
+      // If there are pending notifications, send them as a JSON array
+      // containing the response + notifications (MCP batch format)
+      if (notifications && notifications.length > 0) {
+        const batch = [
+          response,
+          ...notifications.map((n) => ({
+            jsonrpc: "2.0" as const,
+            method: n.method,
+            params: n.params,
+          })),
+        ];
+        return json(batch, 200, origin);
+      }
+
+      return json(response, 200, origin);
     }
 
-    return json({ error: "Not found" }, 404);
+    return json({ error: "Not found" }, 404, origin);
   } catch (err: any) {
     console.error("Router error:", err);
-    return json({ error: err.message || "Internal server error" }, 500);
+    // Never leak internal error details to clients
+    return json({ error: "Internal server error" }, 500, origin);
+  }
+}
+
+function safeParseBody(body: string | undefined, contentType?: string): any | null {
+  if (!body) return null;
+
+  // Handle application/x-www-form-urlencoded (OAuth standard)
+  if (contentType?.includes("application/x-www-form-urlencoded")) {
+    const params = new URLSearchParams(body);
+    const obj: Record<string, string> = {};
+    for (const [key, value] of params) {
+      obj[key] = value;
+    }
+    return obj;
+  }
+
+  // Try JSON first, fall back to form-urlencoded
+  try {
+    return JSON.parse(body);
+  } catch {
+    try {
+      const params = new URLSearchParams(body);
+      if (params.has("grant_type") || params.has("client_id") || params.has("code")) {
+        const obj: Record<string, string> = {};
+        for (const [key, value] of params) {
+          obj[key] = value;
+        }
+        return obj;
+      }
+    } catch {
+      // not form data either
+    }
+    return null;
   }
 }

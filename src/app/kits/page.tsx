@@ -12,7 +12,7 @@ import { auth } from "@/lib/auth";
 import { headers } from "next/headers";
 import { db } from "@/lib/db";
 import { kitActivations } from "@/db/schema";
-import { eq } from "drizzle-orm";
+import { eq, and } from "drizzle-orm";
 import type { KitCardData } from "@/services/transformers";
 
 const demos: Record<string, React.ReactNode> = {
@@ -26,16 +26,16 @@ export default async function KitsPage() {
   const kits = await getAllKitCards();
   const totalReplacesValue = kits.reduce((sum, k) => sum + k.replacesValue, 0);
 
-  // Get user's activated kits
-  let activatedSlugs = new Set<string>();
+  // Get user's kit activation statuses
+  let kitStatuses = new Map<string, string>();
   try {
     const session = await auth.api.getSession({ headers: await headers() });
     if (session) {
       const activations = await db
-        .select({ slug: kitActivations.kitSlug })
+        .select({ slug: kitActivations.kitSlug, status: kitActivations.status })
         .from(kitActivations)
         .where(eq(kitActivations.userId, session.user.id));
-      activatedSlugs = new Set(activations.map((a) => a.slug));
+      kitStatuses = new Map(activations.map((a) => [a.slug, a.status]));
     }
   } catch {
     // Not logged in — no activated kits
@@ -139,13 +139,28 @@ export default async function KitsPage() {
 
               {/* Buttons */}
               <div className="flex gap-2.5 mt-auto">
-                {activatedSlugs.has(kit.slug) ? (
+                {kitStatuses.get(kit.slug) === "active" ? (
                   <>
                     <Link
                       href={`/kits/${kit.slug}`}
                       className="ks-btn !text-[12px] !py-2 !px-4 !border-green-600 !text-green-700"
                     >
                       &#10003; Active
+                    </Link>
+                    <Link
+                      href={`/kits/${kit.slug}`}
+                      className="ks-btn !text-[12px] !py-2 !px-4"
+                    >
+                      View kit
+                    </Link>
+                  </>
+                ) : kitStatuses.get(kit.slug) === "deactivated" ? (
+                  <>
+                    <Link
+                      href={`/kits/${kit.slug}`}
+                      className="ks-btn ks-btn-accent !text-[12px] !py-2 !px-4"
+                    >
+                      Reactivate &rarr;
                     </Link>
                     <Link
                       href={`/kits/${kit.slug}`}
