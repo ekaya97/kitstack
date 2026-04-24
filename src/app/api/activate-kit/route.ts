@@ -1,14 +1,12 @@
 import { NextRequest, NextResponse } from "next/server";
 import { after } from "next/server";
-import { getSessionOrNull } from "@/lib/auth-session";
+import { requireAuthorized } from "@/lib/authz";
 import { activateKit } from "@/services/kit-lifecycle.service";
 import { flushLogs } from "@/lib/logger";
 
 export async function POST(request: NextRequest) {
-  const session = await getSessionOrNull();
-  if (!session?.user) {
-    return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
-  }
+  const auth = await requireAuthorized();
+  if (!auth.ok) return auth.response;
 
   const { kitSlug } = (await request.json()) as { kitSlug?: string };
   if (!kitSlug) {
@@ -17,7 +15,7 @@ export async function POST(request: NextRequest) {
 
   after(() => flushLogs());
 
-  const result = await activateKit(session.user.id, kitSlug);
+  const result = await activateKit(auth.userId, kitSlug);
 
   if (!result.ok) {
     return NextResponse.json(

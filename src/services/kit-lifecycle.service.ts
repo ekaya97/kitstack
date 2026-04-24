@@ -14,10 +14,11 @@ import { nanoid } from "nanoid";
 import { db } from "@/lib/db";
 import { kitActivations } from "@/db/schema";
 import { getSubscription } from "./subscription.service";
-import { PLAN_LIMITS, getActiveKitCount } from "./kit-activation.service";
+import { PLAN_LIMITS, getActiveKitCount, deleteKitActivation } from "./kit-activation.service";
 import {
   provisionKit,
   deactivateKitDb,
+  deleteKitDb,
 } from "./mcp-sync.service";
 import {
   trackKitActivated,
@@ -26,6 +27,7 @@ import {
   trackKitDeactivationFailed,
 } from "@/lib/analytics-server";
 import { log } from "@/lib/logger";
+import { grantRelation, revokeRelation } from "../../packages/authz/src/lifecycle";
 
 // Kit migrations
 import { migrationSql as meetingMigrations } from "../../packages/mcp-server/src/kits/meeting/migrations";
@@ -154,6 +156,8 @@ export async function activateKit(
     log.warn("Kit SQLite write failed (non-critical)", { userId, kitSlug, error: err.message });
   }
 
+  await grantRelation(db, userId, "activator", "kit", kitSlug);
+
   trackKitActivated(userId, kitSlug, !!existing);
 
   return { ok: true, data: { status: "activated", kitSlug } };
@@ -203,7 +207,67 @@ export async function deactivateKit(
     log.warn("Kit SQLite deactivation failed (non-critical)", { userId, kitSlug, error: err.message });
   }
 
+  await revokeRelation(db, userId, "activator", "kit", kitSlug);
+
   trackKitDeactivated(userId, kitSlug);
 
   return { ok: true, data: { status: "deactivated", kitSlug } };
+}
+
+/**
+ * Permanently delete a kit for a user.
+ * Only allowed for deactivated kits.
+ *
+ * Order of operations:
+ * 1. Verify kit is deactivated (safety check)
+ * 2. Destroy Turso database + delete DynamoDB record
+ * 3. Delete SQLite kit_activations row
+ */
+export async function deleteKit(
+  userId: string,
+  kitSlug: string
+): Promise<LifecycleResult> {
+  const kitId = SLUG_TO_KIT_ID[kitSlug];
+  if (!kitId) {
+    return { ok: false, status: 404, error: `Unknown kit: ${kitSlug}` };
+  }
+
+  // Step 1: Verify it's deactivated in SQLite
+  const existing = await db
+    .select()
+    .from(kitActivations)
+    .where(
+      and(
+        eq(kitActivations.userId, userId),
+        eq(kitActivations.kitSlug, kitSlug)
+      )
+    )
+    .then((r) => r[0]);
+
+  if (!existing) {
+    return { ok: false, status: 404, error: "Kit not found." };
+  }
+
+  if (existing.status === "active") {
+    return { ok: false, status: 400, error: "Deactivate the kit before deleting." };
+  }
+
+  // Step 2: Destroy Turso DB + delete DynamoDB record
+  try {
+    await deleteKitDb(userId, kitId);
+  } catch (err: any) {
+    log.error("Kit deletion failed", { userId, kitSlug, error: err.message });
+    return { ok: false, status: 500, error: "Failed to delete kit data. Please try again." };
+  }
+
+  // Step 3: Delete SQLite row
+  try {
+    await deleteKitActivation(userId, kitSlug);
+  } catch (err: any) {
+    log.warn("Kit SQLite deletion failed (non-critical)", { userId, kitSlug, error: err.message });
+  }
+
+  await revokeRelation(db, userId, "activator", "kit", kitSlug);
+
+  return { ok: true, data: { status: "deleted", kitSlug } };
 }

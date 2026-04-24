@@ -1,6 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
-import { auth } from "@/lib/auth";
-import { headers } from "next/headers";
+import { requireAuthorized } from "@/lib/authz";
 import {
   getReviewsByTarget,
   getRatingDistribution,
@@ -28,10 +27,8 @@ export async function GET(request: NextRequest) {
 }
 
 export async function POST(request: NextRequest) {
-  const session = await auth.api.getSession({ headers: await headers() });
-  if (!session) {
-    return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
-  }
+  const auth = await requireAuthorized();
+  if (!auth.ok) return auth.response;
 
   const body = await request.json();
   const { targetType, targetSlug, rating, text } = body;
@@ -54,14 +51,14 @@ export async function POST(request: NextRequest) {
     await createReview({
       targetType,
       targetSlug,
-      userId: session.user.id,
-      userName: session.user.name || "Anonymous",
+      userId: auth.userId,
+      userName: auth.userName || "Anonymous",
       userRole: body.userRole,
       rating,
       text,
     });
 
-    trackReviewSubmitted(session.user.id, targetType, targetSlug, rating);
+    trackReviewSubmitted(auth.userId, targetType, targetSlug, rating);
 
     return NextResponse.json({ ok: true }, { status: 201 });
   } catch {

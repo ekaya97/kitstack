@@ -136,6 +136,9 @@ export const authors = sqliteTable("authors", {
 // ── BetterAuth tables ──
 export { user, session, account, verification } from "./auth-schema";
 
+// ── Authorization tuples (Zanzibar-style) ──
+export { authzTuples } from "../../packages/authz/src/schema";
+
 // Kit activations (tracks which kits a user has activated)
 export const kitActivations = sqliteTable("kit_activations", {
   id: text("id").primaryKey(),
@@ -170,3 +173,15 @@ export type Wishlist = typeof wishlists.$inferSelect;
 export type Author = typeof authors.$inferSelect;
 export type NewAuthor = typeof authors.$inferInsert;
 export type SkillDownload = typeof skillDownloads.$inferSelect;
+
+// Kit registry (tool definitions for MCP server)
+export const kitRegistryTable = sqliteTable("kit_registry", {
+  kitId: text("kit_id").notNull(),
+  toolName: text("tool_name").notNull(),
+  toolDescription: text("tool_description").notNull(),
+  inputSchema: text("input_schema").notNull(),
+  kitName: text("kit_name").notNull(),
+  kitDescription: text("kit_description"),
+}, (table) => [
+  uniqueIndex("kit_registry_pk").on(table.kitId, table.toolName),
+]);

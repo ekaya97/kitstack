@@ -9,6 +9,7 @@ import { handleTokenExchange } from "./oauth/token";
 import { verifyAccessToken } from "./oauth/helpers";
 import { handleMcpRequest } from "./mcp-protocol";
 import { getAllRegistryItems, getUserKitDbs } from "../framework/dynamo";
+import { mcpRequireAuthorized } from "../framework/authz";
 import { audit } from "../framework/audit";
 import { log, flushLogs } from "../framework/logger";
 import {
@@ -332,7 +333,7 @@ export async function handler(
     // --- MCP Protocol (POST /) ---
 
     if (path === "/" && method === "POST") {
-      // Authenticate
+      // Authenticate via authz layer
       const authHeader = event.headers.authorization || event.headers.Authorization || "";
       const token = authHeader.replace("Bearer ", "");
       if (!token) {
@@ -342,7 +343,7 @@ export async function handler(
 
       let userId: string;
       try {
-        const auth = await verifyAccessToken(token);
+        const auth = await mcpRequireAuthorized(token);
         userId = auth.userId;
       } catch {
         audit({ action: "auth.failed", detail: "invalid or expired access token" });

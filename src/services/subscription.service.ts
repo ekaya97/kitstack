@@ -2,6 +2,7 @@ import { eq, and } from "drizzle-orm";
 import { nanoid } from "nanoid";
 import { db } from "@/lib/db";
 import { subscriptions, type Subscription } from "@/db/schema";
+import { grantRelation, revokeRelation } from "../../packages/authz/src/lifecycle";
 
 
 export async function getSubscription(userId: string): Promise<Subscription | null> {
@@ -33,6 +34,8 @@ export async function createSubscription(
     currentPeriodEnd: periodEnd,
   });
 
+  await grantRelation(db, userId, "subscriber", "subscription", id);
+
   const result = await db
     .select()
     .from(subscriptions)
@@ -41,6 +44,8 @@ export async function createSubscription(
 }
 
 export async function cancelSubscription(userId: string): Promise<void> {
+  const existing = await getSubscription(userId);
+
   await db
     .update(subscriptions)
     .set({ status: "cancelled", updatedAt: new Date() })
@@ -48,4 +53,7 @@ export async function cancelSubscription(userId: string): Promise<void> {
       and(eq(subscriptions.userId, userId), eq(subscriptions.status, "active"))
     );
 
+  if (existing) {
+    await revokeRelation(db, userId, "subscriber", "subscription", existing.id);
+  }
 }

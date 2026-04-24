@@ -1,4 +1,6 @@
 import {
+  tursoDbUrl,
+  tursoAuthToken,
   tursoPlatformApiToken,
   tursoOrgName,
   betterAuthSecret,
@@ -9,13 +11,10 @@ import {
   posthogKey,
   posthogHost,
 } from "./secrets";
+import { kitBucket } from "./storage";
 
 // --- DynamoDB Tables ---
-
-export const kitRegistry = new sst.aws.Dynamo("KitRegistry", {
-  fields: { kitId: "string", toolName: "string" },
-  primaryIndex: { hashKey: "kitId", rangeKey: "toolName" },
-});
+// Kit Registry moved to main Turso DB (kit_registry table)
 
 export const userKitDbs = new sst.aws.Dynamo("UserKitDbs", {
   fields: { userId: "string", kitId: "string" },
@@ -86,7 +85,7 @@ export const mcpRouter = new sst.aws.Function("McpRouter", {
   architecture: "arm64",
   url: true,
   link: [
-    kitRegistry,
+    kitBucket,
     userKitDbs,
     oauthStore,
     kitMeeting,
@@ -94,6 +93,8 @@ export const mcpRouter = new sst.aws.Function("McpRouter", {
     kitExpense,
     kitOutreach,
     appData,
+    tursoDbUrl,
+    tursoAuthToken,
     tursoPlatformApiToken,
     tursoOrgName,
     betterAuthSecret,

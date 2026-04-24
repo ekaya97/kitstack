@@ -1,23 +1,23 @@
 import { NextRequest, NextResponse } from "next/server";
 import { after } from "next/server";
-import { getSessionOrNull } from "@/lib/auth-session";
+import { requireAuthorized } from "@/lib/authz";
 import { deactivateKit } from "@/services/kit-lifecycle.service";
 import { flushLogs } from "@/lib/logger";
 
 export async function POST(request: NextRequest) {
-  const session = await getSessionOrNull();
-  if (!session?.user) {
-    return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
-  }
-
   const { kitSlug } = (await request.json()) as { kitSlug?: string };
   if (!kitSlug) {
     return NextResponse.json({ error: "kitSlug is required" }, { status: 400 });
   }
 
+  const auth = await requireAuthorized([
+    { relation: "activator", objectType: "kit", objectId: kitSlug },
+  ]);
+  if (!auth.ok) return auth.response;
+
   after(() => flushLogs());
 
-  const result = await deactivateKit(session.user.id, kitSlug);
+  const result = await deactivateKit(auth.userId, kitSlug);
 
   if (!result.ok) {
     return NextResponse.json(

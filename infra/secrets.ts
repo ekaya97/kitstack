@@ -1,5 +1,5 @@
 // ── Database ────────────────────────────────────────────────────
-export const tursoDbUrl = new sst.Secret("TursoDbUrl", "file:databases/local.db");
+export const tursoDbUrl = new sst.Secret("TursoDbUrl", "http://127.0.0.1:8080");
 export const tursoAuthToken = new sst.Secret("TursoAuthToken", "");
 export const tursoPlatformApiToken = new sst.Secret("TursoPlatformApiToken", "");
 export const tursoOrgName = new sst.Secret("TursoOrgName", "");

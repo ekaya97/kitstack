@@ -1,21 +1,19 @@
 import { NextResponse } from "next/server";
 import { eq, and, ne } from "drizzle-orm";
-import { getSessionOrNull } from "@/lib/auth-session";
+import { requireAuthorized } from "@/lib/authz";
 import { getSubscription } from "@/services/subscription.service";
 import { getActiveKitCount, PLAN_LIMITS } from "@/services/kit-activation.service";
 import { db } from "@/lib/db";
 import { kitActivations, kits } from "@/db/schema";
 
 export async function GET() {
-  const session = await getSessionOrNull();
-  if (!session?.user) {
-    return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
-  }
+  const auth = await requireAuthorized();
+  if (!auth.ok) return auth.response;
 
-  const subscription = await getSubscription(session.user.id);
+  const subscription = await getSubscription(auth.userId);
   const plan = subscription?.plan ?? "starter";
   const limit = PLAN_LIMITS[plan as keyof typeof PLAN_LIMITS] ?? 0;
-  const activeCount = await getActiveKitCount(session.user.id);
+  const activeCount = await getActiveKitCount(auth.userId);
 
   // Get all activations (active + deactivated, not archived)
   const activations = await db
@@ -37,7 +35,7 @@ export async function GET() {
     .leftJoin(kits, eq(kitActivations.kitSlug, kits.slug))
     .where(
       and(
-        eq(kitActivations.userId, session.user.id),
+        eq(kitActivations.userId, auth.userId),
         ne(kitActivations.status, "archived")
       )
     );

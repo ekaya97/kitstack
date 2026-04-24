@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
-import { auth } from "@/lib/auth";
-import { headers } from "next/headers";
+import { requireAuthorized } from "@/lib/authz";
+import { getSessionOrNull } from "@/lib/auth-session";
 import {
   addToWishlist,
   removeFromWishlist,
@@ -13,8 +13,9 @@ import {
 } from "@/lib/analytics-server";
 
 export async function GET(request: NextRequest) {
-  const session = await auth.api.getSession({ headers: await headers() });
-  if (!session) {
+  // GET is optional-auth: returns empty data for anonymous users
+  const session = await getSessionOrNull();
+  if (!session?.user) {
     return NextResponse.json({ wishlisted: false, wishlists: [] });
   }
 
@@ -31,10 +32,8 @@ export async function GET(request: NextRequest) {
 }
 
 export async function POST(request: NextRequest) {
-  const session = await auth.api.getSession({ headers: await headers() });
-  if (!session) {
-    return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
-  }
+  const auth = await requireAuthorized();
+  if (!auth.ok) return auth.response;
 
   const { targetType, targetSlug } = await request.json();
   if (!targetType || !targetSlug) {
@@ -44,16 +43,14 @@ export async function POST(request: NextRequest) {
     );
   }
 
-  await addToWishlist(session.user.id, targetType, targetSlug);
-  trackWishlistItemAdded(session.user.id, targetType, targetSlug);
+  await addToWishlist(auth.userId, targetType, targetSlug);
+  trackWishlistItemAdded(auth.userId, targetType, targetSlug);
   return NextResponse.json({ ok: true }, { status: 201 });
 }
 
 export async function DELETE(request: NextRequest) {
-  const session = await auth.api.getSession({ headers: await headers() });
-  if (!session) {
-    return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
-  }
+  const auth = await requireAuthorized();
+  if (!auth.ok) return auth.response;
 
   const { targetType, targetSlug } = await request.json();
   if (!targetType || !targetSlug) {
@@ -63,7 +60,7 @@ export async function DELETE(request: NextRequest) {
     );
   }
 
-  await removeFromWishlist(session.user.id, targetType, targetSlug);
-  trackWishlistItemRemoved(session.user.id, targetType, targetSlug);
+  await removeFromWishlist(auth.userId, targetType, targetSlug);
+  trackWishlistItemRemoved(auth.userId, targetType, targetSlug);
   return NextResponse.json({ ok: true });
 }
