@@ -2,24 +2,10 @@ import { BatchLogRecordProcessor, LoggerProvider } from "@opentelemetry/sdk-logs
 import { OTLPLogExporter } from "@opentelemetry/exporter-logs-otlp-http";
 import { logs } from "@opentelemetry/api-logs";
 import { resourceFromAttributes } from "@opentelemetry/resources";
+import { Resource } from "sst";
 
-function getConfig() {
-  try {
-    const { Resource } = require("sst");
-    const R = Resource as any;
-    return {
-      key: R.PosthogKey?.value || process.env.NEXT_PUBLIC_POSTHOG_KEY,
-      host: R.PosthogHost?.value ?? "https://eu.i.posthog.com",
-    };
-  } catch {
-    return {
-      key: process.env.NEXT_PUBLIC_POSTHOG_KEY,
-      host: process.env.POSTHOG_HOST ?? "https://eu.i.posthog.com",
-    };
-  }
-}
-
-const { key: posthogKey, host: posthogHost } = getConfig();
+const posthogKey = Resource.PosthogKey.value || process.env.NEXT_PUBLIC_POSTHOG_KEY;
+const posthogHost = Resource.PosthogHost.value ?? "https://eu.i.posthog.com";
 
 export const loggerProvider = posthogKey
   ? new LoggerProvider({

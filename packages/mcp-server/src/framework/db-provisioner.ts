@@ -1,27 +1,24 @@
 import { putUserKitDb } from "./dynamo";
-import { resource } from "./resource";
+import { Resource } from "sst";
 import { createClient } from "@libsql/client";
 import { mkdirSync } from "node:fs";
 import { resolve } from "node:path";
 
 const TURSO_API_BASE = "https://api.turso.tech/v1";
 
-function isDevMode(): boolean {
-  const app = resource("App");
-  return app?.stage === "dev" || !!app?.local;
-}
-
-function getTursoConfig() {
-  const token = resource("TursoPlatformApiToken")?.value;
-  const org = resource("TursoOrgName")?.value;
-  if (!token || !org) {
-    throw new Error("TursoPlatformApiToken and TursoOrgName secrets must be set");
-  }
+function getTursoConfig(): { token: string; org: string } | null {
+  const token = Resource.TursoPlatformApiToken?.value;
+  const org = Resource.TursoOrgName?.value;
+  if (!token || !org) return null;
   return { token, org };
 }
 
+function isDevMode(): boolean {
+  return getTursoConfig() === null;
+}
+
 async function tursoFetch(path: string, options: RequestInit = {}) {
-  const { token } = getTursoConfig();
+  const { token } = getTursoConfig()!;
   const res = await fetch(`${TURSO_API_BASE}${path}`, {
     ...options,
     headers: {
@@ -69,7 +66,7 @@ async function provisionTurso(
   kitId: string,
   migrationSql: string
 ): Promise<{ dbUrl: string; dbToken: string }> {
-  const { org } = getTursoConfig();
+  const { org } = getTursoConfig()!;
   const dbName = `ks-${userId}-${kitId}`.replace(/[^a-z0-9-]/g, "-");
 
   const createResult = await tursoFetch(`/organizations/${org}/databases`, {
@@ -98,8 +95,8 @@ export async function destroyKitDatabase(
   userId: string,
   kitId: string
 ): Promise<void> {
-  const token = resource("TursoPlatformApiToken")?.value;
-  const org = resource("TursoOrgName")?.value;
+  const token = Resource.TursoPlatformApiToken.value;
+  const org = Resource.TursoOrgName.value;
   const dbName = `ks-${userId}-${kitId}`.replace(/[^a-z0-9-]/g, "-");
 
   // No Turso credentials → local mode, delete the file

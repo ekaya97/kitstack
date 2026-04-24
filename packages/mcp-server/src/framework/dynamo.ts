@@ -9,7 +9,7 @@ import {
 } from "@aws-sdk/client-dynamodb";
 
 import { marshall, unmarshall } from "@aws-sdk/util-dynamodb";
-import { resource } from "./resource";
+import { Resource } from "sst";
 import type { KitRegistryItem, UserKitDbItem } from "./types";
 
 const client = new DynamoDBClient({});
@@ -18,7 +18,7 @@ const client = new DynamoDBClient({});
 
 export async function getAllRegistryItems(): Promise<KitRegistryItem[]> {
   const result = await client.send(
-    new ScanCommand({ TableName: resource("KitRegistry").name })
+    new ScanCommand({ TableName: Resource.KitRegistry.name })
   );
   return (result.Items || []).map((item) => unmarshall(item) as KitRegistryItem);
 }
@@ -26,7 +26,7 @@ export async function getAllRegistryItems(): Promise<KitRegistryItem[]> {
 export async function getRegistryItemsForKit(kitId: string): Promise<KitRegistryItem[]> {
   const result = await client.send(
     new QueryCommand({
-      TableName: resource("KitRegistry").name,
+      TableName: Resource.KitRegistry.name,
       KeyConditionExpression: "kitId = :kitId",
       ExpressionAttributeValues: marshall({ ":kitId": kitId }),
     })
@@ -37,7 +37,7 @@ export async function getRegistryItemsForKit(kitId: string): Promise<KitRegistry
 export async function putRegistryItem(item: KitRegistryItem): Promise<void> {
   await client.send(
     new PutItemCommand({
-      TableName: resource("KitRegistry").name,
+      TableName: Resource.KitRegistry.name,
       Item: marshall(item),
     })
   );
@@ -51,7 +51,7 @@ export async function getUserKitDb(
 ): Promise<UserKitDbItem | null> {
   const result = await client.send(
     new GetItemCommand({
-      TableName: resource("UserKitDbs").name,
+      TableName: Resource.UserKitDbs.name,
       Key: marshall({ userId, kitId }),
     })
   );
@@ -61,7 +61,7 @@ export async function getUserKitDb(
 export async function putUserKitDb(item: UserKitDbItem): Promise<void> {
   await client.send(
     new PutItemCommand({
-      TableName: resource("UserKitDbs").name,
+      TableName: Resource.UserKitDbs.name,
       Item: marshall(item),
     })
   );
@@ -74,7 +74,7 @@ export async function updateUserKitDbStatus(
 ): Promise<void> {
   await client.send(
     new UpdateItemCommand({
-      TableName: resource("UserKitDbs").name,
+      TableName: Resource.UserKitDbs.name,
       Key: marshall({ userId, kitId }),
       UpdateExpression: "SET #s = :status",
       ExpressionAttributeNames: { "#s": "status" },
@@ -89,7 +89,7 @@ export async function deleteUserKitDb(
 ): Promise<void> {
   await client.send(
     new DeleteItemCommand({
-      TableName: resource("UserKitDbs").name,
+      TableName: Resource.UserKitDbs.name,
       Key: marshall({ userId, kitId }),
     })
   );
@@ -98,7 +98,7 @@ export async function deleteUserKitDb(
 export async function getUserKitDbs(userId: string): Promise<UserKitDbItem[]> {
   const result = await client.send(
     new QueryCommand({
-      TableName: resource("UserKitDbs").name,
+      TableName: Resource.UserKitDbs.name,
       KeyConditionExpression: "userId = :userId",
       ExpressionAttributeValues: marshall({ ":userId": userId }),
     })

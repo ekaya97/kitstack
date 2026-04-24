@@ -1,5 +1,5 @@
 import { NextResponse } from "next/server";
-import { resource } from "@/lib/resource";
+import { Resource } from "sst";
 import { getSessionOrNull } from "@/lib/auth-session";
 
 export async function GET() {
@@ -9,7 +9,7 @@ export async function GET() {
   }
 
   try {
-    const mcpUrl = resource("McpRouter").url.replace(/\/$/, "");
+    const mcpUrl = Resource.McpRouter.url.replace(/\/$/, "");
     const res = await fetch(
       `${mcpUrl}/connected?userId=${encodeURIComponent(session.user.id)}`,
       { signal: AbortSignal.timeout(5000) }

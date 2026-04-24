@@ -1,8 +1,8 @@
 import { SignJWT, jwtVerify } from "jose";
 import crypto from "node:crypto";
-import { resource } from "../../framework/resource";
+import { Resource } from "sst";
 
-const getSecret = () => new TextEncoder().encode(resource("McpJwtSecret").value);
+const getSecret = () => new TextEncoder().encode(Resource.McpJwtSecret.value);
 
 // --- PKCE ---
 

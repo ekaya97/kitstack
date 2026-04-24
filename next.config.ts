@@ -2,6 +2,14 @@ import type { NextConfig } from "next";
 
 const nextConfig: NextConfig = {
   reactStrictMode: true,
+  serverExternalPackages: ["sst"],
+  webpack: (config, { isServer }) => {
+    if (isServer) {
+      config.externals = config.externals || [];
+      config.externals.push("sst");
+    }
+    return config;
+  },
   outputFileTracingRoot: __dirname,
   images: {
     remotePatterns: [

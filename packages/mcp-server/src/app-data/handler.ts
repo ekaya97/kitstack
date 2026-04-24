@@ -4,15 +4,17 @@ import { getUserKitDb } from "../framework/dynamo";
 import { createKitDbClient } from "../framework/kit-db";
 import { audit } from "../framework/audit";
 import { log, flushLogs } from "../framework/logger";
-import { resource } from "../framework/resource";
+import { Resource } from "sst";
 import { sql } from "drizzle-orm";
 
-const ALLOWED_ORIGINS = (resource("McpAllowedOrigins")?.value || "https://kitstack.co,https://www.kitstack.co")
+const ALLOWED_ORIGINS = (Resource.McpAllowedOrigins.value || "https://kitstack.co,https://www.kitstack.co")
   .split(",")
   .map((o: string) => o.trim());
 
 function getAllowedOrigin(requestOrigin: string | undefined): string {
   if (!requestOrigin) return ALLOWED_ORIGINS[0];
+  // MCP App sandboxed iframes send "null" origin — allow them (auth is via JWT token)
+  if (requestOrigin === "null") return "null";
   return ALLOWED_ORIGINS.includes(requestOrigin) ? requestOrigin : ALLOWED_ORIGINS[0];
 }
 

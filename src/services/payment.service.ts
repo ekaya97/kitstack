@@ -1,4 +1,5 @@
 import crypto from "node:crypto";
+import { Resource } from "sst";
 import type { LemonSqueezyWebhookEvent } from "./payment.service.types";
 
 export function verifyWebhookSignature(
@@ -48,8 +49,7 @@ export async function createCheckoutUrl(
     "@lemonsqueezy/lemonsqueezy.js"
   );
 
-  const { resource } = await import("@/lib/resource");
-  lemonSqueezySetup({ apiKey: resource("LemonsqueezyApiKey")?.value || "" });
+  lemonSqueezySetup({ apiKey: Resource.LemonsqueezyApiKey.value || "" });
 
   const checkout = await createCheckout(storeId, variantId, {
     checkoutData: {

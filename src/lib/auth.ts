@@ -1,7 +1,7 @@
 import { betterAuth } from "better-auth";
 import { drizzleAdapter } from "better-auth/adapters/drizzle";
 import { db } from "./db";
-import { resource } from "./resource";
+import { Resource } from "sst";
 import * as schema from "@/db/schema";
 
 export const auth = betterAuth({
@@ -14,12 +14,12 @@ export const auth = betterAuth({
   },
   socialProviders: {
     google: {
-      clientId: resource("GoogleClientId")?.value || "",
-      clientSecret: resource("GoogleClientSecret")?.value || "",
+      clientId: Resource.GoogleClientId.value || "",
+      clientSecret: Resource.GoogleClientSecret.value || "",
     },
     github: {
-      clientId: resource("GithubClientId")?.value || "",
-      clientSecret: resource("GithubClientSecret")?.value || "",
+      clientId: Resource.GithubClientId.value || "",
+      clientSecret: Resource.GithubClientSecret.value || "",
     },
   },
 });

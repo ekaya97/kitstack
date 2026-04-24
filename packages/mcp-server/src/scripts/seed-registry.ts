@@ -1,6 +1,6 @@
 import { zodToJsonSchema } from "../shared/zod-to-json-schema";
 import { putRegistryItem } from "../framework/dynamo";
-import { resource } from "../framework/resource";
+import { Resource } from "sst";
 import type { KitDefinition, KitRegistryItem } from "../framework/types";
 
 // Import all kit definitions
@@ -20,7 +20,7 @@ const KIT_RESOURCE_MAP: Record<string, string> = {
 function getArn(kitId: string): string {
   const resourceName = KIT_RESOURCE_MAP[kitId];
   if (!resourceName) throw new Error(`No resource mapping for kit: ${kitId}`);
-  const fn = resource(resourceName);
+  const fn = Resource[resourceName];
   if (!fn?.arn) throw new Error(`Resource ${resourceName} not linked or missing ARN`);
   return fn.arn;
 }
