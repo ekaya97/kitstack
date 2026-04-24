@@ -6,6 +6,7 @@ import { meetings, actionItems, decisions } from "../schema";
 import { createKitHandler } from "../../../framework";
 import meetingKit from "../index";
 import type { KitToolInvocation } from "../../../framework/types";
+import { textOf } from "../../../test/helpers";
 
 let db: Awaited<ReturnType<typeof createKitTestDb>>;
 let handler: ReturnType<typeof createKitHandler>;
@@ -42,9 +43,9 @@ describe("process_meeting", () => {
     );
 
     expect(result.isError).toBeUndefined();
-    expect(result.content[0].text).toContain("Sprint Planning");
-    expect(result.content[0].text).toContain("2 action item(s)");
-    expect(result.content[0].text).toContain("1 decision(s)");
+    expect(textOf(result)).toContain("Sprint Planning");
+    expect(textOf(result)).toContain("2 action item(s)");
+    expect(textOf(result)).toContain("1 decision(s)");
 
     const allMeetings = await db.select().from(meetings);
     expect(allMeetings).toHaveLength(1);
@@ -69,8 +70,8 @@ describe("process_meeting", () => {
       })
     );
 
-    expect(result.content[0].text).toContain("no owner");
-    expect(result.content[0].text).toContain("no deadline");
+    expect(textOf(result)).toContain("no owner");
+    expect(textOf(result)).toContain("no deadline");
   });
 });
 
@@ -79,7 +80,7 @@ describe("process_meeting", () => {
 describe("list_meetings", () => {
   it("returns empty when no meetings", async () => {
     const result = await handler(invoke("list_meetings"));
-    expect(result.content[0].text).toContain("No meetings found");
+    expect(textOf(result)).toContain("No meetings found");
   });
 
   it("lists meetings sorted by date descending", async () => {
@@ -105,7 +106,7 @@ describe("list_meetings", () => {
     );
 
     const result = await handler(invoke("list_meetings"));
-    const text = result.content[0].text;
+    const text = textOf(result);
     expect(text).toContain("2 meeting(s)");
     expect(text.indexOf("Newer Meeting")).toBeLessThan(text.indexOf("Older Meeting"));
   });
@@ -130,7 +131,7 @@ describe("get_meeting", () => {
     const meetingId = allMeetings[0].id;
 
     const result = await handler(invoke("get_meeting", { meetingId }));
-    const text = result.content[0].text;
+    const text = textOf(result);
     expect(text).toContain("Kickoff");
     expect(text).toContain("Draft plan");
     expect(text).toContain("Use React for frontend");
@@ -163,18 +164,18 @@ describe("list_actions", () => {
 
   it("lists all actions", async () => {
     const result = await handler(invoke("list_actions"));
-    expect(result.content[0].text).toContain("2 action item(s)");
+    expect(textOf(result)).toContain("2 action item(s)");
   });
 
   it("filters by owner", async () => {
     const result = await handler(invoke("list_actions", { owner: "Alice" }));
-    expect(result.content[0].text).toContain("Task A");
-    expect(result.content[0].text).not.toContain("Task B");
+    expect(textOf(result)).toContain("Task A");
+    expect(textOf(result)).not.toContain("Task B");
   });
 
   it("filters by status", async () => {
     const result = await handler(invoke("list_actions", { status: "done" }));
-    expect(result.content[0].text).toContain("No action items found");
+    expect(textOf(result)).toContain("No action items found");
   });
 });
 
@@ -197,7 +198,7 @@ describe("update_action", () => {
     const actionId = actions[0].id;
 
     const result = await handler(invoke("update_action", { actionId, status: "done" }));
-    expect(result.content[0].text).toContain("completed");
+    expect(textOf(result)).toContain("completed");
 
     const updated = await db.select().from(actionItems).where(eq(actionItems.id, actionId));
     expect(updated[0].status).toBe("done");
@@ -214,7 +215,7 @@ describe("update_action", () => {
 describe("open_items_summary", () => {
   it("returns all-caught-up when no open items", async () => {
     const result = await handler(invoke("open_items_summary"));
-    expect(result.content[0].text).toContain("all caught up");
+    expect(textOf(result)).toContain("all caught up");
   });
 
   it("shows open items grouped by meeting", async () => {
@@ -233,7 +234,7 @@ describe("open_items_summary", () => {
     );
 
     const result = await handler(invoke("open_items_summary"));
-    const text = result.content[0].text;
+    const text = textOf(result);
     expect(text).toContain("2 open action item(s)");
     expect(text).toContain("Sprint 1");
     expect(text).toContain("Task 1");

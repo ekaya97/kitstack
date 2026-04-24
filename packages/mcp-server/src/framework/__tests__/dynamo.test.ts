@@ -64,7 +64,6 @@ describe("Kit Registry operations", () => {
       toolName: "add_contact",
       toolDescription: "Add a contact",
       inputSchema: "{}",
-      lambdaArn: "arn:aws:lambda:test",
       kitName: "CRM Kit",
     });
 

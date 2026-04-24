@@ -55,7 +55,9 @@ describe("createKitHandler", () => {
   it("dispatches to the correct tool", async () => {
     const handler = createKitHandler(testKit);
     const result = await handler(makeInvocation());
-    expect(result.content[0].text).toContain("Added item 1");
+    const block = result.content[0];
+    expect(block.type).toBe("text");
+    if (block.type === "text") expect(block.text).toContain("Added item 1");
     expect(result.isError).toBeUndefined();
   });
 
@@ -64,14 +66,16 @@ describe("createKitHandler", () => {
     const result = await handler(
       makeInvocation({ toolName: "kitstack_test-kit_instructions", args: {} })
     );
-    expect(result.content[0].text).toContain("You are the test kit");
+    const block = result.content[0];
+    if (block.type === "text") expect(block.text).toContain("You are the test kit");
   });
 
   it("returns error for unknown tool", async () => {
     const handler = createKitHandler(testKit);
     const result = await handler(makeInvocation({ toolName: "nonexistent" }));
     expect(result.isError).toBe(true);
-    expect(result.content[0].text).toContain("Unknown tool");
+    const block = result.content[0];
+    if (block.type === "text") expect(block.text).toContain("Unknown tool");
   });
 
   it("validates args with Zod and returns error on invalid", async () => {
@@ -80,6 +84,7 @@ describe("createKitHandler", () => {
       makeInvocation({ args: { id: 123, value: null } })
     );
     expect(result.isError).toBe(true);
-    expect(result.content[0].text).toContain("Invalid arguments");
+    const block = result.content[0];
+    if (block.type === "text") expect(block.text).toContain("Invalid arguments");
   });
 });

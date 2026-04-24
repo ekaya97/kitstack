@@ -1,6 +1,7 @@
 import { describe, it, expect, vi } from "vitest";
 import { KIT_TOOL_DEFINITION, handleKitCall } from "../kit-handler";
 import type { KitRegistryItem, UserKitDbItem } from "../../framework/types";
+import { textOf } from "../../test/helpers";
 
 const mockTools: KitRegistryItem[] = [
   {
@@ -15,7 +16,7 @@ const mockTools: KitRegistryItem[] = [
       },
       required: ["name"],
     }),
-    lambdaArn: "arn:aws:lambda:eu-central-1:123:function:KitCrm",
+
     kitName: "CRM Kit",
     kitDescription: "Full CRM with contacts, deals, pipeline, and proposals",
   },
@@ -24,7 +25,7 @@ const mockTools: KitRegistryItem[] = [
     toolName: "list_contacts",
     toolDescription: "List all contacts",
     inputSchema: JSON.stringify({ type: "object", properties: {} }),
-    lambdaArn: "arn:aws:lambda:eu-central-1:123:function:KitCrm",
+
     kitName: "CRM Kit",
     kitDescription: "Full CRM with contacts, deals, pipeline, and proposals",
   },
@@ -33,7 +34,7 @@ const mockTools: KitRegistryItem[] = [
     toolName: "kitstack_crm_instructions",
     toolDescription: "Load behavioral instructions for the CRM Kit",
     inputSchema: JSON.stringify({ type: "object", properties: {} }),
-    lambdaArn: "arn:aws:lambda:eu-central-1:123:function:KitCrm",
+
     kitName: "CRM Kit",
     kitDescription: "Full CRM with contacts, deals, pipeline, and proposals",
   },
@@ -46,7 +47,7 @@ const mockTools: KitRegistryItem[] = [
       properties: { title: { type: "string" }, notes: { type: "string" } },
       required: ["title", "notes"],
     }),
-    lambdaArn: "arn:aws:lambda:eu-central-1:123:function:KitMeeting",
+
     kitName: "Meeting Action Tracker Kit",
     kitDescription: "Track action items across meetings with persistent history",
   },
@@ -102,7 +103,7 @@ describe("handleKitCall", () => {
         invokeLambda
       );
       expect(result.isError).toBeUndefined();
-      const text = result.content[0].text;
+      const text = textOf(result);
       expect(text).toContain("crm");
       expect(text).toContain("meeting-action-tracker");
     });
@@ -115,7 +116,7 @@ describe("handleKitCall", () => {
         getUserDbs,
         invokeLambda
       );
-      const text = result.content[0].text;
+      const text = textOf(result);
       // CRM has 2 real tools (add_contact, list_contacts), not 3
       expect(text).toContain("2");
     });
@@ -128,7 +129,7 @@ describe("handleKitCall", () => {
         async () => [],
         invokeLambda
       );
-      expect(result.content[0].text).toContain("No kits activated");
+      expect(textOf(result)).toContain("No kits activated");
     });
   });
 
@@ -142,7 +143,7 @@ describe("handleKitCall", () => {
         invokeLambda
       );
       expect(result.isError).toBeUndefined();
-      const text = result.content[0].text;
+      const text = textOf(result);
       expect(text).toContain("add_contact");
       expect(text).toContain("list_contacts");
       expect(text).not.toContain("kitstack_crm_instructions");
@@ -156,7 +157,7 @@ describe("handleKitCall", () => {
         getUserDbs,
         invokeLambda
       );
-      expect(result.content[0].text).toContain("CRM Kit");
+      expect(textOf(result)).toContain("CRM Kit");
     });
 
     it("returns error for non-activated kit", async () => {
@@ -168,7 +169,7 @@ describe("handleKitCall", () => {
         invokeLambda
       );
       expect(result.isError).toBe(true);
-      expect(result.content[0].text).toContain("not activated");
+      expect(textOf(result)).toContain("not activated");
     });
   });
 
@@ -181,7 +182,7 @@ describe("handleKitCall", () => {
         getUserDbs,
         invokeLambda
       );
-      const text = result.content[0].text;
+      const text = textOf(result);
       expect(text).toContain("add_contact");
       expect(text).toContain('"name"');
       expect(text).toContain('"company"');
@@ -197,7 +198,7 @@ describe("handleKitCall", () => {
         invokeLambda
       );
       expect(result.isError).toBe(true);
-      expect(result.content[0].text).toContain("Unknown action");
+      expect(textOf(result)).toContain("Unknown action");
     });
   });
 
@@ -210,7 +211,7 @@ describe("handleKitCall", () => {
         getUserDbs,
         invokeLambda
       );
-      expect(result.content[0].text).toBe("Done");
+      expect(textOf(result)).toBe("Done");
     });
   });
 });

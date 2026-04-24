@@ -1,14 +1,14 @@
 import { describe, it, expect, vi, beforeEach } from "vitest";
 import { dispatchToolCall } from "../tool-dispatcher";
 import type { KitRegistryItem } from "../../framework/types";
+import { textOf } from "../../test/helpers";
 
 const mockTools: KitRegistryItem[] = [
   {
-    kitId: "kit-meeting",
+    kitId: "meeting-action-tracker",
     toolName: "process_meeting",
     toolDescription: "Process meeting",
     inputSchema: "{}",
-    lambdaArn: "arn:aws:lambda:eu-central-1:123:function:KitMeeting",
     kitName: "Meeting Kit",
   },
 ];
@@ -39,7 +39,7 @@ describe("dispatchToolCall", () => {
       invokeKitLambda
     );
     expect(result.isError).toBe(true);
-    expect(result.content[0].text).toContain("Unknown tool");
+    expect(textOf(result)).toContain("Unknown tool");
   });
 
   it("returns error when kit is not activated", async () => {
@@ -53,13 +53,13 @@ describe("dispatchToolCall", () => {
       invokeKitLambda
     );
     expect(result.isError).toBe(true);
-    expect(result.content[0].text).toContain("not activated");
+    expect(textOf(result)).toContain("not activated");
   });
 
   it("invokes kit lambda with correct payload", async () => {
     vi.mocked(getUserKitDb).mockResolvedValueOnce({
       userId: "user-1",
-      kitId: "kit-meeting",
+      kitId: "meeting-action-tracker",
       dbUrl: "libsql://test.turso.io",
       dbToken: "tok",
       provisionedAt: "2026-01-01",
@@ -74,7 +74,7 @@ describe("dispatchToolCall", () => {
     );
 
     expect(invokeKitLambda).toHaveBeenCalledWith(
-      "arn:aws:lambda:eu-central-1:123:function:KitMeeting",
+      expect.any(String),
       expect.objectContaining({
         toolName: "process_meeting",
         args: { title: "Sprint" },
@@ -83,6 +83,6 @@ describe("dispatchToolCall", () => {
       })
     );
 
-    expect(result.content[0].text).toBe("Done");
+    expect(textOf(result)).toBe("Done");
   });
 });

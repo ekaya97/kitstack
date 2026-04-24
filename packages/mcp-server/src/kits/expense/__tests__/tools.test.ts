@@ -6,6 +6,7 @@ import { expenses, quarterlySummaries, settings } from "../schema";
 import { createKitHandler } from "../../../framework";
 import expenseKit from "../index";
 import type { KitToolInvocation } from "../../../framework/types";
+import { textOf } from "../../../test/helpers";
 
 let db: Awaited<ReturnType<typeof createKitTestDb>>;
 let handler: ReturnType<typeof createKitHandler>;
@@ -33,8 +34,8 @@ describe("add_expense", () => {
       amountGross: 59.99,
       vatRate: 0.19,
     }));
-    expect(result.content[0].text).toContain("Adobe Creative Cloud");
-    expect(result.content[0].text).toContain("59.99");
+    expect(textOf(result)).toContain("Adobe Creative Cloud");
+    expect(textOf(result)).toContain("59.99");
 
     const all = await db.select().from(expenses);
     expect(all).toHaveLength(1);
@@ -50,7 +51,7 @@ describe("add_expense", () => {
       description: "New Laptop",
       amountGross: 1299.00,
     }));
-    expect(result.content[0].text).toContain("receipt required");
+    expect(textOf(result)).toContain("receipt required");
 
     const all = await db.select().from(expenses);
     expect(all[0].needsReceipt).toBe(true);
@@ -73,7 +74,7 @@ describe("add_expense", () => {
       description: "Test",
       amountGross: 10,
     }));
-    expect(result.content[0].text).toContain("not tax advice");
+    expect(textOf(result)).toContain("not tax advice");
   });
 });
 
@@ -87,7 +88,7 @@ describe("import_csv", () => {
 25.01.2026,Office Rent,800.00`;
 
     const result = await handler(invoke("import_csv", { csvText: csv }));
-    expect(result.content[0].text).toContain("Imported 3 expense(s)");
+    expect(textOf(result)).toContain("Imported 3 expense(s)");
 
     const all = await db.select().from(expenses);
     expect(all).toHaveLength(3);
@@ -100,7 +101,7 @@ describe("import_csv", () => {
 20.01.2026;Strom;89,99`;
 
     const result = await handler(invoke("import_csv", { csvText: csv }));
-    expect(result.content[0].text).toContain("Imported 2 expense(s)");
+    expect(textOf(result)).toContain("Imported 2 expense(s)");
 
     const all = await db.select().from(expenses);
     expect(all).toHaveLength(2);
@@ -132,9 +133,9 @@ describe("list_expenses", () => {
     await handler(invoke("add_expense", { date: "2026-01-20", description: "Expense B", amountGross: 200 }));
 
     const result = await handler(invoke("list_expenses"));
-    expect(result.content[0].text).toContain("2 expense(s)");
-    expect(result.content[0].text).toContain("Expense A");
-    expect(result.content[0].text).toContain("Expense B");
+    expect(textOf(result)).toContain("2 expense(s)");
+    expect(textOf(result)).toContain("Expense A");
+    expect(textOf(result)).toContain("Expense B");
   });
 
   it("filters by date range", async () => {
@@ -142,8 +143,8 @@ describe("list_expenses", () => {
     await handler(invoke("add_expense", { date: "2026-02-15", description: "February", amountGross: 200 }));
 
     const result = await handler(invoke("list_expenses", { startDate: "2026-02-01", endDate: "2026-02-28" }));
-    expect(result.content[0].text).toContain("February");
-    expect(result.content[0].text).not.toContain("January");
+    expect(textOf(result)).toContain("February");
+    expect(textOf(result)).not.toContain("January");
   });
 
   it("filters by category", async () => {
@@ -151,13 +152,13 @@ describe("list_expenses", () => {
     await handler(invoke("add_expense", { date: "2026-01-02", description: "B", amountGross: 200, category: "Travel" }));
 
     const result = await handler(invoke("list_expenses", { category: "Software" }));
-    expect(result.content[0].text).toContain("1 expense(s)");
-    expect(result.content[0].text).toContain("Software");
+    expect(textOf(result)).toContain("1 expense(s)");
+    expect(textOf(result)).toContain("Software");
   });
 
   it("returns message when no expenses found", async () => {
     const result = await handler(invoke("list_expenses"));
-    expect(result.content[0].text).toContain("No expenses found");
+    expect(textOf(result)).toContain("No expenses found");
   });
 });
 
@@ -169,7 +170,7 @@ describe("categorize", () => {
     await handler(invoke("add_expense", { date: "2026-01-02", description: "Google Ads Campaign", amountGross: 200 }));
 
     const result = await handler(invoke("categorize"));
-    expect(result.content[0].text).toContain("Categorized 2 of 2");
+    expect(textOf(result)).toContain("Categorized 2 of 2");
 
     const all = await db.select().from(expenses);
     const aws = all.find((e) => e.description === "AWS Cloud Hosting");
@@ -185,8 +186,8 @@ describe("categorize", () => {
     await handler(invoke("add_expense", { date: "2026-01-01", description: "Random Thing XYZ", amountGross: 30 }));
 
     const result = await handler(invoke("categorize"));
-    expect(result.content[0].text).toContain("could not auto-categorize");
-    expect(result.content[0].text).toContain("manual categorization");
+    expect(textOf(result)).toContain("could not auto-categorize");
+    expect(textOf(result)).toContain("manual categorization");
   });
 
   it("categorizes a specific expense by ID", async () => {
@@ -195,7 +196,7 @@ describe("categorize", () => {
     const id = all[0].id;
 
     const result = await handler(invoke("categorize", { expenseId: id }));
-    expect(result.content[0].text).toContain("Miete");
+    expect(textOf(result)).toContain("Miete");
 
     const updated = await db.select().from(expenses).where(eq(expenses.id, id));
     expect(updated[0].category).toBe("Miete");
@@ -204,7 +205,7 @@ describe("categorize", () => {
 
   it("returns message when no uncategorized expenses exist", async () => {
     const result = await handler(invoke("categorize"));
-    expect(result.content[0].text).toContain("No uncategorized expenses");
+    expect(textOf(result)).toContain("No uncategorized expenses");
   });
 });
 
@@ -217,7 +218,7 @@ describe("quarterly_summary", () => {
     await handler(invoke("add_expense", { date: "2026-03-10", description: "Rent", amountGross: 800, category: "Miete" }));
 
     const result = await handler(invoke("quarterly_summary", { year: 2026, quarter: 1 }));
-    const text = result.content[0].text;
+    const text = textOf(result);
     expect(text).toContain("Q1 2026 Summary");
     expect(text).toContain("1100.00");
     expect(text).toContain("Software");
@@ -233,12 +234,12 @@ describe("quarterly_summary", () => {
     await handler(invoke("add_expense", { date: "2026-01-15", description: "Mystery charge", amountGross: 50 }));
 
     const result = await handler(invoke("quarterly_summary", { year: 2026, quarter: 1 }));
-    expect(result.content[0].text).toContain("uncategorized");
+    expect(textOf(result)).toContain("uncategorized");
   });
 
   it("returns message when no expenses in quarter", async () => {
     const result = await handler(invoke("quarterly_summary", { year: 2026, quarter: 4 }));
-    expect(result.content[0].text).toContain("No expenses found for Q4 2026");
+    expect(textOf(result)).toContain("No expenses found for Q4 2026");
   });
 });
 
@@ -259,7 +260,7 @@ describe("export_steuerberater", () => {
       endDate: "2026-01-31",
     }));
 
-    const text = result.content[0].text;
+    const text = textOf(result);
     expect(text).toContain("Steuerberater Export");
     expect(text).toContain("csv");
     expect(text).toContain("Software License");
@@ -274,7 +275,7 @@ describe("export_steuerberater", () => {
       startDate: "2099-01-01",
       endDate: "2099-12-31",
     }));
-    expect(result.content[0].text).toContain("No expenses found");
+    expect(textOf(result)).toContain("No expenses found");
   });
 });
 
@@ -291,7 +292,7 @@ describe("update_expense", () => {
       category: "Werbekosten",
       skr03Account: "4600",
     }));
-    expect(result.content[0].text).toContain("updated");
+    expect(textOf(result)).toContain("updated");
 
     const updated = await db.select().from(expenses).where(eq(expenses.id, id));
     expect(updated[0].category).toBe("Werbekosten");
@@ -322,6 +323,6 @@ describe("update_expense", () => {
     const id = all[0].id;
 
     const result = await handler(invoke("update_expense", { expenseId: id }));
-    expect(result.content[0].text).toContain("No changes");
+    expect(textOf(result)).toContain("No changes");
   });
 });

@@ -1,6 +1,7 @@
 import { describe, it, expect, vi } from "vitest";
 import { handleMcpRequest } from "../mcp-protocol";
 import type { KitRegistryItem, UserKitDbItem, JsonRpcRequest } from "../../framework/types";
+import { textOf } from "../../test/helpers";
 
 const mockTools: KitRegistryItem[] = [
   {
@@ -12,7 +13,7 @@ const mockTools: KitRegistryItem[] = [
       properties: { title: { type: "string" }, notes: { type: "string" } },
       required: ["title", "notes"],
     }),
-    lambdaArn: "arn:aws:lambda:eu-central-1:123:function:KitMeeting",
+
     kitName: "Meeting Action Tracker Kit",
     kitDescription: "Track action items across meetings",
   },
@@ -21,7 +22,7 @@ const mockTools: KitRegistryItem[] = [
     toolName: "list_meetings",
     toolDescription: "List all meetings",
     inputSchema: JSON.stringify({ type: "object", properties: {} }),
-    lambdaArn: "arn:aws:lambda:eu-central-1:123:function:KitMeeting",
+
     kitName: "Meeting Action Tracker Kit",
     kitDescription: "Track action items across meetings",
   },
@@ -34,7 +35,7 @@ const mockTools: KitRegistryItem[] = [
       properties: { name: { type: "string" } },
       required: ["name"],
     }),
-    lambdaArn: "arn:aws:lambda:eu-central-1:123:function:KitCrm",
+
     kitName: "CRM Kit",
     kitDescription: "Full CRM with contacts and deals",
   },
@@ -84,8 +85,8 @@ describe("handleMcpRequest", () => {
     });
   });
 
-  describe("tools/list — static kit tool", () => {
-    it("always returns exactly one tool: kit", async () => {
+  describe("tools/list — kit + kit_view tools", () => {
+    it("returns kit and kit_view tools", async () => {
       const res = await handleMcpRequest(
         rpc("tools/list"),
         "user-1",
@@ -94,11 +95,12 @@ describe("handleMcpRequest", () => {
         invokeKitLambda
       );
       const result = res.response.result as any;
-      expect(result.tools).toHaveLength(1);
+      expect(result.tools).toHaveLength(2);
       expect(result.tools[0].name).toBe("kit");
+      expect(result.tools[1].name).toBe("kit_view");
     });
 
-    it("returns the same tool regardless of user activations", async () => {
+    it("returns the same tools regardless of user activations", async () => {
       const noKits = vi.fn(async () => [] as UserKitDbItem[]);
       const res = await handleMcpRequest(
         rpc("tools/list"),
@@ -108,8 +110,9 @@ describe("handleMcpRequest", () => {
         invokeKitLambda
       );
       const result = res.response.result as any;
-      expect(result.tools).toHaveLength(1);
+      expect(result.tools).toHaveLength(2);
       expect(result.tools[0].name).toBe("kit");
+      expect(result.tools[1].name).toBe("kit_view");
     });
   });
 
@@ -123,8 +126,8 @@ describe("handleMcpRequest", () => {
         invokeKitLambda
       );
       const result = res.response.result as any;
-      expect(result.content[0].text).toContain("kit-meeting");
-      expect(result.content[0].text).not.toContain("kit-crm");
+      expect(textOf(result)).toContain("kit-meeting");
+      expect(textOf(result)).not.toContain("kit-crm");
     });
 
     it("discovers actions when called with id", async () => {
@@ -136,8 +139,8 @@ describe("handleMcpRequest", () => {
         invokeKitLambda
       );
       const result = res.response.result as any;
-      expect(result.content[0].text).toContain("process_meeting");
-      expect(result.content[0].text).toContain("list_meetings");
+      expect(textOf(result)).toContain("process_meeting");
+      expect(textOf(result)).toContain("list_meetings");
     });
 
     it("describes an action when called with id + cmd", async () => {
@@ -149,9 +152,9 @@ describe("handleMcpRequest", () => {
         invokeKitLambda
       );
       const result = res.response.result as any;
-      expect(result.content[0].text).toContain("process_meeting");
-      expect(result.content[0].text).toContain("Parameters");
-      expect(result.content[0].text).toContain("title");
+      expect(textOf(result)).toContain("process_meeting");
+      expect(textOf(result)).toContain("Parameters");
+      expect(textOf(result)).toContain("title");
     });
 
     it("runs an action when called with id + cmd + params", async () => {
@@ -166,7 +169,7 @@ describe("handleMcpRequest", () => {
         invokeKitLambda
       );
       const result = res.response.result as any;
-      expect(result.content[0].text).toContain("Meeting processed");
+      expect(textOf(result)).toContain("Meeting processed");
     });
 
     it("returns error for non-activated kit", async () => {
@@ -179,7 +182,7 @@ describe("handleMcpRequest", () => {
       );
       const result = res.response.result as any;
       expect(result.isError).toBe(true);
-      expect(result.content[0].text).toContain("not activated");
+      expect(textOf(result)).toContain("not activated");
     });
 
     it("returns error for unknown tool name", async () => {
