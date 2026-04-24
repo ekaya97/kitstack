@@ -1,11 +1,13 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState, useMemo } from "react";
 import Link from "next/link";
 import { authClient } from "@/lib/auth-client";
 import { McpConnectModal } from "./mcp-connect-modal";
 import { WishlistButton } from "./wishlist-button";
 import { ShareButton } from "./share-modal";
+import { useSubscription, useSubscribe } from "@/hooks/use-subscription";
+import { useMyKits, useActivateKit } from "@/hooks/use-my-kits";
 
 interface Props {
   kitSlug: string;
@@ -22,7 +24,7 @@ type ActivationState =
   | "no-subscription"
   | "not-activated"
   | "deactivated"
-  | "connecting"    // showing MCP connect modal
+  | "connecting"
   | "activating"
   | "active";
 
@@ -35,108 +37,83 @@ export function KitActivateCard({
   linkedSkillSlug,
 }: Props) {
   const { data: session, isPending: sessionPending } = authClient.useSession();
-  const [state, setState] = useState<ActivationState>("loading");
+  const { data: subData, isLoading: subLoading } = useSubscription();
+  const { data: kitsData, isLoading: kitsLoading } = useMyKits();
+  const subscribeMut = useSubscribe();
+  const activateMut = useActivateKit();
+
+  const [showConnect, setShowConnect] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  // Manual override state for post-mutation transitions
+  const [overrideState, setOverrideState] = useState<ActivationState | null>(null);
 
-  useEffect(() => {
-    if (sessionPending) return;
+  const derivedState: ActivationState = useMemo(() => {
+    if (overrideState) return overrideState;
+    if (sessionPending || subLoading || kitsLoading) return "loading";
+    if (!session?.user) return "not-logged-in";
+    if (!subData?.subscription) return "no-subscription";
 
-    if (!session?.user) {
-      setState("not-logged-in");
-      return;
-    }
+    const kit = kitsData?.kits?.find((k) => k.kitSlug === kitSlug);
+    if (kit?.status === "active") return "active";
+    if (kit?.status === "deactivated") return "deactivated";
+    return "not-activated";
+  }, [sessionPending, subLoading, kitsLoading, session, subData, kitsData, kitSlug, overrideState]);
 
-    Promise.all([
-      fetch("/api/subscription").then((r) => r.json()),
-      fetch("/api/my-kits").then((r) => r.json()),
-    ]).then(([subData, kitsData]) => {
-      if (!subData.subscription) {
-        setState("no-subscription");
-        return;
-      }
-      const kit = kitsData.kits?.find(
-        (k: { kitSlug: string }) => k.kitSlug === kitSlug
-      );
-      if (kit?.status === "active") setState("active");
-      else if (kit?.status === "deactivated") setState("deactivated");
-      else setState("not-activated");
+  const handleStartActivation = () => {
+    setError(null);
+    setOverrideState("connecting");
+    setShowConnect(true);
+  };
+
+  const handleSubscribeAndConnect = () => {
+    setError(null);
+    subscribeMut.mutate("starter", {
+      onSuccess: () => {
+        setOverrideState("connecting");
+        setShowConnect(true);
+      },
+      onError: () => setError("Failed to subscribe"),
     });
-  }, [session, sessionPending, kitSlug]);
-
-  // Step 1: Subscribe (if needed), then show MCP connect modal
-  const handleStartActivation = async () => {
-    setError(null);
-    setState("connecting");
   };
 
-  const handleSubscribeAndConnect = async () => {
+  const handleMcpConnected = () => {
+    setOverrideState("activating");
     setError(null);
+    setShowConnect(false);
 
-    try {
-      const subRes = await fetch("/api/subscription", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ plan: "starter" }),
-      });
-
-      if (!subRes.ok) {
-        setError("Failed to subscribe");
-        return;
-      }
-
-      setState("connecting");
-    } catch {
-      setError("Something went wrong. Please try again.");
-    }
+    activateMut.mutate(kitSlug, {
+      onSuccess: () => setOverrideState("active"),
+      onError: (err) => {
+        setError(err.message || "Activation failed");
+        setOverrideState(null);
+      },
+    });
   };
 
-  // Step 2: After MCP connection verified, activate the kit
-  const handleMcpConnected = async () => {
-    setState("activating");
-    setError(null);
-
-    try {
-      const res = await fetch("/api/activate-kit", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ kitSlug }),
-      });
-
-      const data = await res.json();
-
-      if (!res.ok) {
-        setError(data.error || "Activation failed");
-        setState("not-activated");
-        return;
-      }
-
-      setState("active");
-    } catch {
-      setError("Something went wrong. Please try again.");
-      setState("not-activated");
-    }
-  };
+  const state = derivedState;
 
   return (
     <>
       <McpConnectModal
-        open={state === "connecting"}
+        open={showConnect}
         onConnected={handleMcpConnected}
-        onClose={() => setState("not-activated")}
+        onClose={() => {
+          setShowConnect(false);
+          setOverrideState(null);
+        }}
       />
 
-      <div className="ks-card p-4 sm:p-5 md:p-6 lg:sticky lg:top-8">
+      <div className="ks-card p-6 sticky top-8">
         <div className="font-mono text-[10px] text-ks-muted tracking-wider mb-2">
           SUBSCRIPTION KIT
         </div>
-        <div className="font-serif text-[36px] sm:text-[40px] md:text-[44px] text-ks-ink italic leading-none mb-1">
+        <div className="font-serif text-[44px] text-ks-ink italic leading-none mb-1">
           &euro;5<span className="text-lg">/mo</span>
         </div>
         <div className="font-sans text-[13px] text-ks-muted mb-5">
           Starter plan &middot; unlocks every kit
         </div>
 
-        {/* CTA based on state */}
         {state === "loading" && (
           <div className="h-[52px] bg-ks-paper-warm rounded-full animate-pulse mb-2.5" />
         )}
@@ -153,9 +130,10 @@ export function KitActivateCard({
         {state === "no-subscription" && (
           <button
             onClick={handleSubscribeAndConnect}
+            disabled={subscribeMut.isPending}
             className="ks-btn ks-btn-accent w-full justify-center !py-3.5 !text-[15px] mb-2.5"
           >
-            Subscribe &amp; activate &rarr;
+            {subscribeMut.isPending ? "Subscribing..." : "Subscribe & activate →"}
           </button>
         )}
 
@@ -214,31 +192,44 @@ export function KitActivateCard({
           </>
         )}
 
-        {state !== "active" && state !== "loading" && state !== "connecting" && state !== "activating" && (
-          <Link
-            href={`/kits/${kitSlug}/try`}
-            className="ks-btn w-full justify-center !py-3 !text-[13px] mb-2.5"
-          >
-            Try it free &rarr;
-          </Link>
-        )}
-
-        {state === "connecting" ? null : error ? (
+        {error && (
           <div className="font-sans text-[12px] text-red-600 mb-3">
             {error}
           </div>
-        ) : null}
+        )}
 
         {/* Action row */}
-        <div className="flex justify-between border-t border-ks-hair py-4">
+        <div className="flex justify-between border-t border-ks-hair pt-4 mb-5">
           <WishlistButton targetType="kit" targetSlug={kitSlug} />
           <ShareButton type="kit" slug={kitSlug} title={kitName} />
         </div>
 
+        {/* Features checklist */}
+        <div className="border-t border-ks-hair pt-4 flex flex-col gap-2">
+          <div className="font-mono text-[10px] text-ks-muted tracking-wider mb-1">
+            INCLUDES
+          </div>
+          {[
+            "Your own private database",
+            `${toolCount} built-in actions`,
+            `${uiCount} interactive views`,
+            `${schemaCount} data types`,
+            "Data export anytime",
+            "EU-hosted, your data stays private",
+          ].map((f) => (
+            <div
+              key={f}
+              className="font-sans text-[13px] text-ks-ink flex items-center gap-2"
+            >
+              <span className="text-green-700 text-xs">&#10003;</span>
+              {f}
+            </div>
+          ))}
+        </div>
 
         {/* Link to free skill */}
         {linkedSkillSlug && (
-          <div className="pt-4 border-t border-ks-hair">
+          <div className="mt-5 pt-4 border-t border-ks-hair">
             <Link
               href={`/skills/${linkedSkillSlug}`}
               className="font-sans text-[13px] text-ks-accent hover:underline"

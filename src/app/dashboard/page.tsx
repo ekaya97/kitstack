@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState, useCallback } from "react";
+import { useState, useEffect } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
 import { authClient } from "@/lib/auth-client";
@@ -9,38 +9,14 @@ import { Footer } from "@/components/shared/footer";
 import { CatMark } from "@/components/ui/cat-mark";
 import { Avatar } from "@/components/ui/avatar";
 import { AuthorCTA } from "@/components/shared/author-cta";
-
-interface McpTool {
-  name: string;
-  description: string;
-}
-
-interface McpApp {
-  name: string;
-  description: string;
-}
-
-interface MyKit {
-  kitSlug: string;
-  status: "active" | "deactivated" | "archived";
-  activatedAt: string | null;
-  deactivatedAt: string | null;
-  kitName: string | null;
-  kitCategory: string | null;
-  kitDescription: string | null;
-  kitReplaces: string | null;
-  kitSavingsPerMonth: number | null;
-  kitMcpTools: McpTool[] | null;
-  kitMcpApps: McpApp[] | null;
-  kitDbSchema: string | null;
-}
-
-interface SubscriptionData {
-  id: string;
-  plan: string;
-  status: string;
-  currentPeriodEnd: string | null;
-}
+import {
+  useSubscription,
+  useSubscribe,
+  useCancelSubscription,
+} from "@/hooks/use-subscription";
+import { useMyKits, useActivateKit, useDeactivateKit } from "@/hooks/use-my-kits";
+import { useMcpConnection } from "@/hooks/use-mcp-connection";
+import { useWishlists } from "@/hooks/use-wishlists";
 
 function getGreeting(): string {
   const hour = new Date().getHours();
@@ -52,51 +28,27 @@ function getGreeting(): string {
 export default function DashboardPage() {
   const router = useRouter();
   const { data: session, isPending } = authClient.useSession();
-  const [subscription, setSubscription] = useState<SubscriptionData | null>(null);
-  const [myKits, setMyKits] = useState<MyKit[]>([]);
-  const [kitLimit, setKitLimit] = useState<number | null>(null);
-  const [activeKitCount, setActiveKitCount] = useState(0);
-  const [loading, setLoading] = useState(true);
-  const [wishlistItems, setWishlistItems] = useState<{ targetType: string; targetSlug: string; createdAt: string | null }[]>([]);
-  const [mcpConnected, setMcpConnected] = useState(true); // default true to avoid flash
-  const [showCancelModal, setShowCancelModal] = useState(false);
-  const [cancelling, setCancelling] = useState(false);
 
-  const fetchData = useCallback(async () => {
-    try {
-      const [subRes, kitsRes, wishRes, mcpRes] = await Promise.all([
-        fetch("/api/subscription"),
-        fetch("/api/my-kits"),
-        fetch("/api/wishlists"),
-        fetch("/api/check-mcp-connection"),
-      ]);
-      const subData = await subRes.json();
-      const kitsData = await kitsRes.json();
-      const wishData = await wishRes.json();
-      const mcpData = await mcpRes.json();
-      setSubscription(subData.subscription ?? null);
-      setMyKits(kitsData.kits ?? []);
-      setKitLimit(kitsData.limit ?? null);
-      setActiveKitCount(kitsData.activeCount ?? 0);
-      setWishlistItems(wishData.wishlists ?? []);
-      setMcpConnected(mcpData.connected ?? false);
-    } catch {
-      // ignore
-    } finally {
-      setLoading(false);
-    }
-  }, []);
+  const { data: subData, isLoading: subLoading } = useSubscription();
+  const { data: kitsData, isLoading: kitsLoading } = useMyKits();
+  const { data: wishData } = useWishlists();
+  const { data: mcpData } = useMcpConnection();
+  const subscribe = useSubscribe();
+  const cancelSub = useCancelSubscription();
+  const activateKit = useActivateKit();
+  const deactivateKit = useDeactivateKit();
+
+  const [showCancelModal, setShowCancelModal] = useState(false);
 
   useEffect(() => {
     if (!isPending && !session?.user) {
       router.replace("/login");
     }
-    if (session?.user) {
-      fetchData();
-    }
-  }, [isPending, session, router, fetchData]);
+  }, [isPending, session, router]);
 
-  if (isPending || loading) {
+  const loading = isPending || subLoading || kitsLoading;
+
+  if (loading) {
     return (
       <div className="bg-ks-paper min-h-screen flex flex-col">
         <Nav />
@@ -111,6 +63,12 @@ export default function DashboardPage() {
 
   const user = session.user;
   const firstName = user.name?.split(" ")[0] || "there";
+  const subscription = subData?.subscription ?? null;
+  const myKits = kitsData?.kits ?? [];
+  const kitLimit = kitsData?.limit ?? null;
+  const activeKitCount = kitsData?.activeCount ?? 0;
+  const wishlistItems = wishData?.wishlists ?? [];
+  const mcpConnected = mcpData?.connected ?? true;
   const activeKits = myKits.filter((k) => k.status === "active");
   const deactivatedKits = myKits.filter((k) => k.status === "deactivated");
   const totalSaving = activeKits.reduce((s, k) => s + (k.kitSavingsPerMonth ?? 0), 0);
@@ -203,14 +161,8 @@ export default function DashboardPage() {
                 anytime.
               </p>
               <button
-                onClick={async () => {
-                  await fetch("/api/subscription", {
-                    method: "POST",
-                    headers: { "Content-Type": "application/json" },
-                    body: JSON.stringify({ plan: "starter" }),
-                  });
-                  fetchData();
-                }}
+                onClick={() => subscribe.mutate("starter")}
+                disabled={subscribe.isPending}
                 className="ks-btn ks-btn-accent !py-2.5 !px-5 !text-[14px]"
               >
                 Subscribe to Starter &mdash; &euro;5/mo
@@ -290,14 +242,9 @@ export default function DashboardPage() {
                     Details
                   </Link>
                   <button
-                    onClick={async (e) => {
+                    onClick={(e) => {
                       e.preventDefault();
-                      await fetch("/api/deactivate-kit", {
-                        method: "POST",
-                        headers: { "Content-Type": "application/json" },
-                        body: JSON.stringify({ kitSlug: kit.kitSlug }),
-                      });
-                      fetchData();
+                      deactivateKit.mutate(kit.kitSlug);
                     }}
                     className="ks-btn !py-2 !px-3.5 !text-[12px] !text-ks-muted hover:!text-red-600 hover:!border-red-200 ml-auto"
                   >
@@ -329,18 +276,7 @@ export default function DashboardPage() {
                       </div>
                     </div>
                     <button
-                      onClick={async () => {
-                        const res = await fetch("/api/activate-kit", {
-                          method: "POST",
-                          headers: { "Content-Type": "application/json" },
-                          body: JSON.stringify({ kitSlug: kit.kitSlug }),
-                        });
-                        if (!res.ok) {
-                          const data = await res.json();
-                          alert(data.error);
-                        }
-                        fetchData();
-                      }}
+                      onClick={() => activateKit.mutate(kit.kitSlug)}
                       className="ks-btn !py-2 !px-3.5 !text-[12px]"
                     >
                       Reactivate
@@ -536,17 +472,15 @@ export default function DashboardPage() {
                 Keep subscription
               </button>
               <button
-                disabled={cancelling}
-                onClick={async () => {
-                  setCancelling(true);
-                  await fetch("/api/subscription", { method: "DELETE" });
-                  setShowCancelModal(false);
-                  setCancelling(false);
-                  fetchData();
+                disabled={cancelSub.isPending}
+                onClick={() => {
+                  cancelSub.mutate(undefined, {
+                    onSuccess: () => setShowCancelModal(false),
+                  });
                 }}
                 className="flex-1 font-sans text-[13px] font-medium py-3 px-4 rounded-full border border-red-200 text-red-600 hover:bg-red-50 transition-colors disabled:opacity-50"
               >
-                {cancelling ? "Cancelling..." : "Yes, cancel"}
+                {cancelSub.isPending ? "Cancelling..." : "Yes, cancel"}
               </button>
             </div>
           </div>
