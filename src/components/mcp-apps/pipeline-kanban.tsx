@@ -29,43 +29,45 @@ const cols = [
 
 export function PipelineKanban({ compact = false }: { compact?: boolean }) {
   return (
-    <div className="grid grid-cols-4 gap-2">
-      {cols.map((c) => (
-        <div
-          key={c.stage}
-          className="bg-white border border-ks-hair rounded-md p-2"
-        >
-          <div className="flex justify-between items-center mb-2">
-            <div className="flex items-center gap-[5px]">
-              <span
-                className="w-[7px] h-[7px] rounded-full"
-                style={{ background: c.color }}
-              />
-              <span className="font-mono text-[10px] font-semibold tracking-wide">
-                {c.stage.toUpperCase()}
+    <div className="origin-top-left scale-[0.78] sm:scale-100 -mb-[22%] sm:mb-0">
+      <div className="grid grid-cols-4 gap-2">
+        {cols.map((c) => (
+          <div
+            key={c.stage}
+            className="bg-white border border-ks-hair rounded-md p-2"
+          >
+            <div className="flex justify-between items-center mb-2">
+              <div className="flex items-center gap-[5px]">
+                <span
+                  className="w-[7px] h-[7px] rounded-full"
+                  style={{ background: c.color }}
+                />
+                <span className="font-mono text-ks-muted text-[10px] font-semibold tracking-wide">
+                  {c.stage.toUpperCase()}
+                </span>
+              </div>
+              <span className="font-mono text-[9px] text-ks-muted">
+                {c.deals.length}
               </span>
             </div>
-            <span className="font-mono text-[9px] text-ks-muted">
-              {c.deals.length}
-            </span>
-          </div>
-          {c.deals.map((d, i) => (
-            <div key={i} className="bg-ks-paper-warm p-[7px] rounded mb-[5px]">
-              <div className="font-sans text-[11px] font-semibold">
-                {d.name}
-              </div>
-              {!compact && (
-                <div className="font-sans text-[9px] text-ks-muted mt-px">
-                  {d.contact}
+            {c.deals.map((d, i) => (
+              <div key={i} className="bg-ks-paper-warm p-[7px] rounded mb-[5px]">
+                <div className="font-sans text-ks-muted text-[11px] font-semibold">
+                  {d.name}
                 </div>
-              )}
-              <div className="font-mono text-[10px] text-ks-accent mt-[3px]">
-                &euro;{d.value.toLocaleString()}
+                {!compact && (
+                  <div className="font-sans text-[9px] text-ks-muted mt-px">
+                    {d.contact}
+                  </div>
+                )}
+                <div className="font-mono text-[10px] text-ks-accent mt-[3px]">
+                  &euro;{d.value.toLocaleString()}
+                </div>
               </div>
-            </div>
-          ))}
-        </div>
-      ))}
+            ))}
+          </div>
+        ))}
+      </div>
     </div>
   );
 }

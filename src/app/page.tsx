@@ -96,11 +96,11 @@ export default async function Landing() {
 
           {/* Kit card */}
           <div className="ks-card-ink p-[18px] relative">
-            <div className="flex justify-between items-center mb-2.5">
-              <span className="ks-chip !text-[10px] !border-ks-accent !text-ks-accent">
-                SUBSCRIPTION KIT &middot; via connector
+            <div className="flex flex-wrap justify-between items-center gap-1 mb-2.5">
+              <span className="ks-chip !text-[9px] sm:!text-[10px] !border-ks-accent !text-ks-accent">
+                SUBSCRIPTION KIT
               </span>
-              <span className="font-mono text-[10px] text-ks-faint">
+              <span className="font-mono text-[9px] sm:text-[10px] text-ks-faint">
                 data persists &middot; UI in chat
               </span>
             </div>
