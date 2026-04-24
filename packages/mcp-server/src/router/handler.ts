@@ -67,7 +67,7 @@ async function invokeKitLambda(arn: string, payload: unknown): Promise<unknown> 
 // --- Rate Limiting (DynamoDB-backed, per-userId, sliding window) ---
 
 const RATE_LIMIT_WINDOW_SEC = 60;
-const RATE_LIMIT_MAX_REQUESTS = 60; // 60 requests per minute per user
+const RATE_LIMIT_MAX_REQUESTS = 120; // 120 requests per minute per user (session loads re-trigger artifacts)
 
 async function checkRateLimit(userId: string): Promise<boolean> {
   const oauthTable = Resource.OAuthStore.name;
@@ -354,7 +354,14 @@ export async function handler(
       const allowed = await checkRateLimit(userId);
       if (!allowed) {
         audit({ action: "auth.failed", userId, detail: "rate limit exceeded" });
-        return json({ error: "Rate limit exceeded. Try again later." }, 429, origin);
+        return json({
+          jsonrpc: "2.0",
+          id: (safeParseBody(event.body) as any)?.id ?? null,
+          error: {
+            code: -32029,
+            message: "Rate limit exceeded (60 requests/minute). Wait a moment before retrying. This can happen when loading a session with many tool results.",
+          },
+        }, 429, origin);
       }
 
       const body = safeParseBody(event.body);
