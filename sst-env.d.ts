@@ -39,6 +39,10 @@ declare module "sst" {
       "type": "sst.sst.Secret"
       "value": string
     }
+    "KitAssets": {
+      "name": string
+      "type": "sst.aws.Bucket"
+    }
     "KitCrm": {
       "name": string
       "type": "sst.aws.Function"
@@ -54,10 +58,6 @@ declare module "sst" {
     "KitOutreach": {
       "name": string
       "type": "sst.aws.Function"
-    }
-    "KitRegistry": {
-      "name": string
-      "type": "sst.aws.Dynamo"
     }
     "LemonsqueezyApiKey": {
       "type": "sst.sst.Secret"

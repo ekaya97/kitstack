@@ -4,43 +4,46 @@ import {
   GetItemCommand,
   PutItemCommand,
   QueryCommand,
-  ScanCommand,
   UpdateItemCommand,
 } from "@aws-sdk/client-dynamodb";
 
 import { marshall, unmarshall } from "@aws-sdk/util-dynamodb";
+import { eq } from "drizzle-orm";
 import { Resource } from "sst";
 import type { KitRegistryItem, UserKitDbItem } from "./types";
+import { getTursoDb } from "./authz";
+import { kitRegistryTable } from "../../../../src/db/schema";
 
 const client = new DynamoDBClient({});
 
-// --- Kit Registry ---
+// --- Kit Registry (Turso) ---
 
 export async function getAllRegistryItems(): Promise<KitRegistryItem[]> {
-  const result = await client.send(
-    new ScanCommand({ TableName: Resource.KitRegistry.name })
-  );
-  return (result.Items || []).map((item) => unmarshall(item) as KitRegistryItem);
+  const db = getTursoDb();
+  const rows = await db.select().from(kitRegistryTable);
+  return rows as KitRegistryItem[];
 }
 
 export async function getRegistryItemsForKit(kitId: string): Promise<KitRegistryItem[]> {
-  const result = await client.send(
-    new QueryCommand({
-      TableName: Resource.KitRegistry.name,
-      KeyConditionExpression: "kitId = :kitId",
-      ExpressionAttributeValues: marshall({ ":kitId": kitId }),
-    })
-  );
-  return (result.Items || []).map((item) => unmarshall(item) as KitRegistryItem);
+  const db = getTursoDb();
+  const rows = await db.select().from(kitRegistryTable).where(eq(kitRegistryTable.kitId, kitId));
+  return rows as KitRegistryItem[];
 }
 
 export async function putRegistryItem(item: KitRegistryItem): Promise<void> {
-  await client.send(
-    new PutItemCommand({
-      TableName: Resource.KitRegistry.name,
-      Item: marshall(item),
-    })
-  );
+  const db = getTursoDb();
+  await db
+    .insert(kitRegistryTable)
+    .values(item)
+    .onConflictDoUpdate({
+      target: [kitRegistryTable.kitId, kitRegistryTable.toolName],
+      set: {
+        toolDescription: item.toolDescription,
+        inputSchema: item.inputSchema,
+        kitName: item.kitName,
+        kitDescription: item.kitDescription,
+      },
+    });
 }
 
 // --- User Kit Databases ---

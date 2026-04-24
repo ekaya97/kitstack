@@ -11,8 +11,12 @@ export interface KitToolInvocation {
   dbToken: string;
 }
 
+export type KitToolContentBlock =
+  | { type: "text"; text: string }
+  | { type: "resource"; resource: { uri: string; mimeType: string; text: string } };
+
 export interface KitToolResult {
-  content: Array<{ type: "text"; text: string }>;
+  content: KitToolContentBlock[];
   isError?: boolean;
 }
 
@@ -50,7 +54,6 @@ export interface KitRegistryItem {
   toolName: string;
   toolDescription: string;
   inputSchema: string; // JSON-serialized Zod-to-JSON-Schema
-  lambdaArn: string;
   kitName: string;
   kitDescription?: string;
 }
