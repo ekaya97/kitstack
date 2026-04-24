@@ -122,7 +122,7 @@ async function handleToolsCall(
   if (params?.name === "kit_view") {
     const args = (params.arguments || {}) as { id?: string; view?: string };
     const result = await handleKitViewCall(args, userId, getUserKitDbs);
-    return { jsonrpc: "2.0", id: request.id, result };
+    return { jsonrpc: "2.0" as const, id: request.id, result };
   }
 
   if (params?.name !== "kit") {

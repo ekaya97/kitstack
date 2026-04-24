@@ -47,17 +47,24 @@ const htmlCache = new Map<string, string>();
 async function fetchFromS3(s3Key: string): Promise<string | null> {
   if (htmlCache.has(s3Key)) return htmlCache.get(s3Key)!;
 
+  const bucket = (Resource as any).KitAssets?.name;
+  console.log(`[AppResources] Fetching s3://${bucket}/${s3Key}`);
+
+  if (!bucket) {
+    console.error("[AppResources] KitAssets bucket not linked");
+    return null;
+  }
+
   try {
     const result = await s3.send(
-      new GetObjectCommand({
-        Bucket: (Resource as any).KitAssets.name,
-        Key: s3Key,
-      })
+      new GetObjectCommand({ Bucket: bucket, Key: s3Key })
     );
     const content = await result.Body!.transformToString();
+    console.log(`[AppResources] Loaded ${s3Key} (${content.length} bytes)`);
     htmlCache.set(s3Key, content);
     return content;
-  } catch {
+  } catch (err: any) {
+    console.error(`[AppResources] S3 fetch failed: ${err.message}`);
     return null;
   }
 }

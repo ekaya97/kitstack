@@ -31,7 +31,7 @@ export const personalizeForProspect = defineTool({
     const hookCount = Object.keys(merged).length;
     const hookSummary = Object.entries(args.hooks).map(([k, v]) => `${k}: ${v}`).join(", ");
     let text = `Personalization hooks updated for "${prospect.name}" (${hookCount} total). Added: ${hookSummary}.`;
-    text += `\n\n**Next:** \`export_sequence\` to see the full sequence with hooks, or \`show_app\` with view \`prospect-list\`.`;
+    text += `\n\n**Next:** \`export_sequence\` to see the full sequence with hooks, or \`kit_view(id="cold-outreach", view="prospect-list")\` for interactive UI.`;
 
     return { content: [{ type: "text" as const, text }] };
   },

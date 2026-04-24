@@ -1,13 +1,9 @@
-// Minimal MCP Apps postMessage client — no SDK dependency.
-// Generic renderer: receives {kit, view, cmd, params} from the server,
-// calls the tool via MCP channel, renders the markdown result.
-// Ignores all other tool results (write actions, list, describe).
+// Minimal MCP Apps client — implements the sandbox proxy handshake
+// and tool result protocol without the full ext-apps SDK.
 
 const root = document.getElementById("root")!;
 let requestId = 0;
 const pending = new Map<number, { resolve: (v: any) => void; reject: (e: any) => void }>();
-
-// --- JSON-RPC over postMessage ---
 
 function send(msg: Record<string, unknown>) {
   window.parent.postMessage(msg, "*");
@@ -29,6 +25,7 @@ window.addEventListener("message", (event) => {
   const msg = event.data;
   if (!msg || msg.jsonrpc !== "2.0") return;
 
+  // Response to a request we sent
   if ("id" in msg && pending.has(msg.id)) {
     const { resolve, reject } = pending.get(msg.id)!;
     pending.delete(msg.id);
@@ -37,19 +34,31 @@ window.addEventListener("message", (event) => {
     return;
   }
 
+  // Sandbox proxy handshake — the proxy sends this when it's ready
+  if (msg.method === "ui/notifications/sandbox-proxy-ready") {
+    // Respond with the resource ready signal containing our HTML
+    sendNotification("ui/notifications/sandbox-resource-ready", {
+      html: document.documentElement.outerHTML,
+    });
+    return;
+  }
+
+  // Tool result from the host
   if (msg.method === "ui/notifications/tool-result") {
+    handleToolResult(msg.params);
+  }
+  if (msg.method === "ui/notifications/tool-input") {
     handleToolResult(msg.params);
   }
 });
 
-// --- Initialize ---
-
+// Initialize the MCP Apps connection
 async function init() {
   try {
     await sendRequest("ui/initialize", {
       protocolVersion: "2026-01-26",
-      capabilities: {},
-      clientInfo: { name: "KitStack", version: "1.0.0" },
+      appCapabilities: {},
+      appInfo: { name: "KitStack", version: "1.0.0" },
     });
     sendNotification("ui/notifications/initialized");
   } catch (e) {
@@ -60,18 +69,23 @@ async function init() {
 // --- Tool result handler ---
 
 function handleToolResult(params: any) {
-  const result = params?.result ?? params;
-  const text = result?.content?.find?.((c: any) => c.type === "text")?.text;
-  if (!text) return;
+  const candidates = [
+    params?.result?.content,
+    params?.content,
+  ];
 
-  // Only act on structured show_app data: {kit, view, cmd, params}
-  try {
-    const data = JSON.parse(text);
-    if (data.kit && data.view && data.cmd) {
-      loadView(data);
-    }
-  } catch {
-    // Not show_app JSON — ignore (write actions, list, describe)
+  for (const content of candidates) {
+    if (!Array.isArray(content)) continue;
+    const textBlock = content.find((c: any) => c.type === "text");
+    if (!textBlock?.text) continue;
+
+    try {
+      const data = JSON.parse(textBlock.text);
+      if (data.kit && data.view && data.cmd) {
+        loadView(data);
+        return;
+      }
+    } catch {}
   }
 }
 
@@ -85,10 +99,7 @@ interface ViewData {
   app?: string;
 }
 
-let lastView: ViewData | null = null;
-
 async function loadView(data: ViewData) {
-  lastView = data;
   const title = data.app || data.view.replace(/-/g, " ").replace(/\b\w/g, (c) => c.toUpperCase());
 
   root.innerHTML = `
@@ -100,7 +111,6 @@ async function loadView(data: ViewData) {
       <div id="ks-content" class="ks-loading">Loading...</div>
     </div>
   `;
-
   (window as any).__ksRefresh = () => loadView(data);
 
   try {
@@ -109,7 +119,13 @@ async function loadView(data: ViewData) {
       arguments: { id: data.kit, cmd: data.cmd, params: data.params || {} },
     });
 
-    const text = result?.content?.find?.((c: any) => c.type === "text")?.text || "";
+    let text = "";
+    const content = result?.content;
+    if (Array.isArray(content)) {
+      const tb = content.find((c: any) => c.type === "text");
+      if (tb) text = tb.text;
+    }
+
     getEl("ks-content").innerHTML = renderMarkdown(text);
     getEl("ks-content").className = "";
   } catch (err: any) {
@@ -118,60 +134,34 @@ async function loadView(data: ViewData) {
   }
 }
 
-// --- Markdown → HTML renderer ---
+// --- Markdown -> HTML ---
 
 function renderMarkdown(text: string): string {
   const lines = text.split("\n");
   let html = "";
   let inTable = false;
-
   for (const line of lines) {
     const t = line.trim();
-
-    if (t.startsWith("# ")) { closeTable(); html += `<h3>${esc(t.slice(2))}</h3>`; continue; }
-    if (t.startsWith("## ")) { closeTable(); html += `<h4>${esc(t.slice(3))}</h4>`; continue; }
-    if (t.startsWith("### ")) { closeTable(); html += `<h5>${esc(t.slice(4))}</h5>`; continue; }
-
-    if (t.startsWith("**") && t.includes(":**")) {
-      const i = t.indexOf(":**");
-      html += `<p><strong>${esc(t.slice(2, i))}:</strong> ${esc(t.slice(i + 3))}</p>`;
-      continue;
-    }
-    if (t.startsWith("**") && t.endsWith("**") && !t.includes("|")) {
-      html += `<p><strong>${esc(t.slice(2, -2))}</strong></p>`;
-      continue;
-    }
-
+    if (t.startsWith("# ")) { ct(); html += `<h3>${esc(t.slice(2))}</h3>`; continue; }
+    if (t.startsWith("## ")) { ct(); html += `<h4>${esc(t.slice(3))}</h4>`; continue; }
+    if (t.startsWith("### ")) { ct(); html += `<h5>${esc(t.slice(4))}</h5>`; continue; }
+    if (t.startsWith("**") && t.includes(":**")) { const i = t.indexOf(":**"); html += `<p><strong>${esc(t.slice(2, i))}:</strong> ${esc(t.slice(i + 3))}</p>`; continue; }
+    if (t.startsWith("**") && t.endsWith("**") && !t.includes("|")) { html += `<p><strong>${esc(t.slice(2, -2))}</strong></p>`; continue; }
     if (t.startsWith("|") && t.endsWith("|")) {
       const cells = t.split("|").slice(1, -1).map((c) => c.trim());
       if (cells.every((c) => /^[-:]+$/.test(c))) continue;
-      if (!inTable) {
-        html += `<table><thead><tr>${cells.map((c) => `<th>${esc(c)}</th>`).join("")}</tr></thead><tbody>`;
-        inTable = true;
-        continue;
-      }
-      html += `<tr>${cells.map((c) => `<td>${esc(c)}</td>`).join("")}</tr>`;
-      continue;
+      if (!inTable) { html += `<table><thead><tr>${cells.map((c) => `<th>${esc(c)}</th>`).join("")}</tr></thead><tbody>`; inTable = true; continue; }
+      html += `<tr>${cells.map((c) => `<td>${esc(c)}</td>`).join("")}</tr>`; continue;
     }
-
-    if (inTable && !t.startsWith("|")) closeTable();
-
-    if (t.startsWith("*") && t.endsWith("*") && !t.startsWith("**")) {
-      html += `<p class="ks-muted">${esc(t.slice(1, -1))}</p>`; continue;
-    }
+    if (inTable && !t.startsWith("|")) ct();
+    if (t.startsWith("*") && t.endsWith("*") && !t.startsWith("**")) { html += `<p class="ks-muted">${esc(t.slice(1, -1))}</p>`; continue; }
     if (t.startsWith("- ")) { html += `<p class="ks-list-item">${esc(t.slice(2))}</p>`; continue; }
     if (t) html += `<p>${esc(t)}</p>`;
   }
-
-  closeTable();
+  ct();
   return html || `<div class="ks-empty">No data yet.</div>`;
-
-  function closeTable() {
-    if (inTable) { html += "</tbody></table>"; inTable = false; }
-  }
+  function ct() { if (inTable) { html += "</tbody></table>"; inTable = false; } }
 }
-
-// --- Helpers ---
 
 function esc(s: string): string {
   return s.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;").replace(/`([^`]+)`/g, "<code>$1</code>");

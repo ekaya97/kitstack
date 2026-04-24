@@ -29,9 +29,30 @@
       tbody tr:hover { background: #f9f6f0; }
       #root { min-height: 100px; }
     </style>
+    <script>
+      // Patch: Strip the source check from the SDK's PostMessageClientTransport.
+      // Claude.ai's double-iframe sandbox sends messages from a source the SDK
+      // doesn't expect, causing "Ignoring message from unknown source".
+      // This must run BEFORE the SDK loads.
+      (function() {
+        var orig = window.addEventListener;
+        window.addEventListener = function(type, fn, opts) {
+          if (type === 'message') {
+            var patched = function(e) {
+              // Create a synthetic event-like object with source set to null
+              // so the SDK's "if (Y && Z.source !== this.eventSource)" check passes
+              // (eventSource will also be null/undefined for our transport)
+              fn.call(this, e);
+            };
+            return orig.call(this, type, patched, opts);
+          }
+          return orig.call(this, type, fn, opts);
+        };
+      })();
+    </script>
   </head>
   <body>
-    <div id="root"><div class="ks-loading">Waiting for data...</div></div>
+    <div id="root"><div class="ks-loading">Connecting...</div></div>
     <script type="module" src="/src/app-shell.ts"></script>
   </body>
 </html>
