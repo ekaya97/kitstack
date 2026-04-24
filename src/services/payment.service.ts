@@ -48,7 +48,8 @@ export async function createCheckoutUrl(
     "@lemonsqueezy/lemonsqueezy.js"
   );
 
-  lemonSqueezySetup({ apiKey: process.env.LEMONSQUEEZY_API_KEY! });
+  const { resource } = await import("@/lib/resource");
+  lemonSqueezySetup({ apiKey: resource("LemonsqueezyApiKey")?.value || "" });
 
   const checkout = await createCheckout(storeId, variantId, {
     checkoutData: {

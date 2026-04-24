@@ -1,6 +1,6 @@
 import { S3Client, GetObjectCommand } from "@aws-sdk/client-s3";
 import { getSignedUrl } from "@aws-sdk/s3-request-presigner";
-import { Resource } from "sst";
+import { resource } from "@/lib/resource";
 
 const s3 = new S3Client({});
 
@@ -13,7 +13,7 @@ export async function getDownloadUrl(
   }
 
   const command = new GetObjectCommand({
-    Bucket: (Resource as any).Assets.name,
+    Bucket: resource("Assets").name,
     Key: s3Key,
   });
 

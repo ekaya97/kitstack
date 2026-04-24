@@ -3,8 +3,23 @@ import { OTLPLogExporter } from "@opentelemetry/exporter-logs-otlp-http";
 import { logs } from "@opentelemetry/api-logs";
 import { resourceFromAttributes } from "@opentelemetry/resources";
 
-const posthogKey = process.env.NEXT_PUBLIC_POSTHOG_KEY;
-const posthogHost = process.env.POSTHOG_HOST ?? "https://eu.i.posthog.com";
+function getConfig() {
+  try {
+    const { Resource } = require("sst");
+    const R = Resource as any;
+    return {
+      key: R.PosthogKey?.value || process.env.NEXT_PUBLIC_POSTHOG_KEY,
+      host: R.PosthogHost?.value ?? "https://eu.i.posthog.com",
+    };
+  } catch {
+    return {
+      key: process.env.NEXT_PUBLIC_POSTHOG_KEY,
+      host: process.env.POSTHOG_HOST ?? "https://eu.i.posthog.com",
+    };
+  }
+}
+
+const { key: posthogKey, host: posthogHost } = getConfig();
 
 export const loggerProvider = posthogKey
   ? new LoggerProvider({

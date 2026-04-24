@@ -10,9 +10,10 @@ import {
   getUserKitDb,
   putUserKitDb,
   getUserKitDbs,
+  deleteUserKitDb,
   updateUserKitDbStatus,
 } from "../../packages/mcp-server/src/framework/dynamo";
-import { provisionKitDatabase } from "../../packages/mcp-server/src/framework/db-provisioner";
+import { provisionKitDatabase, destroyKitDatabase } from "../../packages/mcp-server/src/framework/db-provisioner";
 import type { UserKitDbItem } from "../../packages/mcp-server/src/framework/types";
 import { log } from "@/lib/logger";
 
@@ -86,6 +87,23 @@ export async function deactivateKitDb(
   await withRetry(
     () => updateUserKitDbStatus(userId, kitId, "deactivated"),
     `deactivateKitDb(${kitId})`
+  );
+}
+
+export async function deleteKitDb(
+  userId: string,
+  kitId: string
+): Promise<void> {
+  // Destroy the Turso database first (most expensive resource)
+  await withRetry(
+    () => destroyKitDatabase(userId, kitId),
+    `destroyKitDatabase(${kitId})`
+  );
+
+  // Then remove the DynamoDB record
+  await withRetry(
+    () => deleteUserKitDb(userId, kitId),
+    `deleteUserKitDb(${kitId})`
   );
 }
 

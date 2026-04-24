@@ -11,9 +11,10 @@ vi.mock("@aws-sdk/s3-request-presigner", () => ({
   getSignedUrl: vi.fn().mockResolvedValue("https://s3.example.com/presigned-url"),
 }));
 
-vi.mock("sst", () => ({
-  Resource: {
-    Assets: { name: "test-bucket" },
+vi.mock("@/lib/resource", () => ({
+  resource: (name: string) => {
+    if (name === "Assets") return { name: "test-bucket" };
+    return undefined;
   },
 }));
 
