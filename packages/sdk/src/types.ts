@@ -261,3 +261,30 @@ export interface KitDefinition {
   tools: ToolDefinition[];
   views?: ViewDefinition<any>[];
 }
+
+// --- Protocol types (Router ↔ Kit Lambda) ---
+
+/**
+ * The payload sent from the McpRouter to a kit Lambda when invoking a
+ * tool or loader. This is the wire format — kit handlers receive this
+ * as their event.
+ */
+export interface KitToolInvocation {
+  toolName?: string;
+  loaderSlug?: string;
+  args?: Record<string, unknown>;
+  userId: string;
+  kitId: string;
+  dbUrl: string;
+  dbToken: string;
+}
+
+/**
+ * Input for the `kit()` tool — the progressive discovery onion.
+ * `kit()` → list, `kit(cmd)` → describe, `kit(cmd, params)` → run.
+ */
+export interface KitToolInput {
+  id?: string;
+  cmd?: string;
+  params?: Record<string, unknown>;
+}

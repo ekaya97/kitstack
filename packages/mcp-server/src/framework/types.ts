@@ -1,62 +1,42 @@
-import type { z } from "zod";
+// Shared protocol types — owned by the SDK, re-exported here for convenience.
+export type {
+  KitToolInvocation,
+  KitToolContentBlock,
+  KitToolResult,
+  ToolDefinition,
+  KitDefinition,
+  KitToolInput,
+} from "../../../sdk/src/types";
 
-// --- Kit Tool Protocol (Router ↔ Kit Lambda) ---
+// Re-export JSON-RPC types from the SDK runtime
+export type {
+  JsonRpcRequest,
+  JsonRpcResponse,
+} from "../../../sdk/src/runtime/mcp-handler";
 
-export interface KitToolInvocation {
-  toolName: string;
-  args: Record<string, unknown>;
-  userId: string;
-  kitId: string;
-  dbUrl: string;
-  dbToken: string;
-}
+// --- MCP Tool Definition (router-level, includes _meta) ---
 
-export type KitToolContentBlock =
-  | { type: "text"; text: string }
-  | { type: "resource"; resource: { uri: string; mimeType: string; text: string } };
-
-export interface KitToolResult {
-  content: KitToolContentBlock[];
-  isError?: boolean;
-}
-
-// --- Kit Definition (what developers define) ---
-
-export interface ToolDefinition<TArgs extends z.ZodType = z.ZodType> {
+export interface McpToolDefinition {
   name: string;
   description: string;
-  args: TArgs;
-  handler: (db: any, args: z.infer<TArgs>) => Promise<KitToolResult>;
+  inputSchema: {
+    type: "object";
+    properties: Record<string, unknown>;
+    required?: string[];
+  };
+  _meta?: Record<string, unknown>;
 }
 
-export interface KitDefinition {
-  id: string;
-  name: string;
-  description: string;
-  schema: Record<string, any>;
-  migrationSql: string;
-  instructions: string;
-  tools: ToolDefinition[];
-}
-
-// --- Kit Tool Input (onion pattern) ---
-
-export interface KitToolInput {
-  id?: string;
-  cmd?: string;
-  params?: Record<string, unknown>;
-}
-
-// --- DynamoDB Items ---
+// --- DynamoDB Items (server infrastructure, not part of SDK contract) ---
 
 export interface KitRegistryItem {
   kitId: string;
   toolName: string;
   toolDescription: string;
-  inputSchema: string; // JSON-serialized Zod-to-JSON-Schema
+  inputSchema: string;
   kitName: string;
   kitDescription?: string;
-  lambdaResource?: string | null; // SST Resource name, e.g. "KitCrm"
+  lambdaResource?: string | null;
 }
 
 export interface UserKitDbItem {
@@ -71,32 +51,6 @@ export interface UserKitDbItem {
 export interface OAuthStoreItem {
   pk: string;
   sk: string;
-  data: string; // JSON
-  ttl: number; // Unix timestamp for DynamoDB TTL
-}
-
-// --- MCP Protocol ---
-
-export interface JsonRpcRequest {
-  jsonrpc: "2.0";
-  id: string | number;
-  method: string;
-  params?: Record<string, unknown>;
-}
-
-export interface JsonRpcResponse {
-  jsonrpc: "2.0";
-  id: string | number;
-  result?: unknown;
-  error?: { code: number; message: string; data?: unknown };
-}
-
-export interface McpToolDefinition {
-  name: string;
-  description: string;
-  inputSchema: {
-    type: "object";
-    properties: Record<string, unknown>;
-    required?: string[];
-  };
+  data: string;
+  ttl: number;
 }

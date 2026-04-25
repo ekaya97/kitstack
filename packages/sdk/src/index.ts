@@ -6,6 +6,8 @@ export type {
   ToolDefinition,
   ViewDefinition,
   KitDefinition,
+  KitToolInvocation,
+  KitToolInput,
   LoaderFn,
   LoaderData,
   Infer,
