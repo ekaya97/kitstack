@@ -7,7 +7,8 @@ import type {
 } from "../framework/types";
 import { Resource } from "sst";
 import { dispatchToolCall } from "./tool-dispatcher";
-import { getKitApps, readAppResource } from "./app-resources";
+import { getKitApps, getKitShellS3Key, readAppResource } from "./app-resources";
+import { getUserKitDb } from "../framework/dynamo";
 import { signAppToken } from "../framework/app-token";
 
 // View → data command mapping. The server tells the shell what tool to call for each view.
@@ -176,7 +177,9 @@ export async function handleKitCall(
 export async function handleKitViewCall(
   args: { id?: string; view?: string },
   userId: string,
-  getUserKitDbs: (userId: string) => Promise<UserKitDbItem[]>
+  getUserKitDbs: (userId: string) => Promise<UserKitDbItem[]>,
+  getAllTools: () => Promise<KitRegistryItem[]>,
+  invokeKitLambda: (arn: string, payload: unknown) => Promise<unknown>
 ): Promise<KitToolResult> {
   if (!args.id) {
     return {
@@ -197,7 +200,7 @@ export async function handleKitViewCall(
 
   // No view specified → text-only discovery (no iframe)
   if (!args.view) {
-    const apps = getKitApps(args.id);
+    const apps = await getKitApps(args.id);
     if (!apps.length) {
       return { content: [{ type: "text", text: `Kit "${args.id}" has no views.` }] };
     }
@@ -217,7 +220,7 @@ export async function handleKitViewCall(
   }
 
   // View specified → render the iframe
-  return handleShowApp(args.id, { view: args.view }, userId, activatedKitIds);
+  return handleShowApp(args.id, { view: args.view }, userId, activatedKitIds, getAllTools, invokeKitLambda);
 }
 
 // --- List Kits ---
@@ -274,10 +277,10 @@ async function handleListKits(
 
 // --- Discover ---
 
-function handleDiscover(
+async function handleDiscover(
   kitId: string,
   kitTools: KitRegistryItem[]
-): KitToolResult {
+): Promise<KitToolResult> {
   const kit = kitTools[0];
   let text = `## ${kit.kitName}\n\n`;
   if (kit.kitDescription) {
@@ -294,7 +297,7 @@ function handleDiscover(
   }
 
   // Point to kit_view for interactive UI
-  const apps = getKitApps(kitId);
+  const apps = await getKitApps(kitId);
   const viewData = VIEW_DATA[kitId];
   if (apps.length > 0 && viewData) {
     const viewList = apps
@@ -345,10 +348,12 @@ async function handleShowApp(
   kitId: string,
   params: Record<string, unknown>,
   userId: string,
-  activatedKitIds: Set<string>
+  activatedKitIds: Set<string>,
+  getAllTools: () => Promise<KitRegistryItem[]>,
+  invokeKitLambda: (arn: string, payload: unknown) => Promise<unknown>
 ): Promise<KitToolResult> {
   const view = params.view as string | undefined;
-  const apps = getKitApps(kitId);
+  const apps = await getKitApps(kitId);
 
   if (!apps.length) {
     return {
@@ -377,20 +382,57 @@ async function handleShowApp(
     };
   }
 
-  // Resolve what data command this view needs
+  // Invoke the kit Lambda to run the view's loader and get pre-loaded data
+  const allTools = await getAllTools();
+  const kitTool = allTools.find((t) => t.kitId === kitId);
+  let loaderData: unknown = null;
+
+  if (kitTool) {
+    // Resolve the Lambda ARN from SST Resource bindings
+    const KIT_RESOURCE_MAP: Record<string, string> = {
+      "meeting-action-tracker": "KitMeeting",
+      crm: "KitCrm",
+      "expense-tax-prep": "KitExpense",
+      "cold-outreach": "KitOutreach",
+    };
+    const resourceName = KIT_RESOURCE_MAP[kitId];
+    const fn = resourceName ? (Resource as any)[resourceName] : null;
+    const functionId = fn?.arn ?? fn?.name ?? null;
+
+    if (functionId) {
+      const userDb = await getUserKitDb(userId, kitId);
+      if (userDb) {
+        try {
+          const result = await invokeKitLambda(functionId, {
+            loaderSlug: app.slug,
+            userId,
+            kitId,
+            dbUrl: userDb.dbUrl,
+            dbToken: userDb.dbToken,
+          }) as any;
+          loaderData = result?.data ?? null;
+        } catch (err: any) {
+          console.error(`[kit_view] Loader invocation failed for ${kitId}/${app.slug}:`, err.message);
+        }
+      }
+    }
+  }
+
+  // Build the text payload with pre-loaded data
   const viewConfig = VIEW_DATA[kitId]?.[app.slug];
   const dataPayload = JSON.stringify({
     kit: kitId,
     view: app.slug,
     app: app.name,
-    cmd: viewConfig?.cmd ?? "list_sequences",
+    cmd: viewConfig?.cmd ?? "list_contacts",
     params: viewConfig?.params ?? {},
+    data: loaderData,
   });
 
-  // EmbeddedResource block with the app shell HTML.
-  // The text block carries structured JSON that the shell parses to know what data to fetch.
+  // Fetch kit-specific generated shell if available, otherwise universal shell
+  const shellS3Key = await getKitShellS3Key(kitId);
   const viewUri = `ui://kitstack/${kitId}/${app.slug}`;
-  const resource = await readAppResource(APP_SHELL_URI, userId, activatedKitIds);
+  const resource = await readAppResource(APP_SHELL_URI, userId, activatedKitIds, shellS3Key);
 
   if (!resource) {
     return {

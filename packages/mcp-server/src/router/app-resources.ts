@@ -1,6 +1,7 @@
 import { GetObjectCommand, S3Client } from "@aws-sdk/client-s3";
 import { Resource } from "sst";
 import { RESOURCE_MIME_TYPE } from "@modelcontextprotocol/ext-apps/server";
+import { getViewsForKit, type KitViewItem } from "../framework/dynamo";
 
 function getCdnUrl(): string {
   return (Resource as any).KitCdn?.url?.replace(/\/$/, "") || "";
@@ -11,21 +12,14 @@ const s3 = new S3Client({});
 /** The single app shell resource URI. Declared in KIT_TOOL_DEFINITION._meta.ui. */
 export const APP_SHELL_URI = "ui://kitstack/app";
 
-// ── Kit → App mapping ───────────────────────────────────────────
+// ── Kit → App mapping (legacy hardcoded, used as fallback) ──────
 
 interface KitApp {
   name: string;
   slug: string;
 }
 
-const KIT_APPS: Record<string, KitApp[]> = {
-  crm: [
-    { name: "Pipeline", slug: "pipeline" },
-    { name: "Contacts", slug: "contacts" },
-    { name: "Contact Detail", slug: "contact-detail" },
-    { name: "Dashboard", slug: "dashboard" },
-    { name: "Proposal", slug: "proposal" },
-  ],
+const KIT_APPS_FALLBACK: Record<string, KitApp[]> = {
   "cold-outreach": [
     { name: "Sequence Builder", slug: "sequence-builder" },
     { name: "Prospect List", slug: "prospect-list" },
@@ -109,14 +103,21 @@ export function listAppResources(activatedKitIds: Set<string>) {
   return resources;
 }
 
+/**
+ * Read the app shell HTML for a kit.
+ * If the kit has a generated shell in the registry (shell_s3_key), use that.
+ * Otherwise fall back to the universal app-shell.html.
+ */
 export async function readAppResource(
   uri: string,
   userId: string,
-  activatedKitIds: Set<string>
+  activatedKitIds: Set<string>,
+  kitShellS3Key?: string | null
 ): Promise<{ uri: string; mimeType: string; text: string; _meta?: any } | null> {
-  // Universal app shell
   if (uri === APP_SHELL_URI) {
-    const html = await fetchFromS3("apps/app-shell.html");
+    // Prefer kit-specific generated shell if available
+    const s3Key = kitShellS3Key || "apps/app-shell.html";
+    const html = await fetchFromS3(s3Key);
     if (!html) return null;
 
     const cdnUrl = getCdnUrl();
@@ -147,7 +148,26 @@ export async function readAppResource(
   return null;
 }
 
-export function getKitApps(kitId: string): KitApp[] {
-  return KIT_APPS[kitId] || [];
+/**
+ * Get apps/views for a kit.
+ * Reads from the kit_views registry table. Falls back to hardcoded map for legacy kits.
+ */
+export async function getKitApps(kitId: string): Promise<KitApp[]> {
+  // Try registry first
+  const views = await getViewsForKit(kitId);
+  if (views.length > 0) {
+    return views.map((v) => ({ name: v.viewName, slug: v.viewSlug }));
+  }
+  // Fallback for legacy kits not yet in registry
+  return KIT_APPS_FALLBACK[kitId] || [];
 }
 
+/**
+ * Get the shell S3 key for a kit from the registry.
+ * Returns null if the kit uses the universal shell.
+ */
+export async function getKitShellS3Key(kitId: string): Promise<string | null> {
+  const views = await getViewsForKit(kitId);
+  // All views for a kit share the same shell
+  return views[0]?.shellS3Key ?? null;
+}

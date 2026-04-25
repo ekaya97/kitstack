@@ -185,3 +185,15 @@ export const kitRegistryTable = sqliteTable("kit_registry", {
 }, (table) => [
   uniqueIndex("kit_registry_pk").on(table.kitId, table.toolName),
 ]);
+
+// Kit view registry (view definitions for MCP Apps)
+export const kitViewsTable = sqliteTable("kit_views", {
+  kitId: text("kit_id").notNull(),
+  viewSlug: text("view_slug").notNull(),
+  viewName: text("view_name").notNull(),
+  viewDescription: text("view_description").notNull(),
+  height: integer("height").default(400),
+  shellS3Key: text("shell_s3_key"),
+}, (table) => [
+  uniqueIndex("kit_views_pk").on(table.kitId, table.viewSlug),
+]);

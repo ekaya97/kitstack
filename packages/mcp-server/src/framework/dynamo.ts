@@ -12,7 +12,7 @@ import { eq } from "drizzle-orm";
 import { Resource } from "sst";
 import type { KitRegistryItem, UserKitDbItem } from "./types";
 import { getTursoDb } from "./authz";
-import { kitRegistryTable } from "../../../../src/db/schema";
+import { kitRegistryTable, kitViewsTable } from "../../../../src/db/schema";
 
 const client = new DynamoDBClient({});
 
@@ -44,6 +44,23 @@ export async function putRegistryItem(item: KitRegistryItem): Promise<void> {
         kitDescription: item.kitDescription,
       },
     });
+}
+
+// --- Kit Views (Turso) ---
+
+export interface KitViewItem {
+  kitId: string;
+  viewSlug: string;
+  viewName: string;
+  viewDescription: string;
+  height: number;
+  shellS3Key: string | null;
+}
+
+export async function getViewsForKit(kitId: string): Promise<KitViewItem[]> {
+  const db = getTursoDb();
+  const rows = await db.select().from(kitViewsTable).where(eq(kitViewsTable.kitId, kitId));
+  return rows as KitViewItem[];
 }
 
 // --- User Kit Databases ---
