@@ -60,12 +60,33 @@ export interface KitToolResult {
   isError?: boolean;
 }
 
+// --- Authorization ---
+
+/**
+ * A single authorization requirement returned by a tool's `authorize` hook.
+ * The runtime checks each requirement against the authz engine before
+ * calling the tool handler.
+ *
+ * @example
+ * ```typescript
+ * authorize: (args, ctx) => [
+ *   { relation: "owner", objectType: "sequence", objectId: args.sequenceId },
+ * ]
+ * ```
+ */
+export interface AuthzRequirement {
+  relation: string;
+  objectType: string;
+  objectId: string;
+}
+
 // --- Tool Definition ---
 
 export interface ToolBase {
   name: string;
   description: string;
   args: z.ZodType;
+  authorize?: (args: any, ctx: KitContext) => AuthzRequirement[];
 }
 
 /** Tool with load() (handler auto-generated if omitted) */

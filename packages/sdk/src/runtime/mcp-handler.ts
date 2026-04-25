@@ -23,6 +23,7 @@ import type {
   KitToolResult,
   KitToolContentBlock,
   ToolDefinition,
+  AuthzRequirement,
 } from "../types";
 import { zodToJsonSchema } from "./zod-to-json-schema";
 import { generateShell } from "../shell-template";
@@ -178,6 +179,36 @@ export interface McpHandlerConfig {
   kitCdn?: string;
   /** Pre-built shell HTML. If omitted, generated from shell-template.ts. */
   shellHtml?: string;
+  /**
+   * Authorization check function. Called for each {@link AuthzRequirement}
+   * returned by a tool's `authorize` hook. If any check returns `false`,
+   * the tool call is rejected with a "Forbidden" error.
+   *
+   * If omitted and a tool defines `authorize`, the hook is skipped
+   * (all calls are permitted). Inject the real authz engine in production.
+   *
+   * @example
+   * ```typescript
+   * import { check } from "@kitstack/authz";
+   *
+   * const handler = createMcpHandler({
+   *   kit: crmKit,
+   *   db,
+   *   checkAuthz: async (db, requirement, ctx) => {
+   *     const result = await check(db, {
+   *       subjectId: ctx.userId,
+   *       ...requirement,
+   *     });
+   *     return result.allowed;
+   *   },
+   * });
+   * ```
+   */
+  checkAuthz?: (
+    db: LibSQLDatabase,
+    requirement: AuthzRequirement,
+    ctx: KitContext
+  ) => Promise<boolean>;
 }
 
 /**
@@ -402,6 +433,19 @@ export function createMcpHandler(config: McpHandlerConfig): McpHandler {
         .map((i) => `${i.path.join(".")}: ${i.message}`)
         .join(", ");
       return errorResult(`Invalid arguments: ${issues}`);
+    }
+
+    // Run authorize hook if present and checkAuthz is configured
+    if (tool.authorize && config.checkAuthz) {
+      const requirements = tool.authorize(parsed.data, defaultCtx);
+      for (const req of requirements) {
+        const allowed = await config.checkAuthz(db, req, defaultCtx);
+        if (!allowed) {
+          return errorResult(
+            `Forbidden: missing "${req.relation}" on ${req.objectType} "${req.objectId}"`
+          );
+        }
+      }
     }
 
     return tool.handler!(db, parsed.data, defaultCtx);

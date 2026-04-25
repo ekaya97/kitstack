@@ -1,6 +1,6 @@
 import { createClient } from "@libsql/client";
 import { drizzle, type LibSQLDatabase } from "drizzle-orm/libsql";
-import type { KitDefinition, KitContext, KitToolResult } from "../types";
+import type { KitDefinition, KitContext, KitToolResult, AuthzRequirement } from "../types";
 import { kit } from "../result";
 import { MigrationError } from "../errors";
 
@@ -208,7 +208,18 @@ export interface TestKit {
  * ```
  */
 export async function createTestKit(
-  kitDef: KitDefinition
+  kitDef: KitDefinition,
+  options?: {
+    /**
+     * Authorization check function for testing tools with `authorize` hooks.
+     * If omitted, authorize hooks are skipped (all calls permitted).
+     */
+    checkAuthz?: (
+      db: LibSQLDatabase,
+      requirement: AuthzRequirement,
+      ctx: KitContext
+    ) => Promise<boolean>;
+  }
 ): Promise<TestKit> {
   const client = createClient({ url: ":memory:" });
   const db = drizzle(client);
@@ -260,6 +271,23 @@ export async function createTestKit(
         ],
         isError: true,
       };
+    }
+
+    // Run authorize hook if present and checkAuthz is configured
+    if (tool.authorize && options?.checkAuthz) {
+      const requirements = tool.authorize(parsed.data, ctx);
+      for (const req of requirements) {
+        const allowed = await options.checkAuthz(db, req, ctx);
+        if (!allowed) {
+          return {
+            content: [{
+              type: "text" as const,
+              text: `Forbidden: missing "${req.relation}" on ${req.objectType} "${req.objectId}"`,
+            }],
+            isError: true,
+          };
+        }
+      }
     }
 
     // If handler exists, call it. If only load exists, auto-wrap with kit.json().

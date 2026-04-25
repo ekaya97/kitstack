@@ -9,6 +9,7 @@ export type {
   LoaderFn,
   LoaderData,
   Infer,
+  AuthzRequirement,
 } from "./types";
 
 // Factory functions

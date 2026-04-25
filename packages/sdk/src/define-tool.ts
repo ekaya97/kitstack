@@ -1,6 +1,6 @@
 import type { z } from "zod";
 import type { LibSQLDatabase } from "drizzle-orm/libsql";
-import type { ToolBase, ToolDefinition, KitToolResult, KitContext } from "./types";
+import type { ToolBase, ToolDefinition, KitToolResult, KitContext, AuthzRequirement } from "./types";
 import { kit } from "./result";
 
 /**
@@ -90,6 +90,7 @@ export function defineTool<T extends z.ZodType, TData>(config: {
   name: string;
   description: string;
   args: T;
+  authorize?: (args: z.infer<T>, ctx: KitContext) => AuthzRequirement[];
   load: (db: LibSQLDatabase, args: z.infer<T>, ctx: KitContext) => Promise<TData>;
   handler?: (db: LibSQLDatabase, args: z.infer<T>, ctx: KitContext) => Promise<KitToolResult>;
 }): TypedToolWithLoad<T, TData>;
@@ -99,6 +100,7 @@ export function defineTool<T extends z.ZodType>(config: {
   name: string;
   description: string;
   args: T;
+  authorize?: (args: z.infer<T>, ctx: KitContext) => AuthzRequirement[];
   handler: (db: LibSQLDatabase, args: z.infer<T>, ctx: KitContext) => Promise<KitToolResult>;
 }): ToolDefinition;
 
