@@ -19,7 +19,7 @@ import {
 } from "./oauth-store";
 import {
   mcpAllowedOrigins,
-  oauthStoreTable,
+  mcpAuthStoreTable,
   mcpInternalApiKey,
   betterAuthUrl,
   devRelayUrl,
@@ -74,7 +74,7 @@ const RATE_LIMIT_WINDOW_SEC = 60;
 const RATE_LIMIT_MAX_REQUESTS = 120; // 120 requests per minute per user (session loads re-trigger artifacts)
 
 async function checkRateLimit(userId: string): Promise<boolean> {
-  const oauthTable = oauthStoreTable();
+  const oauthTable = mcpAuthStoreTable();
   if (!oauthTable) return true; // fail-open if table not configured
 
   const windowKey = Math.floor(Date.now() / 1000 / RATE_LIMIT_WINDOW_SEC);
@@ -332,7 +332,7 @@ export async function handler(
         try {
           const auth = await verifyAccessToken(token);
           log.debug("Revoke: token is a valid JWT", { userId: auth.userId });
-          const oauthTable = oauthStoreTable();
+          const oauthTable = mcpAuthStoreTable();
           if (auth.userId && oauthTable) {
             const scan = await dynamo.send(
               new ScanCommand({
@@ -384,7 +384,7 @@ export async function handler(
         return json({ connected: false, reason: "missing_userId" }, 400, origin);
       }
 
-      const oauthTable = oauthStoreTable();
+      const oauthTable = mcpAuthStoreTable();
       if (!oauthTable) {
         return json({ connected: false, reason: "server_config_error" }, 500, origin);
       }
@@ -484,18 +484,18 @@ export async function handler(
         return json({ error: "Dev session disconnected" }, 502, origin);
       }
 
-      // Poll DynamoDB for the response
+      // Poll DevRelayStore for the response
+      const { getRelayResponse, deleteRelayResponse } = await import("../relay/store.js");
       const maxWait = 25; // 25 iterations × 200ms = 5 seconds max
       for (let i = 0; i < maxWait; i++) {
-        const response = await getOAuthItem(`DEV_REQ#${requestId}`, "RESPONSE");
-        if (response) {
-          const responseBody = JSON.parse((response as any).body || "null");
-          // Clean up
-          deleteOAuthItem(`DEV_REQ#${requestId}`, "RESPONSE").catch(() => {});
+        const responseBody = await getRelayResponse(requestId);
+        if (responseBody) {
+          const parsed = JSON.parse(responseBody);
+          deleteRelayResponse(requestId).catch(() => {});
           return json({
             jsonrpc: "2.0",
             id: (body as any).id ?? null,
-            ...responseBody,
+            ...parsed,
           }, 200, origin);
         }
         await new Promise((r) => setTimeout(r, 200));

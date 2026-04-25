@@ -1,14 +1,14 @@
 /**
  * WebSocket $default handler for the DevRelay.
  *
- * Receives responses from the CLI dev server and stores them in OAuthStore
- * for the McpRouter relay route to pick up.
+ * Receives responses from the CLI dev server and stores them in
+ * DevRelayStore for the McpRouter relay route to pick up.
  *
  * Message format: { requestId: string, result: unknown }
  */
 
 import type { APIGatewayProxyWebsocketHandlerV2 } from "aws-lambda";
-import { putOAuthItem } from "../router/oauth-store";
+import { putRelayResponse } from "./store";
 
 export const handler: APIGatewayProxyWebsocketHandlerV2 = async (event) => {
   const body = event.body;
@@ -28,14 +28,7 @@ export const handler: APIGatewayProxyWebsocketHandlerV2 = async (event) => {
     return { statusCode: 400, body: "Missing requestId" };
   }
 
-  // Store the response for the McpRouter relay route to poll
-  const ttl = Math.floor(Date.now() / 1000) + 60; // 60 second TTL
-  await putOAuthItem({
-    pk: `DEV_REQ#${requestId}`,
-    sk: "RESPONSE",
-    body: JSON.stringify(result),
-    ttl,
-  } as any);
+  await putRelayResponse(requestId, JSON.stringify(result));
 
   return { statusCode: 200, body: "OK" };
 };

@@ -16,7 +16,7 @@ export const tursoAuthToken = () => Resource.TursoAuthToken.value;
 // --- DynamoDB Tables ---
 
 export const userKitDbsTable = () => Resource.UserKitDbs.name;
-export const oauthStoreTable = () => Resource.OAuthStore.name;
+export const mcpAuthStoreTable = () => (Resource as any).MCPAuthStore.name;
 
 // --- Auth & Security ---
 
@@ -31,6 +31,7 @@ export const betterAuthUrl = () => Resource.BetterAuthUrl.value || "http://local
 // --- Relay ---
 
 export const devRelayUrl = (): string => (Resource as any).DevRelay?.url?.replace(/\/$/, "") || "";
+export const devRelayStoreTable = (): string => (Resource as any).DevRelayStore?.name || "";
 
 // --- CDN & Storage ---
 

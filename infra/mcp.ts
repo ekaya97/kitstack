@@ -21,7 +21,7 @@ export const userKitDbs = new sst.aws.Dynamo("UserKitDbs", {
   primaryIndex: { hashKey: "userId", rangeKey: "kitId" },
 });
 
-export const oauthStore = new sst.aws.Dynamo("OAuthStore", {
+export const mcpAuthStore = new sst.aws.Dynamo("MCPAuthStore", {
   fields: { pk: "string", sk: "string" },
   primaryIndex: { hashKey: "pk", rangeKey: "sk" },
   ttl: "ttl",
@@ -88,6 +88,14 @@ export const appData = new sst.aws.Function("AppData", {
   ],
 });
 
+// --- DevRelay store (short-lived relay requests/responses + sessions) ---
+
+export const devRelayStore = new sst.aws.Dynamo("DevRelayStore", {
+  fields: { pk: "string", sk: "string" },
+  primaryIndex: { hashKey: "pk", rangeKey: "sk" },
+  ttl: "ttl",
+});
+
 // --- DevRelay WebSocket API (for kitstack dev relay mode) ---
 
 const relayConnect = new sst.aws.Function("RelayConnect", {
@@ -96,7 +104,7 @@ const relayConnect = new sst.aws.Function("RelayConnect", {
   memory: "128 MB",
   runtime: "nodejs22.x",
   architecture: "arm64",
-  link: [oauthStore, tursoDbUrl, tursoAuthToken],
+  link: [mcpAuthStore, tursoDbUrl, tursoAuthToken],
 });
 
 const relayDisconnect = new sst.aws.Function("RelayDisconnect", {
@@ -105,7 +113,7 @@ const relayDisconnect = new sst.aws.Function("RelayDisconnect", {
   memory: "128 MB",
   runtime: "nodejs22.x",
   architecture: "arm64",
-  link: [oauthStore],
+  link: [devRelayStore],
 });
 
 const relayDefault = new sst.aws.Function("RelayDefault", {
@@ -114,7 +122,7 @@ const relayDefault = new sst.aws.Function("RelayDefault", {
   memory: "128 MB",
   runtime: "nodejs22.x",
   architecture: "arm64",
-  link: [oauthStore],
+  link: [devRelayStore],
 });
 
 export const devRelay = new sst.aws.ApiGatewayWebSocket("DevRelay", {
@@ -139,8 +147,9 @@ export const mcpRouter = new sst.aws.Function("McpRouter", {
     kitCdn,
     kitLambdaInfra,
     userKitDbs,
-    oauthStore,
+    mcpAuthStore,
     devRelay,
+    devRelayStore,
     appData,
     tursoDbUrl,
     tursoAuthToken,

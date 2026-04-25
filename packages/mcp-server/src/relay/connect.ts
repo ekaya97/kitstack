@@ -57,7 +57,7 @@ export const handler: APIGatewayProxyWebsocketHandlerV2 = async (event) => {
   const userId = sessions[0].userId;
   const connectionId = event.requestContext.connectionId!;
 
-  // Store session in DynamoDB for message routing
+  // Store session in OAuthStore for message routing
   const ttl = Math.floor(Date.now() / 1000) + 86400; // 24 hours
   await putOAuthItem({
     pk: `DEV_SESSION#${sessionId}`,
