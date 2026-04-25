@@ -256,7 +256,19 @@ export interface KitDefinition {
   name: string;
   description: string;
   schema: Record<string, unknown>;
-  migrationSql: string;
+  /**
+   * Raw SQL migration statements, separated by `;`.
+   * Use this when not using Drizzle (e.g. Prisma, hand-written SQL).
+   * If omitted, the SDK reads `.sql` files from `migrationsDir`.
+   * At least one of `migrationSql` or `migrationsDir` should be provided.
+   */
+  migrationSql?: string;
+  /**
+   * Path to a directory containing numbered `.sql` migration files
+   * (e.g. drizzle-kit output). Files are applied in alphabetical order.
+   * If omitted, falls back to `migrationSql`.
+   */
+  migrationsDir?: string;
   instructions: string;
   tools: ToolDefinition[];
   views?: ViewDefinition<any>[];

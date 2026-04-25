@@ -68,7 +68,7 @@ describe("provisionKitLambda — create new function", () => {
 
   it("sends correct CreateFunctionCommand parameters", async () => {
     await provisionKitLambda(BASE_OPTIONS);
-    const createCall = mockSend.mock.calls.find((c: any) => c[0]._type === "CreateFunction");
+    const createCall = mockSend.mock.calls.find((c: any) => c[0]._type === "CreateFunction")!;
     const input = createCall[0].input;
     expect(input.FunctionName).toBe("Kit-crm");
     expect(input.Runtime).toBe("nodejs22.x");
@@ -84,7 +84,7 @@ describe("provisionKitLambda — create new function", () => {
 
   it("uses custom memory and timeout", async () => {
     await provisionKitLambda({ ...BASE_OPTIONS, memory: 512, timeout: 60 });
-    const createCall = mockSend.mock.calls.find((c: any) => c[0]._type === "CreateFunction");
+    const createCall = mockSend.mock.calls.find((c: any) => c[0]._type === "CreateFunction")!;
     expect(createCall[0].input.MemorySize).toBe(512);
     expect(createCall[0].input.Timeout).toBe(60);
   });

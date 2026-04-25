@@ -3,6 +3,7 @@ import { drizzle, type LibSQLDatabase } from "drizzle-orm/libsql";
 import type { KitDefinition, KitContext, KitToolResult, AuthzRequirement } from "../types";
 import { kit } from "../result";
 import { MigrationError } from "../errors";
+import { resolveMigrationSql } from "../migrations";
 
 /**
  * An isolated test harness for a kit. Wraps an in-memory SQLite database
@@ -225,7 +226,8 @@ export async function createTestKit(
   const db = drizzle(client);
 
   async function runMigrations() {
-    const statements = kitDef.migrationSql
+    const sql = resolveMigrationSql(kitDef);
+    const statements = sql
       .split(";")
       .map((s) => s.trim())
       .filter(Boolean);

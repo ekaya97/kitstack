@@ -129,8 +129,10 @@ export async function dev(args: string[]) {
   }
 
   // Provision local SQLite
+  const { resolveMigrationSql } = await import("../../migrations.js");
+  const migrationSql = resolveMigrationSql(kit);
   const fullDbPath = resolve(process.cwd(), dbPath);
-  const db = await provisionDevDb(fullDbPath, kit.migrationSql, { reset: resetDb });
+  const db = await provisionDevDb(fullDbPath, migrationSql, { reset: resetDb });
 
   // Views mode — start DevKit HTTP server
   if (views) {

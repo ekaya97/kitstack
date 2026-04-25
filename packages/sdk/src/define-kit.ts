@@ -102,7 +102,8 @@ export function defineKit(config: {
   name: string;
   description: string;
   schema: Record<string, unknown>;
-  migrationSql: string;
+  migrationSql?: string;
+  migrationsDir?: string;
   instructions: string;
   tools: ToolDefinition[];
   views?: ViewDefinition[];
