@@ -1,6 +1,6 @@
 import { execSync } from "node:child_process";
 import { readdirSync, existsSync, readFileSync, statSync } from "node:fs";
-import { resolve, join, relative } from "node:path";
+import { resolve, join } from "node:path";
 import { S3Client, PutObjectCommand } from "@aws-sdk/client-s3";
 import { Resource } from "sst";
 
@@ -57,51 +57,12 @@ async function uploadSkills() {
   }
 }
 
-// --- Upload MCP App builds ---
-
-async function uploadMcpApps() {
-  const distDir = resolve(ROOT, "packages/mcp-apps/dist");
-  if (!existsSync(distDir)) {
-    console.log("No mcp-apps/dist found. Run 'cd packages/mcp-apps && npm run build' first.");
-    return;
-  }
-
-  console.log("\nUploading MCP App builds...");
-
-  function walkDir(dir: string): string[] {
-    const files: string[] = [];
-    for (const entry of readdirSync(dir, { withFileTypes: true })) {
-      const fullPath = join(dir, entry.name);
-      if (entry.isDirectory()) {
-        files.push(...walkDir(fullPath));
-      } else {
-        files.push(fullPath);
-      }
-    }
-    return files;
-  }
-
-  const files = walkDir(distDir);
-  for (const filePath of files) {
-    const key = `mcp-apps/${relative(distDir, filePath)}`;
-    const ext = filePath.split(".").pop() || "";
-    const contentTypes: Record<string, string> = {
-      html: "text/html",
-      js: "application/javascript",
-      css: "text/css",
-      json: "application/json",
-    };
-    await uploadFile(key, filePath, contentTypes[ext] || "application/octet-stream");
-  }
-}
-
 // --- Main ---
 
 async function main() {
   console.log(`Bucket: ${BUCKET}`);
 
   await uploadSkills();
-  await uploadMcpApps();
 
   console.log("\nDone.");
 }
