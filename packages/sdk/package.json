@@ -2,6 +2,9 @@
   "name": "@kitstackdev/kit",
   "version": "0.0.1",
   "type": "module",
+  "bin": {
+    "kitstack": "./src/cli/index.ts"
+  },
   "exports": {
     ".": "./src/index.ts",
     "./view": "./views/src/shared/use-kit.ts",
