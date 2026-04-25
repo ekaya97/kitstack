@@ -14,7 +14,7 @@ export default defineConfig({
   },
   build: {
     outDir: "dist-views",
-    cssCodeSplit: false, // bundle all CSS into shared chunk
+    cssCodeSplit: false, // single shared.css (6.3KB gzip) — per-kit purging deferred to SDK
     rollupOptions: {
       input: {
         // CRM
