@@ -81,7 +81,7 @@ When validation fails, `defineKit` attempts to generate a suggested corrected na
 ### Dev database provisioning
 
 - **Statement splitting:** Splitting on `;` is simple but fragile — it would break on semicolons inside string literals. In practice, migration SQL for kits is machine-generated DDL (CREATE TABLE, CREATE INDEX) that never contains embedded semicolons. If this becomes a problem, we can switch to a proper SQL parser.
-- **`CREATE TABLE IF NOT EXISTS` is essential:** Without it, running `kitstack dev` twice without `--reset` would fail. All kit migrations should use `IF NOT EXISTS` for idempotency.
+- **`IF NOT EXISTS` is auto-injected:** `provisionDevDb()` automatically adds `IF NOT EXISTS` to all `CREATE TABLE` statements at runtime, so drizzle-kit output (which omits it) works without modification. Kit developers don't need to worry about this.
 - **File URL format:** libSQL expects `file:` prefix for local databases (e.g. `file:.kitstack/dev.db`). Forgetting the prefix causes a connection error that looks like a network issue, which is confusing.
 
 ---

@@ -167,6 +167,33 @@ There is no distinction. All kits — whether maintained by the platform team or
 
 The previous approach of declaring first-party kits as `sst.aws.Function` in `infra/mcp.ts` has been removed. All per-kit Lambda definitions are now dynamically provisioned via `provisionKitLambda()`.
 
+### Kit visibility and access control
+
+`seedRegistry()` accepts `visibility` (default: `"private"`) and `authorId` fields. The `kit_registry` table stores these on every tool row.
+
+| Visibility | Who can see it | Who can use it |
+|-----------|---------------|---------------|
+| `private` | Only users with `activator` authz tuple | Same |
+| `unlisted` | Anyone with the direct URL | Users with `activator` tuple |
+| `public` | Everyone (marketplace listing) | Users with `activator` tuple |
+
+The `kitstack deploy` command sets `visibility: "private"` and auto-grants `activator` + `author` authz tuples to the deployer. Use `--public` to make the kit visible on the marketplace.
+
+### `kitstack deploy` CLI command
+
+The deploy command (`packages/sdk/src/cli/commands/deploy.ts`) wraps the full pipeline:
+
+```bash
+npx sst shell -- kitstack deploy --config kits/crm
+```
+
+It requires `kitstack login` first (reads credentials for authz tuple creation). Steps:
+1. Read `.kitstack/build/manifest.json`
+2. Upload to S3 via `uploadKitBundle()`
+3. Seed registry via `seedRegistry()` with visibility + authorId
+4. Provision Lambda via `provisionKitLambda()`
+5. Grant deployer `activator` + `author` authz tuples
+
 ### Common mistakes
 
 1. **Running deploy without `sst shell`.** The script needs `Resource.KitAssets.name` and other SST bindings. Without `sst shell`, these are undefined and the deploy fails silently or with cryptic errors.

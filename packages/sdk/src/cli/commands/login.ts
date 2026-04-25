@@ -4,12 +4,13 @@
  * 1. Starts a temporary HTTP server on localhost (port 9876, or next available).
  * 2. Opens the browser to `https://kitstack.co/cli/authorize?callback=http://localhost:{port}`.
  * 3. User logs in (BetterAuth) and clicks "Authorize".
- * 4. KitStack redirects back to localhost with `?token=kst_...&email=...`.
+ * 4. KitStack creates a BetterAuth session (1-year expiry) and redirects
+ *    back to localhost with `?token={sessionToken}&email=...`.
  * 5. Saves credentials to `~/.kitstack/credentials.json` (0600 permissions).
- * 6. Prints confirmation and exits.
+ * 6. Prints confirmation and exits. Times out after 2 minutes.
  *
- * The token is opaque (not JWT), prefixed with `kst_`, and revocable from
- * the KitStack dashboard. No expiration by default.
+ * The token is a standard BetterAuth session token stored in Turso's
+ * `session` table. It can be revoked from the web app's session management.
  *
  * @example
  * ```sh

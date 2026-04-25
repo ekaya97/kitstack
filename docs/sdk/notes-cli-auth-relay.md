@@ -51,8 +51,8 @@ The `connectRelay()` function returns `Promise<never>` — it runs until the pro
 Three Lambda handlers back the WebSocket API Gateway:
 
 - **`connect.ts`** — `$connect` route. Validates the CLI token against the BetterAuth `session` table in Turso (checks token exists and is not expired), then stores the WebSocket connectionId keyed by sessionId in DynamoDB with a 24-hour TTL.
-- **`default.ts`** — `$default` route. Receives responses from the CLI (JSON `{ requestId, result }`) and stores them in OAuthStore with a 60-second TTL for the McpRouter relay route to poll.
-- **`disconnect.ts`** — `$disconnect` route. Best-effort cleanup. Since `$disconnect` does not guarantee query params, stale sessions rely on the 24-hour TTL for cleanup. A GSI on connectionId would make this more efficient but is not needed at the current scale (max 2 sessions per user).
+- **`default.ts`** — `$default` route. Receives responses from the CLI (JSON `{ requestId, result }`) and stores them in **DevRelayStore** (a separate DynamoDB table) with a 5-minute TTL for the McpRouter relay route to poll.
+- **`disconnect.ts`** — `$disconnect` route. No-op — relies on TTL for cleanup (5 minutes for relay data in DevRelayStore, 24 hours for sessions in MCPAuthStore).
 
 ## What was learned
 
@@ -102,9 +102,26 @@ The `connectRelay()` function returns `Promise<never>` via `new Promise(() => {}
 
 stdio mode remains the primary development mode. Relay is useful when the developer cannot configure stdio directly (e.g., using a web-based LLM client) or wants to share a dev session.
 
-### Response storage with short TTL
+### Response storage in DevRelayStore
 
-The `$default` handler stores responses with a 60-second TTL. This is intentionally short because responses are only needed until the McpRouter relay route polls for them. If a response is not picked up within 60 seconds, the original HTTP request to the McpRouter will have already timed out (API Gateway has a 29-second timeout). The short TTL prevents DynamoDB from accumulating stale response data.
+Relay responses are stored in a dedicated **DevRelayStore** DynamoDB table (separate from MCPAuthStore which handles OAuth/sessions). The `$default` handler stores responses with a 5-minute TTL. The McpRouter relay route polls DevRelayStore with `ConsistentRead: true` at 200ms intervals (max 5 seconds) for the response. In practice, the CLI responds in <100ms so it's usually 1-2 reads.
+
+The 5-minute TTL is generous — responses are typically consumed within seconds. The TTL just ensures stale data is cleaned up if the McpRouter times out or the response is never read.
+
+### Deterministic session IDs
+
+Session IDs are derived from a SHA-256 hash of the user's email (first 8 hex chars). This means the same developer always gets the same relay URL — no need to re-add the MCP connection in Claude.ai after restarting `kitstack dev`.
+
+### DynamoDB table separation
+
+Two DynamoDB tables are used for relay:
+
+| Table | Purpose | TTL |
+|-------|---------|-----|
+| **MCPAuthStore** | Dev sessions (`DEV_SESSION#`), OAuth clients, refresh tokens, rate limits | Per-item (24h sessions) |
+| **DevRelayStore** | Relay request/response mailbox (`REQ#`) | 5 minutes |
+
+This separation keeps transient relay data out of the auth store.
 
 ## How to use it
 
