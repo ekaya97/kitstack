@@ -34,7 +34,7 @@ export interface OAuthServerMetadata {
  *
  * The SDK ships two built-in adapters:
  * - `none()` — no-op adapter for local development and testing
- * - `kitstack()` (planned) — delegates to KitStack's identity provider
+ * - `kitstack()` — delegates to KitStack's identity provider (OAuth 2.0)
  *
  * Kit authors can implement this interface to integrate any OAuth provider
  * (e.g. Auth0, Clerk, or their own database-backed auth).
