@@ -8,6 +8,7 @@ export type {
   KitDefinition,
   LoaderFn,
   LoaderData,
+  Infer,
 } from "./types";
 
 // Factory functions
@@ -18,3 +19,6 @@ export { defineLoader } from "./define-loader";
 
 // Result helpers
 export { kit } from "./result";
+
+// Build
+export { buildKit } from "./build";

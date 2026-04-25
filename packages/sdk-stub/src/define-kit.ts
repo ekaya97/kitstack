@@ -2,6 +2,7 @@ import type { KitDefinition, ToolDefinition, ViewDefinition } from "./types";
 
 export function defineKit(config: {
   id: string;
+  version: string;
   name: string;
   description: string;
   schema: Record<string, unknown>;
@@ -10,6 +11,13 @@ export function defineKit(config: {
   tools: ToolDefinition[];
   views?: ViewDefinition[];
 }): KitDefinition {
+  // Validate every tool has at least load() or handler()
+  for (const tool of config.tools) {
+    if (!tool.load && !tool.handler) {
+      throw new Error(`Tool "${tool.name}" must have at least a load() or handler() function.`);
+    }
+  }
+
   // Validate unique tool names
   const toolNames = config.tools.map((t) => t.name);
   const uniqueToolNames = new Set(toolNames);

@@ -5,7 +5,8 @@ export function defineView<TLoader extends LoaderFn>(config: {
   name: string;
   description: string;
   loader: TLoader;
-  component: string;
+  component: React.ComponentType<{ data: Awaited<ReturnType<TLoader>> }>;
+  height?: number;
   permissions?: {
     clipboardWrite?: boolean;
   };
