@@ -56,6 +56,7 @@ export interface KitRegistryItem {
   inputSchema: string; // JSON-serialized Zod-to-JSON-Schema
   kitName: string;
   kitDescription?: string;
+  lambdaResource?: string | null; // SST Resource name, e.g. "KitCrm"
 }
 
 export interface UserKitDbItem {

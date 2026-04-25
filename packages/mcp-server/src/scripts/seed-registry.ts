@@ -8,7 +8,17 @@ import crmKit from "../kits/crm/index";
 import expenseKit from "../kits/expense/index";
 import outreachKit from "../kits/outreach/index";
 
+// kitId → SST Resource name for Lambda ARN resolution
+const KIT_LAMBDA_RESOURCES: Record<string, string> = {
+  "meeting-action-tracker": "KitMeeting",
+  crm: "KitCrm",
+  "expense-tax-prep": "KitExpense",
+  "cold-outreach": "KitOutreach",
+};
+
 async function seedKit(kit: KitDefinition) {
+  const lambdaResource = KIT_LAMBDA_RESOURCES[kit.id] ?? null;
+
   // Register each tool
   for (const tool of kit.tools) {
     const item: KitRegistryItem = {
@@ -18,6 +28,7 @@ async function seedKit(kit: KitDefinition) {
       inputSchema: JSON.stringify(zodToJsonSchema(tool.args)),
       kitName: kit.name,
       kitDescription: kit.description,
+      lambdaResource,
     };
     await putRegistryItem(item);
     console.log(`  ✓ ${tool.name}`);
@@ -31,6 +42,7 @@ async function seedKit(kit: KitDefinition) {
     inputSchema: JSON.stringify({ type: "object", properties: {} }),
     kitName: kit.name,
     kitDescription: kit.description,
+    lambdaResource,
   };
   await putRegistryItem(instructionItem);
   console.log(`  ✓ kitstack_${kit.id}_instructions`);

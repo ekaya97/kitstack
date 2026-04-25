@@ -8,6 +8,7 @@ export const kitRegistryTable = sqliteTable("kit_registry", {
   inputSchema: text("input_schema").notNull(),
   kitName: text("kit_name").notNull(),
   kitDescription: text("kit_description"),
+  lambdaResource: text("lambda_resource"),  // SST Resource name, e.g. "KitCrm"
 }, (table) => [
   uniqueIndex("kit_registry_pk").on(table.kitId, table.toolName),
 ]);

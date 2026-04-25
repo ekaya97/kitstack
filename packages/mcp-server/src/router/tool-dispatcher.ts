@@ -3,32 +3,7 @@ import { getUserKitDb } from "../framework/dynamo";
 import { mcpCheckTuple } from "../framework/authz";
 import { audit } from "../framework/audit";
 import { log } from "../framework/logger";
-import { Resource } from "sst";
-
-// kitId (MCP internal) → kitSlug (user-facing, used in authz tuples)
-const KIT_ID_TO_SLUG: Record<string, string> = {
-  crm: "crm-kit",
-  "expense-tax-prep": "expense-tax-prep-kit",
-  "cold-outreach": "cold-outreach-kit",
-  "meeting-action-tracker": "meeting-action-tracker-kit",
-};
-
-// kitId → SST Resource name for Lambda ARN resolution
-const KIT_RESOURCE_MAP: Record<string, string> = {
-  "meeting-action-tracker": "KitMeeting",
-  crm: "KitCrm",
-  "expense-tax-prep": "KitExpense",
-  "cold-outreach": "KitOutreach",
-};
-
-function getKitFunctionId(kitId: string): string | null {
-  const resourceName = KIT_RESOURCE_MAP[kitId];
-  if (!resourceName) return null;
-  const fn = (Resource as any)[resourceName];
-  if (!fn) return null;
-  // In production: fn.arn is set. In sst dev: fn.name is the function name.
-  return fn.arn ?? fn.name ?? null;
-}
+import { getKitFunctionId, getKitAuthzSlug } from "./kit-resources";
 
 export async function dispatchToolCall(
   toolName: string,
@@ -53,8 +28,8 @@ export async function dispatchToolCall(
   }
 
   // Authz: tuple check is authoritative — user must have activator relation
-  const kitSlug = KIT_ID_TO_SLUG[tool.kitId];
-  if (kitSlug) {
+  const kitSlug = getKitAuthzSlug(tool.kitId);
+  {
     const allowed = await mcpCheckTuple(userId, "activator", "kit", kitSlug);
     if (!allowed) {
       log.warn("Kit not authorized for user", { userId, toolName, kitId: tool.kitId });
@@ -88,7 +63,7 @@ export async function dispatchToolCall(
   }
 
   // Resolve Lambda function identifier from SST Resource at runtime
-  const functionId = getKitFunctionId(tool.kitId);
+  const functionId = getKitFunctionId(tool.kitId, allTools);
   if (!functionId) {
     log.error("No Lambda function for kit", { kitId: tool.kitId });
     return {

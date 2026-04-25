@@ -42,6 +42,7 @@ export async function putRegistryItem(item: KitRegistryItem): Promise<void> {
         inputSchema: item.inputSchema,
         kitName: item.kitName,
         kitDescription: item.kitDescription,
+        lambdaResource: item.lambdaResource,
       },
     });
 }
