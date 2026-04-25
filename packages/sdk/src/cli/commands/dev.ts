@@ -161,7 +161,7 @@ export async function dev(args: string[]) {
   if (relay) {
     const { loadCredentials } = await import("../credentials.js");
     const { connectRelay } = await import("../../runtime/relay-client.js");
-    const { randomUUID } = await import("node:crypto");
+    const { createHash } = await import("node:crypto");
 
     const creds = loadCredentials();
     if (!creds) {
@@ -169,7 +169,11 @@ export async function dev(args: string[]) {
       process.exit(1);
     }
 
-    const sessionId = randomUUID().slice(0, 8);
+    // Deterministic session ID from user — same URL every time
+    const sessionId = createHash("sha256")
+      .update(creds.email)
+      .digest("hex")
+      .slice(0, 8);
     const relayUrl = process.env.KITSTACK_RELAY_URL || "wss://relay.kitstack.co";
     const mcpBaseUrl = process.env.KITSTACK_MCP_URL || "https://mcp.kitstack.co";
     const publicUrl = `${mcpBaseUrl}/dev/${sessionId}`;
