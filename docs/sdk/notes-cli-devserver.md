@@ -1,234 +1,139 @@
-# SDK Dev Notes — CLI, Dev Server, View DevKit, serve(), Build Pipeline, Kit Migrations
+# SDK Dev Notes — CLI, Dev Server, View DevKit, serve()
 
-Covers: T-0003, T-0006, T-0007, T-0009, T-0018, T-0020, T-0026, T-0028, T-0036, T-0038, T-0039, T-0040, T-0041
+Tickets: T-0003, T-0006, T-0007, T-0009, T-0018, T-0020, T-0026, T-0028, T-0036, T-0038, T-0039, T-0040, T-0041
 
 ---
 
 ## What was built
 
-### Build pipeline hardening (T-0018, T-0020)
+### Build pipeline (`packages/sdk/src/build.ts`)
 
-`buildKit()` in `packages/sdk/src/build.ts` is the core build entry point. It loads `kit.config.ts`, validates, bundles, and produces `.kitstack/build/`.
+`buildKit(kitRoot)` — validates and bundles a kit for deployment. Pipeline:
 
-**Migration SQL validation** runs each statement individually against in-memory SQLite. Errors now include the statement index and starting line number:
+1. **Load** — imports `kit.config.ts` via tsx ESM loader
+2. **Validate** — `defineKit()` runs all validations at import time (snake_case names, description length, kebab-case view slugs, `.describe()` warnings). Build catches `KitStackError` and surfaces the code + doc URL. Build adds file-system checks (View.tsx existence).
+3. **Bundle server** — esbuild, ESM target, externalizes `@libsql/client`, `drizzle-orm`, `zod`
+4. **Generate view entries** — one `{slug}.tsx` per view with `import * as ViewModule` + `mount()`
+5. **Bundle views** — Vite with `manualChunks` (React → `vendor.js`, shared hooks → `shared.js`)
+6. **Tailwind CSS** — `tailwindcss` CLI with per-kit config
+7. **Generate shell** — `generateShell()` bakes kit config into the MCP Apps shell HTML
+8. **Manifest** — `manifest.json` with hashes, sizes, SDK version (read from package.json)
 
-```
-Migration SQL error at statement 3 (line 14): near 'CREAT': syntax error
-         Statement: CREAT TABLE IF NOT EXISTS prospects...
-```
-
-**DROP rejection** scans every statement before execution. Single-line comments are stripped first so `-- DROP TABLE` in a comment doesn't false-positive:
-
-```typescript
-const normalized = stmt.sql.replace(/--[^\n]*/g, "").trim();
-if (/^\s*DROP\s+/i.test(normalized)) {
-  throw new MigrationError("MIGRATION_DROP_FORBIDDEN", ...);
-}
-```
-
-**SDK version in manifest** — `sdkVersion` is read from the SDK's `package.json` at build time via `createRequire`, not hardcoded. This is needed for the deployment pipeline to track which SDK version a kit was built with.
-
-### stdio transport (T-0026)
-
-`packages/sdk/src/runtime/stdio.ts` — `runStdioTransport(handler)` reads newline-delimited JSON-RPC from stdin, routes through the MCP handler, writes responses to stdout. Diagnostic output goes to stderr.
-
-Key design decision: we don't `await` each line sequentially. The MCP protocol allows pipelining — the client can send multiple requests before waiting for responses. So `processLine` is fire-and-forget (`void processLine(line)`).
-
-Gotcha: stdin chunks don't align with line boundaries. The buffer accumulates partial data and only processes complete lines (split on `\n`).
-
-### serve() entry point (T-0038)
-
-`packages/sdk/src/server/index.ts` provides a batteries-included MCP server:
+Bundle size warnings fire at >1MB (server) or >500KB (view modules/shared chunks).
 
 ```typescript
-import { serve, none } from "@kitstack/sdk/server";
+// kits/crm/build.ts — entire file
+import { buildKit } from "../../packages/sdk/src/build";
+buildKit(import.meta.dirname);
+```
+
+### Shell template (`packages/sdk/src/shell-template.ts`)
+
+`generateShell(config)` produces a self-contained HTML shell that:
+
+- Handles the MCP Apps postMessage protocol (sandbox-proxy-ready handshake, ui/initialize, tool-result)
+- Loads view modules from CDN (vendor.js → shared.js → per-view.js)
+- Falls back to markdown rendering when CDN is unavailable
+- Sets up `window.__KITSTACK_MCP__` bridge for React views to call tools
+
+The shell is a build artifact — each kit gets its own shell with baked-in config.
+
+### serve() runtime (`packages/sdk/src/server/index.ts`)
+
+`serve(options)` — batteries-included MCP server. Wires together:
+
+- MCP handler (from `createMcpHandler`)
+- Auth adapter (`none()` default, `kitstack()` or `oauth()` for production)
+- Database connection via `@libsql/client`
+- Transport: stdio (for Claude Desktop/Code) or HTTP (for production)
+
+```typescript
+// Self-hosted with HTTP transport
+import { serve } from "@kitstack/sdk/server";
 import kit from "./kit.config";
 
 serve({
   kit,
-  auth: none(),
-  db: { url: "file:.kitstack/dev.db" },
-  transport: "stdio",  // or "http"
+  db: { url: process.env.DATABASE_URL!, authToken: process.env.DATABASE_TOKEN },
+  transport: "http",
   port: 3000,
 });
 ```
 
-Two transports: stdio (for Claude Desktop/Code) and HTTP (for web clients). The HTTP transport exposes:
-- `POST /` — MCP JSON-RPC endpoint
+HTTP transport exposes:
+- `POST /` — MCP JSON-RPC endpoint (validates Bearer token via auth adapter)
 - `GET /.well-known/oauth-authorization-server` — OAuth metadata from the auth adapter
 
-Auth validation on HTTP: if a Bearer token is present, it's validated via `auth.validate()`. If validation fails, 401. If no token is present, the request proceeds (the `none()` adapter always succeeds).
+### stdio transport (`packages/sdk/src/runtime/stdio.ts`)
 
-### Auth adapters (T-0037)
+`runStdioTransport(handler, opts)` — reads NDJSON from stdin, writes responses to stdout. All diagnostic output goes to stderr. Handles:
 
-`packages/sdk/src/server/auth/adapter.ts` defines `AuthAdapter` — the interface for pluggable authentication. Five methods: `metadata()`, `authorize()`, `token()`, `revoke()`, `validate()`.
+- Partial line buffering (stdin chunks may not align with line boundaries)
+- Graceful shutdown on SIGINT/SIGTERM and stdin close
+- JSON-RPC validation (ignores malformed messages instead of crashing)
+- Pipelining (processes lines as they arrive, doesn't await between requests)
 
-`none()` adapter: all validation succeeds with a fixed user ID. Used by `kitstack dev` and integration tests. Configurable: `none({ userId: "test-42" })`.
+Custom stream overrides make it testable without actual stdin/stdout.
 
-### CLI scaffold (T-0003, T-0006)
+### View DevKit (`packages/sdk/src/devkit/`)
 
-`packages/sdk/src/cli/index.ts` is the `bin` entry point. Routes subcommands to lazy-loaded modules via `switch`/`case` with dynamic `import()`. No CLI framework — each command parses its own flags internally.
+Local MCP Apps renderer for view development. Three layers:
 
-The `init` command (`cli/commands/init.ts`) scaffolds a full kit directory:
+1. **host.ts** — `createMcpAppsHost()`: mock MCP Apps client implementing the full postMessage protocol (ui/initialize, tools/call, ui/download-file, ui/open-link, __load_view, size-changed). Logs all tool calls for the inspector panel.
 
-```bash
-npx kitstack init cold-outreach
-# Creates:
-#   cold-outreach/
-#     kit.config.ts, package.json, tsconfig.json, tailwind.config.ts
-#     src/schema.ts, src/migrations.ts, src/instructions.ts
-#     src/tools/example.ts
-#     src/views/dashboard/{index,loader,View}.tsx
-#     test/tools.test.ts
-```
+2. **proxy.ts** — `generateProxyHtml()`: mock sandbox proxy that replicates Claude.ai's double iframe architecture. Handles sandbox-proxy-ready → sandbox-resource-ready handshake, forwards postMessages between inner iframe and host.
 
-The `dev` command (`cli/commands/dev.ts`) supports two modes:
-- `--stdio` — MCP JSON-RPC over stdin/stdout for Claude Desktop/Code
-- `--views` — View DevKit HTTP server with HMR (starts the devkit server)
+3. **server.ts** + **app.html** — DevKit HTTP server and host page. Sidebar with view list, double iframe viewport, panels for data inspection, tool call logging, capability toggles, and viewport sizing.
 
-Additional flags: `--config <path>`, `--db <path>`, `--reset-db`, `--port <n>`.
+Started via `kitstack dev --views` (defaults to port 5174).
 
-### Shell template (T-0009, T-0028)
+API endpoints:
+- `GET /` — DevKit host page (injects kit metadata as `window.__DEVKIT_KIT__`)
+- `GET /__devkit/shell` — Dev shell HTML
+- `GET /__devkit/proxy` — Mock proxy HTML
+- `GET /__devkit/loader/:slug` — Execute a view's loader, return JSON
+- `POST /__devkit/tool` — Execute a tool handler, return KitToolResult
 
-`packages/sdk/src/shell-template.ts` — `generateShell(config: ShellConfig)` produces the HTML file that runs inside the Claude.ai MCP Apps iframe. The `ShellConfig` interface captures kit-specific values baked in at build time:
+### Build manifest SDK version (T-0020)
 
+Fixed hardcoded `"0.0.1"` → reads from `packages/sdk/package.json` dynamically:
 ```typescript
-interface ShellConfig {
-  kitId: string;       // e.g. "crm"
-  platformCdn: string; // shared vendor/shared.js host
-  kitCdn: string;      // per-kit view modules host
-  views: Array<{ slug: string; height?: number }>;
-}
+sdkVersion: JSON.parse(readFileSync(resolve(import.meta.dirname, "..", "package.json"), "utf-8")).version,
 ```
-
-Two rendering paths in the generated HTML:
-- **React path** (production): loads `vendor.js` + `shared.js` + `{slug}.js` from CDN, mounts React component with pre-loaded loader data
-- **Markdown fallback** (local dev / CDN unavailable): calls the `kit` tool via `tools/call`, renders the text result with a built-in markdown-to-HTML converter
-
-The shell registers view mount functions on `window.__KITSTACK_VIEWS__["{kitId}/{slug}"]`. The MCP Apps postMessage bridge (`window.__KITSTACK_MCP__`) provides `callTool()`, `downloadFile()`, `openLink()`, and `copyToClipboard()` to view components.
-
-### Kit migrations and dev database (T-0007, T-0036)
-
-Migration SQL is a raw string in the kit definition (`migrationSql` field). The build pipeline validates each statement against in-memory SQLite. At dev time, `provisionDevDb()` in `packages/sdk/src/runtime/dev-db.ts` creates a local SQLite file:
-
-```typescript
-import { provisionDevDb } from "@kitstack/sdk/runtime/dev-db";
-
-// First run: creates file and runs migrations
-const db = await provisionDevDb(".kitstack/dev.db", migrationSql);
-
-// Reset on each restart
-const db = await provisionDevDb(".kitstack/dev.db", migrationSql, { reset: true });
-```
-
-The `--reset-db` flag on `kitstack dev` deletes the file and re-runs migrations from scratch.
-
-### Build pipeline detail (T-0041)
-
-`buildKit(kitRoot)` in `packages/sdk/src/build.ts` runs nine steps:
-
-1. Locate `kit.config.ts` and `handler.ts`
-2. Load kit definition via tsx (surfaces `KitStackError` with codes/URLs)
-3. Validate: check View.tsx exists, validate migration SQL, reject DROP
-4. Bundle server: esbuild `handler.ts` into `kit.mjs` (ESM, Node 22)
-5. Generate view entries: per-view `.tsx` files with `mount()` registration
-6. Bundle views: Vite with React plugin, manual chunks (vendor + shared)
-7. Compile CSS: Tailwind with kit config
-8. Generate shell: `generateShell()` into `shell.html`
-9. Write manifest: `manifest.json` with hashes, sizes, tool/view metadata
-
-Output: `.kitstack/build/` with `kit.mjs`, `manifest.json`, `shell.html`, and `views/`.
-
-The `BuildResult` type returned on success:
-
-```typescript
-interface BuildResult {
-  manifest: Record<string, unknown>; // also written to manifest.json
-  outputDir: string;                  // absolute path to .kitstack/build/
-}
-```
-
-### View DevKit mock host (T-0039)
-
-`packages/sdk/src/devkit/host.ts` — `createMcpAppsHost()` implements the MCP Apps postMessage protocol that Claude.ai uses:
-
-| Protocol message | Host behavior |
-|---|---|
-| `ui/initialize` | Returns configurable capabilities |
-| `tools/call` | Routes to kit's tool handler, logs call |
-| `__load_view` | Re-executes view loader (for `reload()`) |
-| `ui/download-file` | Delegates to callback |
-| `ui/open-link` | Delegates to callback |
-| `ui/notifications/size-changed` | Delegates to callback |
-
-The host also provides:
-- `buildToolResultNotification(viewSlug)` — runs the loader and builds the JSON-RPC notification the shell expects
-- `getToolCallLogs()` — returns logged tool calls for the inspector panel
-- `setCapabilities(caps)` — toggle capabilities live (for testing responsive behavior)
-
-### Mock sandbox proxy (T-0040)
-
-`packages/sdk/src/devkit/proxy.ts` — `generateProxyHtml()` produces the outer iframe HTML that mimics Claude.ai's sandbox proxy. The double-iframe structure:
-
-```
-Host page (DevKit UI)
-  └── Outer iframe (proxy.html via srcdoc)
-        └── Inner iframe (shell.html via srcdoc, set after handshake)
-```
-
-The handshake:
-1. Outer iframe loads → sends `sandbox-proxy-ready` to inner
-2. Inner iframe (shell) receives → sends back `sandbox-resource-ready` with its own HTML
-3. Outer writes the HTML into inner via `srcdoc`
-4. All subsequent messages are forwarded bidirectionally
 
 ---
 
 ## What was learned
 
-### Statement-level SQL validation catches real bugs
+### Gotcha: esbuild can't handle React for browser ESM
 
-The old "run all SQL at once" approach masked errors — SQLite would fail on the first bad statement but the error message didn't say which one. Running statements individually with line tracking made migration debugging dramatically better during kit development.
+esbuild with `splitting: true` produces `chunk-HASH.js` filenames that aren't predictable. When React is marked as external, the output has bare specifiers (`import { useState } from "react"`) that browsers can't resolve. When React is bundled per-view, multiple React instances crash hooks.
 
-### DROP rejection is a hard requirement
+**Fix:** Vite for view builds with `manualChunks` — React goes into `vendor.js`, shared hooks into `shared.js`, all views share one React instance.
 
-The user's CLAUDE.md explicitly forbids DROP commands. We enforce this at the build level too, not just at the AI level. The regex strips comments first: `-- DROP TABLE old_thing` in a comment shouldn't block the build.
+### Gotcha: defineKit validation runs at import time
 
-### The double iframe is essential for production fidelity
+When `kit.config.ts` is imported during the build, `defineKit()` throws validation errors immediately. The build had a generic catch that would say "Failed to load kit.config.ts" instead of showing the validation error code.
 
-We originally considered skipping the proxy iframe for the DevKit (simpler). But the `sandbox-resource-ready` handshake — where the shell sends its own HTML back to the proxy, which then writes it into the inner iframe — is a real protocol step that can fail. The CRM kit's generated shell had a bug where this handshake never completed in production. Having the double iframe in dev mode would have caught it earlier.
+**Fix:** Check `instanceof KitStackError` in the catch and surface `e.code`, `e.message`, and `e.docUrl`.
 
-### `void processLine()` is intentional, not a mistake
+### Gotcha: vendor.js/shared.js path conflicts between kits
 
-The stdio transport processes lines without awaiting. This looks wrong but is correct — MCP allows request pipelining. If we awaited each line, a slow tool call would block all subsequent requests. The trade-off: responses may arrive out of order, but JSON-RPC handles that via request IDs.
+CRM kit uploads its Vite-built vendor.js/shared.js to `apps/` — same path as the platform's shared assets. Other kits would overwrite them.
 
-### Auth adapter interface is minimal by design
+**Fix:** Namespace kit uploads under `apps/kits/{kitId}/` (done in the outreach and meeting kit upload scripts).
 
-The `AuthAdapter` has five methods that map 1:1 to OAuth 2.0 endpoints. We considered adding `getUserProfile()` or `getRoles()` but decided against it — the only thing the MCP runtime needs is a `userId` string. Kit tools that need richer identity can query their own database.
+### Gotcha: CloudFront caching in dev
 
-### Shell's `__KITSTACK_VIEWS__` registry requires kit-namespaced keys
+After uploading to S3, CloudFront serves stale content until invalidated (30-120 seconds). During development, all files use `Cache-Control: max-age=0, no-cache, no-store, must-revalidate`.
 
-View modules register on `window.__KITSTACK_VIEWS__["{kitId}/{slug}"]`. The shell looks up this key when a tool result contains `{ view: "slug" }`. Without the kit ID namespace, two kits loaded in the same page (unlikely in MCP Apps, possible in DevKit) would collide.
+### Gotcha: stdio transport must not write to stdout
 
-### esbuild externals list is manually maintained
+Any console.log during MCP stdio mode corrupts the protocol stream. All diagnostic output must go to stderr. The `serve()` function writes its startup banner to `process.stderr.write()`.
 
-The server bundle externalizes `@libsql/client`, `drizzle-orm`, `drizzle-orm/*`, and `zod`. These are provided at runtime. If a kit imports another heavy library (e.g., `pdf-lib`), it gets bundled into `kit.mjs`. There is no automatic external detection — if the bundle gets large, check for accidentally bundled dependencies.
+### Gotcha: DevKit double iframe is required
 
-### Vite manual chunks prevent React duplication
-
-Without `manualChunks`, each per-view module bundles its own React (~140 KB). The split into `vendor.js` (react/react-dom/scheduler) and `shared.js` (shared components) keeps total size linear in shared code, not in view count.
-
-### CLI `bin` uses `.ts` path during monorepo development
-
-`package.json` registers `"kitstack": "./src/cli/index.ts"`, not a compiled output. This works because the monorepo uses `tsx` as a TypeScript loader. For the published npm package, this will need to point to built output (handled when `tsup` is set up).
-
-### `.js` extension in dynamic imports is required for ESM
-
-`import("./commands/init.js")` uses `.js` even though the source is `.ts`. TypeScript's `moduleResolution: "bundler"` resolves `.js` to `.ts` during development, and built output has actual `.js` files.
-
-### `provisionDevDb` splits on ";" naively
-
-Migration SQL is split on `;` boundaries. This works for standard SQL but would break if a semicolon appeared inside a string literal or trigger body. For now, kit migration SQL avoids this. If triggers or stored procedures are ever needed, a proper SQL tokenizer would be required.
+The double iframe is not just for security — it affects data delivery timing. The sandbox-proxy-ready → sandbox-resource-ready handshake, the tool-result notification ordering, and postMessage origin checks all break differently with a single iframe. The DevKit replicates the exact production architecture.
 
 ---
 
@@ -237,112 +142,65 @@ Migration SQL is split on `;` boundaries. This works for standard SQL but would 
 ### Build a kit
 
 ```bash
-npx kitstack build                    # from kit root
-npx kitstack build --config ../my-kit # from elsewhere
+cd kits/crm
+npx tsx build.ts
+# Output at .kitstack/build/ (kit.mjs, views/, shell.html, manifest.json)
 ```
 
-The build validates migration SQL (including DROP rejection), bundles server code with esbuild, builds view modules with Vite, compiles Tailwind CSS, generates a shell, and writes a manifest.
+Or via CLI:
+```bash
+npx kitstack build --config ./kits/crm
+```
 
-### Run locally with stdio
+### Run locally with Claude Desktop
 
 ```bash
-npx kitstack dev --stdio    # connect Claude Desktop/Code to this
-```
-
-Or programmatically:
-
-```typescript
-import { createMcpHandler } from "@kitstack/sdk/runtime";
-import { runStdioTransport } from "@kitstack/sdk/runtime/stdio";
-import kit from "./kit.config";
-
-const handler = createMcpHandler({ kit, db });
-await runStdioTransport(handler);
-```
-
-### Self-host with serve()
-
-```typescript
-import { serve, none } from "@kitstack/sdk/server";
-import kit from "./kit.config";
-
-// stdio (Claude Desktop)
-serve({ kit, auth: none(), db: { url: "file:dev.db" } });
-
-// HTTP (any client)
-serve({ kit, auth: none(), db: { url: "file:dev.db" }, transport: "http", port: 3000 });
-```
-
-### Use the mock host for view testing
-
-```typescript
-import { createMcpAppsHost } from "@kitstack/sdk/devkit";
-import kit from "./kits/crm/kit.config";
-
-const host = createMcpAppsHost({
-  kit,
-  db,
-  ctx: { userId: "dev", kitId: kit.id },
-  onToolCall: (log) => {
-    console.log(`[${log.toolName}] ${log.durationMs}ms`, log.args);
-  },
-});
-
-// Get initial data for a view
-const notification = await host.buildToolResultNotification("pipeline");
-
-// Handle messages from an iframe
-const response = await host.handleMessage(incomingMessage);
-```
-
-### Scaffold a new kit
-
-```bash
-npx kitstack init cold-outreach
-cd cold-outreach
-npm install
+cd kits/crm
 npx kitstack dev --stdio
 ```
 
-The generated kit includes a working example tool, a dashboard view, migration SQL, and a vitest test file using `createTestKit()`.
-
-### Claude Desktop MCP config
-
+Claude Desktop MCP config:
 ```json
 {
   "mcpServers": {
     "crm": {
       "command": "npx",
-      "args": ["tsx", "packages/sdk/src/cli/index.ts", "dev", "--stdio"],
+      "args": ["kitstack", "dev", "--stdio"],
       "cwd": "/path/to/kits/crm"
     }
   }
 }
 ```
 
-### View development with DevKit
+### Develop views locally
 
 ```bash
 cd kits/crm
-npx kitstack dev --views --port 5174
-# Open http://localhost:5174
+npx kitstack dev --views
+# Opens http://localhost:5174
 ```
 
-The DevKit page shows all views and tools, executes loaders in real-time, and simulates the Claude.ai MCP Apps iframe sandboxing.
+Click a view in the sidebar → loader runs against local SQLite → view renders in double iframe with the same postMessage protocol as production.
 
-### Reset the dev database
+### Self-host a kit
+
+```typescript
+// server.ts
+import { serve } from "@kitstack/sdk/server";
+import kit from "./kit.config";
+
+serve({
+  kit,
+  db: { url: "file:./data/production.db" },
+  transport: "http",
+  port: 3000,
+});
+```
+
+### Reset dev database
 
 ```bash
 npx kitstack dev --stdio --reset-db
 ```
 
-Deletes `.kitstack/dev.db` and re-runs migrations from scratch. Useful when schema changes make the existing database incompatible.
-
-### Inspect build output
-
-```bash
-npx kitstack build
-cat .kitstack/build/manifest.json | python3 -m json.tool
-```
-
-The manifest lists every tool, view, bundle hash, and file size. Use it to verify the build before publishing.
+Deletes `.kitstack/dev.db` and re-runs migrations from scratch.
