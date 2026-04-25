@@ -1,4 +1,4 @@
-import type { NewSkill, NewKit } from "./schema";
+import type { NewSkill, NewKit } from "../web/src/db/schema";
 
 const baseCompatibility = ["claude.ai", "Claude Desktop", "Cowork", "Claude Code"];
 

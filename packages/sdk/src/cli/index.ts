@@ -161,6 +161,11 @@ async function main() {
       await publish(commandArgs);
       break;
     }
+    case "deploy": {
+      const { deploy } = await import("./commands/deploy.js");
+      await deploy(commandArgs);
+      break;
+    }
     default:
       console.error(`Unknown command: ${command}\n`);
       console.log(HELP);

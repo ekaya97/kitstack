@@ -1,6 +1,6 @@
+import { resolve } from "node:path";
 import { defineKit } from "./src/sdk";
 import * as schema from "./src/schema";
-import { migrationSql } from "./src/migrations";
 import { crmInstructions } from "./src/instructions";
 
 // Tools
@@ -30,7 +30,7 @@ export default defineKit({
   name: "CRM Kit",
   description: "Full CRM with contacts, deals, pipeline, and proposals",
   schema,
-  migrationSql,
+  migrationsDir: resolve(import.meta.dirname, "migrations"),
   instructions: crmInstructions,
   tools: [
     addContact,

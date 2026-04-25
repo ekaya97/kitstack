@@ -1,4 +1,4 @@
-import { resolve } from "node:path";
+import { resolve, dirname } from "node:path";
 import { existsSync } from "node:fs";
 import { createInterface } from "node:readline";
 import { provisionDevDb } from "../../runtime/dev-db";
@@ -130,11 +130,12 @@ export async function dev(args: string[]) {
   }
 
   // Generate migrations from Drizzle schema if drizzle.config.ts exists
-  const drizzleConfigPath = resolve(process.cwd(), "drizzle.config.ts");
+  const kitDir = dirname(fullConfigPath);
+  const drizzleConfigPath = resolve(kitDir, "drizzle.config.ts");
   if (existsSync(drizzleConfigPath) && !kit.migrationSql) {
     const { execSync } = await import("node:child_process");
     try {
-      execSync("npx drizzle-kit generate", { cwd: process.cwd(), stdio: "inherit" });
+      execSync("npx drizzle-kit generate", { cwd: kitDir, stdio: "inherit" });
     } catch {
       console.warn("[kitstack] Warning: drizzle-kit generate failed. Continuing with existing migrations.");
     }

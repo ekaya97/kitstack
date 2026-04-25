@@ -13,7 +13,7 @@ vi.mock("@aws-sdk/s3-request-presigner", () => ({
 
 vi.mock("sst", () => ({
   Resource: {
-    Assets: { name: "test-bucket" },
+    SkillAssets: { name: "test-bucket" },
   },
 }));
 

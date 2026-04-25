@@ -1,11 +1,12 @@
-import { bucket } from "./storage";
+import { webBucket, skillBucket } from "./storage";
 import { mcpRouter, userKitDbs } from "./mcp";
 import * as secrets from "./secrets";
 
 export const web = new sst.aws.Nextjs("Web", {
   path: "web",
   link: [
-    bucket,
+    webBucket,
+    skillBucket,
     mcpRouter,
     userKitDbs,
     ...Object.values(secrets),

@@ -38,6 +38,10 @@ export interface SeedRegistryOptions {
   shellS3Key?: string;
   /** SST Resource name for the kit's Lambda (e.g. "CrmKitLambda"). */
   lambdaResource?: string;
+  /** Kit visibility. Default: "private". */
+  visibility?: "private" | "unlisted" | "public";
+  /** userId of the developer deploying this kit. */
+  authorId?: string;
   /** Default view height in pixels. */
   defaultHeight?: number;
 }
@@ -72,6 +76,8 @@ export async function seedRegistry(options: SeedRegistryOptions): Promise<void> 
     manifest,
     shellS3Key,
     lambdaResource,
+    visibility = "private",
+    authorId,
     defaultHeight = 400,
   } = options;
 
@@ -81,16 +87,18 @@ export async function seedRegistry(options: SeedRegistryOptions): Promise<void> 
     // Seed kit_registry (tools)
     for (const tool of manifest.tools) {
       await client.execute({
-        sql: `INSERT OR REPLACE INTO kit_registry (kit_id, tool_name, tool_description, input_schema, kit_name, kit_description, lambda_resource)
-              VALUES (?, ?, ?, ?, ?, ?, ?)`,
+        sql: `INSERT OR REPLACE INTO kit_registry (kit_id, tool_name, tool_description, input_schema, kit_name, kit_description, lambda_resource, visibility, author_id)
+              VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
         args: [
           manifest.kitId,
           tool.name,
           tool.description,
-          "{}",  // input_schema — populated by the router from Zod at runtime
+          "{}",
           manifest.kitName,
           manifest.kitName,
           lambdaResource ?? null,
+          visibility,
+          authorId ?? null,
         ],
       });
     }

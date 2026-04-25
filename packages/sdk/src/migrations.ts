@@ -26,7 +26,12 @@ export function readMigrationsDir(dir: string): string {
   if (files.length === 0) return "";
 
   return files
-    .map((f) => readFileSync(resolve(dir, f), "utf-8"))
+    .map((f) => {
+      let sql = readFileSync(resolve(dir, f), "utf-8");
+      // drizzle-kit uses "--> statement-breakpoint" as separator — normalize to ";"
+      sql = sql.replace(/--> statement-breakpoint/g, ";");
+      return sql;
+    })
     .join("\n");
 }
 

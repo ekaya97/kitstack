@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { useTool, useFile } from "@shared/use-kit";
+import { useTool, useFile } from "../../sdk-view";
 import type { Infer } from "../../sdk";
 import type { loader } from "./loader";
 

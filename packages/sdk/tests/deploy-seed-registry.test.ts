@@ -57,6 +57,8 @@ function setupDb() {
       kit_name TEXT,
       kit_description TEXT,
       lambda_resource TEXT,
+      visibility TEXT NOT NULL DEFAULT 'private',
+      author_id TEXT,
       PRIMARY KEY (kit_id, tool_name)
     );
     CREATE TABLE IF NOT EXISTS kit_views (

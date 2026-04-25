@@ -13,7 +13,7 @@ export async function getDownloadUrl(
   }
 
   const command = new GetObjectCommand({
-    Bucket: Resource.Assets.name,
+    Bucket: Resource.SkillAssets.name,
     Key: s3Key,
   });
 
