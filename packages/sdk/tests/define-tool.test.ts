@@ -15,7 +15,8 @@ describe("defineTool", () => {
 
       expect(tool.handler).toBeDefined();
       const result = await tool.handler!(null as any, {}, null as any);
-      const data = JSON.parse(result.content[0].text);
+      const block = result.content[0] as { type: "text"; text: string };
+      const data = JSON.parse(block.text);
       expect(data).toEqual([{ id: "1", name: "Widget" }]);
       expect(result.isError).toBeUndefined();
     });
@@ -61,7 +62,7 @@ describe("defineTool", () => {
 
       expect(tool.handler).toBe(handlerFn);
       const result = await tool.handler!(null as any, {}, null as any);
-      expect(result.content[0].text).toBe("custom output");
+      expect((result.content[0] as { type: "text"; text: string }).text).toBe("custom output");
     });
 
     it("keeps load accessible for loaders", async () => {
