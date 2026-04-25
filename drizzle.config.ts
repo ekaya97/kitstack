@@ -1,10 +1,12 @@
+/// <reference path="./.sst/platform/config.d.ts" />
 import type { Config } from "drizzle-kit";
+import { Resource } from "sst";
 
 export default {
   schema: "./web/src/db/schema.ts",
   out: "./infra/migrations",
   dialect: "sqlite",
   dbCredentials: {
-    url: process.env.TURSO_DATABASE_URL || "http://127.0.0.1:8080",
+    url: Resource.TursoDbUrl.value,
   },
 } satisfies Config;

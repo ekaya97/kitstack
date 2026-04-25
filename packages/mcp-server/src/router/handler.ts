@@ -17,7 +17,12 @@ import {
   putOAuthItem,
   deleteOAuthItem,
 } from "./oauth-store";
-import { Resource } from "sst";
+import {
+  mcpAllowedOrigins,
+  oauthStoreTable,
+  mcpInternalApiKey,
+  betterAuthUrl,
+} from "../config";
 import type { JsonRpcRequest } from "./types";
 
 const lambda = new LambdaClient({});
@@ -27,9 +32,7 @@ function serverUrlFromEvent(event: APIGatewayProxyEventV2): string {
   return `https://${event.requestContext.domainName}`;
 }
 
-const ALLOWED_ORIGINS = (Resource.McpAllowedOrigins.value || "https://kitstack.co,https://www.kitstack.co")
-  .split(",")
-  .map((o: string) => o.trim());
+const ALLOWED_ORIGINS = mcpAllowedOrigins();
 
 function getAllowedOrigin(requestOrigin: string | undefined): string {
   if (!requestOrigin) return ALLOWED_ORIGINS[0];
@@ -70,7 +73,7 @@ const RATE_LIMIT_WINDOW_SEC = 60;
 const RATE_LIMIT_MAX_REQUESTS = 120; // 120 requests per minute per user (session loads re-trigger artifacts)
 
 async function checkRateLimit(userId: string): Promise<boolean> {
-  const oauthTable = Resource.OAuthStore.name;
+  const oauthTable = oauthStoreTable();
   if (!oauthTable) return true; // fail-open if table not configured
 
   const windowKey = Math.floor(Date.now() / 1000 / RATE_LIMIT_WINDOW_SEC);
@@ -238,7 +241,7 @@ export async function handler(
       // Store params server-side to prevent tampering during login redirect
       const sessionId = await storeAuthorizeSession(authorizeParams, putOAuthItem);
 
-      const loginUrl = new URL(`${Resource.BetterAuthUrl.value || "http://localhost:3000"}/login`);
+      const loginUrl = new URL(`${betterAuthUrl()}/login`);
       loginUrl.searchParams.set("callback", `${serverUrlFromEvent(httpEvent)}/authorize/callback`);
       loginUrl.searchParams.set("session_id", sessionId);
 
@@ -328,7 +331,7 @@ export async function handler(
         try {
           const auth = await verifyAccessToken(token);
           log.debug("Revoke: token is a valid JWT", { userId: auth.userId });
-          const oauthTable = Resource.OAuthStore.name;
+          const oauthTable = oauthStoreTable();
           if (auth.userId && oauthTable) {
             const scan = await dynamo.send(
               new ScanCommand({
@@ -366,7 +369,7 @@ export async function handler(
     // --- Connection check (called by the marketing site, requires internal API key) ---
 
     if (path === "/connected" && method === "GET") {
-      const internalKey = Resource.McpInternalApiKey.value;
+      const internalKey = mcpInternalApiKey();
       if (internalKey) {
         const providedKey =
           httpEvent.headers["x-internal-api-key"] || httpEvent.queryStringParameters?.api_key;
@@ -380,7 +383,7 @@ export async function handler(
         return json({ connected: false, reason: "missing_userId" }, 400, origin);
       }
 
-      const oauthTable = Resource.OAuthStore.name;
+      const oauthTable = oauthStoreTable();
       if (!oauthTable) {
         return json({ connected: false, reason: "server_config_error" }, 500, origin);
       }

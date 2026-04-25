@@ -5,7 +5,7 @@ import type {
   KitToolInput,
   UserKitDbItem,
 } from "./types";
-import { Resource } from "sst";
+import { appDataUrl } from "../config";
 import { dispatchToolCall } from "./tool-dispatcher";
 import { getKitApps, getKitShellS3Key, readAppResource } from "./app-resources";
 import { getUserKitDb } from "../db/dynamo";
@@ -156,9 +156,9 @@ export async function handleKitCall(
   // get_app_token — called by the app shell inside the iframe to get a JWT for data fetching
   if (cmd === "get_app_token") {
     const token = await signAppToken({ sub: userId, kit: id });
-    const appDataUrl = (Resource as any).AppData?.url?.replace(/\/$/, "") || "";
+    const appDataVal = appDataUrl();
     return {
-      content: [{ type: "text", text: JSON.stringify({ token, appDataUrl, kit: id }) }],
+      content: [{ type: "text", text: JSON.stringify({ token, appDataUrl: appDataVal, kit: id }) }],
     };
   }
 

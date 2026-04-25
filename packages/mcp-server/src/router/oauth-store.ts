@@ -5,7 +5,7 @@ import {
   DeleteItemCommand,
 } from "@aws-sdk/client-dynamodb";
 import { marshall, unmarshall } from "@aws-sdk/util-dynamodb";
-import { Resource } from "sst";
+import { oauthStoreTable } from "../config";
 import type { OAuthStoreItem } from "./types";
 
 const client = new DynamoDBClient({});
@@ -16,7 +16,7 @@ export async function getOAuthItem(
 ): Promise<OAuthStoreItem | null> {
   const result = await client.send(
     new GetItemCommand({
-      TableName: Resource.OAuthStore.name,
+      TableName: oauthStoreTable(),
       Key: marshall({ pk, sk }),
       ConsistentRead: true,
     })
@@ -27,7 +27,7 @@ export async function getOAuthItem(
 export async function putOAuthItem(item: OAuthStoreItem): Promise<void> {
   await client.send(
     new PutItemCommand({
-      TableName: Resource.OAuthStore.name,
+      TableName: oauthStoreTable(),
       Item: marshall(item),
     })
   );
@@ -36,7 +36,7 @@ export async function putOAuthItem(item: OAuthStoreItem): Promise<void> {
 export async function deleteOAuthItem(pk: string, sk: string): Promise<void> {
   await client.send(
     new DeleteItemCommand({
-      TableName: Resource.OAuthStore.name,
+      TableName: oauthStoreTable(),
       Key: marshall({ pk, sk }),
     })
   );

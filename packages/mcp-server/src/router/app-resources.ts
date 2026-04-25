@@ -1,11 +1,7 @@
 import { GetObjectCommand, S3Client } from "@aws-sdk/client-s3";
-import { Resource } from "sst";
 import { RESOURCE_MIME_TYPE } from "@modelcontextprotocol/ext-apps/server";
 import { getViewsForKit } from "../db/dynamo";
-
-function getCdnUrl(): string {
-  return (Resource as any).KitCdn?.url?.replace(/\/$/, "") || "";
-}
+import { kitCdnUrl, kitAssetsBucket, appDataUrl } from "../config";
 
 const s3 = new S3Client({});
 
@@ -27,7 +23,7 @@ const htmlCache = new Map<string, string>();
 async function fetchFromS3(s3Key: string): Promise<string | null> {
   if (htmlCache.has(s3Key)) return htmlCache.get(s3Key)!;
 
-  const bucket = (Resource as any).KitAssets?.name;
+  const bucket = kitAssetsBucket();
   console.log(`[AppResources] Fetching s3://${bucket}/${s3Key}`);
 
   if (!bucket) {
@@ -58,8 +54,8 @@ export function listAppResources(activatedKitIds: Set<string>) {
     mimeType: string;
   }> = [];
 
-  const cdnUrl = getCdnUrl();
-  const appDataUrl = (Resource as any).AppData?.url?.replace(/\/$/, "") || "";
+  const cdnUrl = kitCdnUrl();
+  const appDataVal = appDataUrl();
   resources.push({
     uri: APP_SHELL_URI,
     name: "KitStack App",
@@ -74,7 +70,7 @@ export function listAppResources(activatedKitIds: Set<string>) {
           ],
           connectDomains: [
             ...(cdnUrl ? [cdnUrl] : []),
-            ...(appDataUrl ? [appDataUrl] : []),
+            ...(appDataVal ? [appDataVal] : []),
           ],
         },
         permissions: { clipboardWrite: {} },
@@ -102,8 +98,8 @@ export async function readAppResource(
     const html = await fetchFromS3(s3Key);
     if (!html) return null;
 
-    const cdnUrl = getCdnUrl();
-    const appDataUrl = (Resource as any).AppData?.url?.replace(/\/$/, "") || "";
+    const cdnUrl = kitCdnUrl();
+    const appDataVal = appDataUrl();
     return {
       uri,
       mimeType: RESOURCE_MIME_TYPE,
@@ -118,7 +114,7 @@ export async function readAppResource(
             ],
             connectDomains: [
               ...(cdnUrl ? [cdnUrl] : []),
-              ...(appDataUrl ? [appDataUrl] : []),
+              ...(appDataVal ? [appDataVal] : []),
             ],
           },
           permissions: { clipboardWrite: {} },

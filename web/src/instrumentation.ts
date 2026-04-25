@@ -4,7 +4,7 @@ import { logs } from "@opentelemetry/api-logs";
 import { resourceFromAttributes } from "@opentelemetry/resources";
 import { Resource } from "sst";
 
-const posthogKey = Resource.PosthogKey.value || process.env.NEXT_PUBLIC_POSTHOG_KEY;
+const posthogKey = Resource.PosthogKey.value;
 const posthogHost = Resource.PosthogHost.value ?? "https://eu.i.posthog.com";
 
 export const loggerProvider = posthogKey

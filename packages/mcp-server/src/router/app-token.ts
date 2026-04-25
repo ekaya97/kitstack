@@ -1,7 +1,7 @@
 import { SignJWT, jwtVerify } from "jose";
-import { Resource } from "sst";
+import { mcpJwtSecret } from "../config";
 
-const getSecret = () => new TextEncoder().encode(Resource.McpJwtSecret.value);
+const getSecret = () => mcpJwtSecret();
 
 export interface AppTokenPayload {
   sub: string; // userId

@@ -1,10 +1,10 @@
 import { createClient } from "@libsql/client";
 import { drizzle } from "drizzle-orm/libsql";
-import { Resource } from "sst";
 import { authorize } from "../../../authz/src/middleware";
 import { check } from "../../../authz/src/engine";
 import type { AuthzRequirement, Relation, ObjectType } from "../../../authz/src/types";
 import { verifyAccessToken } from "../router/oauth/helpers";
+import { tursoDbUrl, tursoAuthToken } from "../config";
 
 let _db: ReturnType<typeof drizzle> | null = null;
 
@@ -12,8 +12,8 @@ let _db: ReturnType<typeof drizzle> | null = null;
 export function getTursoDb() {
   if (!_db) {
     const client = createClient({
-      url: Resource.TursoDbUrl.value,
-      authToken: Resource.TursoAuthToken.value,
+      url: tursoDbUrl(),
+      authToken: tursoAuthToken(),
     });
     _db = drizzle(client);
   }
