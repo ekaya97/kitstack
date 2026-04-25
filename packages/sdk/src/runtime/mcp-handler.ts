@@ -31,6 +31,36 @@ import { generateShell } from "../shell-template";
 // JSON-RPC types
 // ---------------------------------------------------------------------------
 
+/**
+ * A JSON-RPC 2.0 request object as received from the MCP transport layer.
+ *
+ * Requests with an `id` expect a {@link JsonRpcResponse} in return.
+ * Requests without an `id` (or where `id` is `null`) are **notifications** and
+ * `handleRequest` returns `null` for them.
+ *
+ * @example
+ * ```typescript
+ * // Initialize handshake — the first message from any MCP client
+ * const initRequest: JsonRpcRequest = {
+ *   jsonrpc: "2.0",
+ *   id: 1,
+ *   method: "initialize",
+ * };
+ * const response = await handler.handleRequest(initRequest);
+ * ```
+ *
+ * @example
+ * ```typescript
+ * // Call the kit tool with progressive discovery
+ * const listActions: JsonRpcRequest = {
+ *   jsonrpc: "2.0",
+ *   id: 2,
+ *   method: "tools/call",
+ *   params: { name: "kit", arguments: {} },
+ * };
+ * const res = await handler.handleRequest(listActions);
+ * ```
+ */
 export interface JsonRpcRequest {
   jsonrpc: "2.0";
   id?: string | number | null;
@@ -38,6 +68,31 @@ export interface JsonRpcRequest {
   params?: Record<string, unknown>;
 }
 
+/**
+ * A JSON-RPC 2.0 response object returned by {@link McpHandler.handleRequest}.
+ *
+ * Exactly one of `result` or `error` will be set. The `id` matches the
+ * originating {@link JsonRpcRequest}. For notifications, `handleRequest`
+ * returns `null` instead of a response.
+ *
+ * @example
+ * ```typescript
+ * // Successful response from tools/list
+ * const res = await handler.handleRequest({
+ *   jsonrpc: "2.0", id: 1, method: "tools/list",
+ * });
+ * // res.result.tools → [{ name: "kit", ... }, { name: "kit_view", ... }]
+ * ```
+ *
+ * @example
+ * ```typescript
+ * // Error response for unknown method
+ * const res = await handler.handleRequest({
+ *   jsonrpc: "2.0", id: 2, method: "resources/list",
+ * });
+ * // res.error → { code: -32601, message: "Method not found: resources/list" }
+ * ```
+ */
 export interface JsonRpcResponse {
   jsonrpc: "2.0";
   id: string | number | null;
@@ -71,6 +126,39 @@ const PROTOCOL_VERSION = "2025-11-25";
 // Public API
 // ---------------------------------------------------------------------------
 
+/**
+ * Configuration for {@link createMcpHandler}.
+ *
+ * Connects a {@link KitDefinition} to a database and optional runtime settings
+ * (user context, CDN URLs, pre-built shell HTML). Both `kitstack dev --stdio`
+ * and `serve()` construct this internally; you only build it manually in tests
+ * or custom server setups.
+ *
+ * @example
+ * ```typescript
+ * // Minimal config for local development / testing
+ * import { createClient } from "@libsql/client";
+ * import { drizzle } from "drizzle-orm/libsql";
+ * import crmKit from "./kit.config";
+ *
+ * const client = createClient({ url: "file:.kitstack/dev.db" });
+ * const db = drizzle(client);
+ *
+ * const handler = createMcpHandler({ kit: crmKit, db });
+ * ```
+ *
+ * @example
+ * ```typescript
+ * // Production config with CDN URLs and user context
+ * const handler = createMcpHandler({
+ *   kit: crmKit,
+ *   db,
+ *   ctx: { userId: "usr_abc123", kitId: "crm" },
+ *   platformCdn: "https://cdn.kitstack.dev/platform",
+ *   kitCdn: "https://cdn.kitstack.dev/kits/crm",
+ * });
+ * ```
+ */
 export interface McpHandlerConfig {
   /** The kit definition (from defineKit()). */
   kit: KitDefinition;
@@ -92,6 +180,41 @@ export interface McpHandlerConfig {
   shellHtml?: string;
 }
 
+/**
+ * The MCP handler returned by {@link createMcpHandler}.
+ *
+ * Exposes three members:
+ * - `handleRequest()` — the main JSON-RPC dispatch loop (initialize, ping,
+ *   tools/list, tools/call)
+ * - `callTool()` — direct tool invocation bypassing JSON-RPC, used by loaders
+ *   and tests
+ * - `tools` — the frozen list of MCP tool definitions (always `kit` and
+ *   optionally `kit_view`)
+ *
+ * The handler is stateless per-request after construction. All mutable state
+ * lives in the database.
+ *
+ * @example
+ * ```typescript
+ * const handler = createMcpHandler({ kit: crmKit, db });
+ *
+ * // Full JSON-RPC flow: initialize → tools/list → tools/call
+ * await handler.handleRequest({
+ *   jsonrpc: "2.0", id: 1, method: "initialize",
+ * });
+ * await handler.handleRequest({
+ *   jsonrpc: "2.0", method: "notifications/initialized",
+ * });
+ * const toolsRes = await handler.handleRequest({
+ *   jsonrpc: "2.0", id: 2, method: "tools/list",
+ * });
+ *
+ * // Direct tool call (used in tests and loaders)
+ * const result = await handler.callTool("add_contact", {
+ *   name: "Alice", company: "Acme",
+ * });
+ * ```
+ */
 export interface McpHandler {
   /**
    * Handle a JSON-RPC request. Returns a JSON-RPC response, or `null` for
@@ -112,6 +235,60 @@ export interface McpHandler {
   readonly tools: readonly McpToolDefinition[];
 }
 
+/**
+ * Create an MCP protocol handler for a kit.
+ *
+ * Takes a kit definition and a database connection, and returns an
+ * {@link McpHandler} that speaks JSON-RPC 2.0 over any transport (stdio,
+ * HTTP, WebSocket). The handler registers exactly two MCP tools:
+ *
+ * - **`kit`** — text-only progressive discovery and CRUD. Calling `kit()`
+ *   with no arguments lists available actions; `kit(cmd)` describes one
+ *   action's parameters; `kit(cmd, params)` executes it.
+ * - **`kit_view`** — embedded resource rendering for MCP Apps. Calling
+ *   `kit_view()` lists views; `kit_view(view)` runs the loader and
+ *   returns an HTML shell as an `EmbeddedResource` with MIME type
+ *   `text/html;profile=mcp-app`.
+ *
+ * If the kit has no views, only the `kit` tool is registered.
+ *
+ * @param config - Kit definition, database, and optional runtime settings
+ * @returns A frozen {@link McpHandler} ready to serve requests
+ *
+ * @example
+ * ```typescript
+ * // CRM kit with stdio transport (kitstack dev --stdio)
+ * import { createClient } from "@libsql/client";
+ * import { drizzle } from "drizzle-orm/libsql";
+ * import crmKit from "./kit.config";
+ * import { createMcpHandler, runStdioTransport } from "@kitstack/sdk/runtime";
+ *
+ * const client = createClient({ url: "file:.kitstack/dev.db" });
+ * const db = drizzle(client);
+ * const handler = createMcpHandler({ kit: crmKit, db });
+ *
+ * // Pipe stdin/stdout through the handler
+ * runStdioTransport(handler);
+ * ```
+ *
+ * @example
+ * ```typescript
+ * // In tests — create handler with in-memory DB
+ * import { createClient } from "@libsql/client";
+ * import { drizzle } from "drizzle-orm/libsql";
+ * import crmKit from "./kit.config";
+ * import { createMcpHandler } from "@kitstack/sdk/runtime";
+ *
+ * const client = createClient({ url: ":memory:" });
+ * const db = drizzle(client);
+ * await client.execute(crmKit.migrationSql);
+ *
+ * const handler = createMcpHandler({ kit: crmKit, db });
+ * const result = await handler.callTool("add_contact", {
+ *   name: "Alice", company: "Acme",
+ * });
+ * ```
+ */
 export function createMcpHandler(config: McpHandlerConfig): McpHandler {
   const { kit, db } = config;
   const defaultCtx: KitContext = {
