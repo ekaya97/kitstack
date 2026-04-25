@@ -3,16 +3,16 @@ import { z } from "zod";
 import { createClient } from "@libsql/client";
 import { drizzle } from "drizzle-orm/libsql";
 import { sql } from "drizzle-orm";
-import { defineTool } from "../define-tool";
-import { defineKit } from "../define-kit";
-import { defineView } from "../define-view";
-import { defineLoader } from "../define-loader";
-import { kit } from "../result";
+import { defineTool } from "../src/define-tool";
+import { defineKit } from "../src/define-kit";
+import { defineView } from "../src/define-view";
+import { defineLoader } from "../src/define-loader";
+import { kit } from "../src/result";
 import {
   createMcpHandler,
   type McpHandler,
   type JsonRpcRequest,
-} from "./mcp-handler";
+} from "../src/runtime/mcp-handler";
 
 // -- Test kit with tools + views --
 

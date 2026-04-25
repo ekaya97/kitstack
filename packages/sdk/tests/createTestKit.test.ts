@@ -1,11 +1,11 @@
 import { describe, it, expect, afterEach, afterAll } from "vitest";
 import { z } from "zod";
 import { sql } from "drizzle-orm";
-import { createTestKit, type TestKit } from "./index";
-import { defineTool } from "../define-tool";
-import { defineKit } from "../define-kit";
-import { kit } from "../result";
-import { MigrationError } from "../errors";
+import { createTestKit, type TestKit } from "../src/testing/index";
+import { defineTool } from "../src/define-tool";
+import { defineKit } from "../src/define-kit";
+import { kit } from "../src/result";
+import { MigrationError } from "../src/errors";
 
 // -- Minimal test kit --
 

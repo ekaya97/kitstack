@@ -1,7 +1,7 @@
 import { describe, it, expect } from "vitest";
 import { z } from "zod";
-import { defineTool } from "./define-tool";
-import { kit } from "./result";
+import { defineTool } from "../src/define-tool";
+import { kit } from "../src/result";
 
 describe("defineTool", () => {
   describe("load-only tool", () => {

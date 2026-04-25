@@ -1,6 +1,6 @@
 import { describe, it, expect } from "vitest";
 import { z } from "zod";
-import { zodToJsonSchema } from "./zod-to-json-schema";
+import { zodToJsonSchema } from "../src/runtime/zod-to-json-schema";
 
 describe("zodToJsonSchema", () => {
   describe("primitives", () => {

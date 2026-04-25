@@ -1,8 +1,8 @@
 import { describe, it, expect, vi } from "vitest";
 import { z } from "zod";
-import { defineKit } from "./define-kit";
-import { ToolValidationError, KitValidationError } from "./errors";
-import { kit } from "./result";
+import { defineKit } from "../src/define-kit";
+import { ToolValidationError, KitValidationError } from "../src/errors";
+import { kit } from "../src/result";
 
 // Helper: minimal valid tool
 function tool(overrides: Record<string, any> = {}) {

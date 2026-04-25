@@ -6,7 +6,7 @@ import {
   MigrationError,
   SchemaError,
   AuthError,
-} from "./errors";
+} from "../src/errors";
 
 describe("KitStackError", () => {
   it("sets code, message, and docUrl", () => {

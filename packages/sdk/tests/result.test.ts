@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { kit } from "./result";
+import { kit } from "../src/result";
 
 describe("kit.text", () => {
   it("returns a text content block", () => {
