@@ -18,7 +18,9 @@
     "db:seed": "tsx web/src/db/seed.ts",
     "postbuild": "next-sitemap --config web/next-sitemap.config.js",
     "upload:apps": "sst shell -- npx tsx packages/sdk/views/upload-apps.ts",
-    "seed:registry": "sst shell -- npx tsx packages/mcp-server/src/scripts/seed-registry.ts"
+    "seed:registry": "sst shell -- npx tsx packages/mcp-server/src/scripts/seed-registry.ts",
+    "build:layer": "packages/sdk/layer/build.sh",
+    "deploy:kit": "sst shell -- npx tsx"
   },
   "dependencies": {
     "@aws-sdk/client-dynamodb": "^3.1035.0",

@@ -1,0 +1,11 @@
+{
+  "name": "kitstack-runtime-layer",
+  "private": true,
+  "description": "Shared Lambda layer for kit Lambdas. Contains the dependencies every kit needs at runtime.",
+  "dependencies": {
+    "@libsql/client": "^0.14",
+    "drizzle-orm": "^0.38",
+    "zod": "^3.22",
+    "nanoid": "^5"
+  }
+}

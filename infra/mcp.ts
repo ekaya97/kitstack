@@ -51,21 +51,15 @@ new aws.iam.RolePolicyAttachment("KitLambdaRoleLogs", {
  * Runtime layer for kit Lambdas.
  * Contains shared node_modules: drizzle-orm, @libsql/client, zod, nanoid.
  *
- * The layer code lives at packages/sdk/layer/ and is built via:
- *   cd packages/sdk/layer && npm install && zip -r layer.zip nodejs/
- *
- * On first deploy, upload the zip to S3 manually or use:
- *   aws lambda publish-layer-version --layer-name KitRuntime \
- *     --compatible-runtimes nodejs22.x --zip-file fileb://layer.zip
- *
- * After that, SST manages the layer version via this resource.
+ * Built from packages/sdk/layer/ — run `packages/sdk/layer/build.sh`
+ * before deploying. SST uploads the zip and creates a new layer version
+ * automatically when the contents change.
  */
 export const kitRuntimeLayer = new aws.lambda.LayerVersion("KitRuntimeLayer", {
   layerName: "KitRuntime",
   compatibleRuntimes: ["nodejs22.x"],
   compatibleArchitectures: ["arm64"],
-  // S3 bucket/key set after first layer build — or use local zip:
-  // code: new $util.asset.FileArchive("packages/sdk/layer/layer.zip"),
+  code: new $util.asset.FileArchive("packages/sdk/layer/layer.zip"),
 });
 
 /** Linkable so deploy scripts can read the ARNs via Resource bindings. */
