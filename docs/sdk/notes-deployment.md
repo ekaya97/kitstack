@@ -1,6 +1,6 @@
 # Deployment Pipeline — Dev Notes
 
-Tickets: T-0047 (S3 bundle upload), T-0048 (registry seeding), T-0049 (proxied DB client), T-0050 (Lambda provisioning)
+Tickets: T-0047 (S3 bundle upload), T-0048 (registry seeding), T-0049 (proxied DB client), T-0050 (Lambda provisioning), T-0064 (shared infra), T-0068 (remove hardcoded Lambdas)
 
 ## What was built
 
@@ -41,12 +41,32 @@ The security boundary: sandboxed kit Lambdas never receive database credentials.
 
 - Uses `nodejs22.x` on `arm64`
 - Loads its code from S3 (`bundles/{kitId}/kit.mjs`)
-- Attaches a shared runtime layer (SDK, Drizzle, libsql, AWS SDK)
+- Attaches the shared `KitRuntimeLayer` (see below)
 - Runs under `KitLambdaRole`, which only has `lambda:InvokeFunction` on the McpRouter
 
 Environment variables are explicitly empty. Sandboxed kits receive context (`invocationToken`, `routerArn`, `userId`, `kitId`) per invocation payload, not via env vars. This prevents a kit author from extracting secrets by reading `process.env`.
 
 If the function already exists, `provisionKitLambda` updates code first, waits for the update to propagate (`waitUntilFunctionActiveV2`), then updates configuration. This two-step sequence is required because Lambda rejects config updates while a code update is in progress.
+
+### Shared infra: KitLambdaRole + KitRuntimeLayer (T-0064, T-0068)
+
+Both resources are defined as Pulumi/AWS constructs in `infra/mcp.ts` and managed by SST. This replaced the previous approach of 4 hardcoded `sst.aws.Function` definitions (one per kit). Now all kits — first-party and third-party — go through the same deploy pipeline.
+
+**`KitLambdaRole`** (`aws.iam.Role`) — A single IAM role shared by all kit Lambdas. Only has `AWSLambdaBasicExecutionRole` (CloudWatch Logs). No database credentials, no S3 access, no VPC. DB credentials are passed per-invocation from the router.
+
+**`KitRuntimeLayer`** (`aws.lambda.LayerVersion`) — A Lambda layer containing the shared node_modules that every kit needs: `drizzle-orm`, `@libsql/client`, `zod`, `nanoid`. Built from `packages/sdk/layer/`:
+
+```bash
+npm run build:layer    # runs packages/sdk/layer/build.sh → layer.zip (5.7 MB)
+```
+
+The build script installs deps into `nodejs/node_modules/` (Lambda's layer convention), strips `.d.ts`/`.map`/README files to save space, and produces `layer.zip`. SST uploads this zip and creates a new layer version automatically via `new aws.lambda.LayerVersion({ code: FileArchive("layer.zip") })`.
+
+At runtime, Lambda mounts the layer at `/opt/nodejs/node_modules/`. Kit bundles externalize these deps via esbuild's `external` option, so `import { drizzle } from "drizzle-orm/libsql"` in `kit.mjs` resolves from the layer — not from the bundle.
+
+**`KitLambdaInfra`** (`sst.Linkable`) — Wraps both ARNs so deploy scripts can read them via SST Resource bindings: `Resource.KitLambdaInfra.roleArn` and `Resource.KitLambdaInfra.layerArn`.
+
+The McpRouter has a wildcard IAM permission `arn:aws:lambda:*:*:function:Kit-*` to invoke any dynamically provisioned kit Lambda. The router resolves Lambda names by convention (`Kit-{kitId}`) via `getKitFunctionId()` in `kit-resources.ts`.
 
 ## What was learned
 
@@ -76,7 +96,7 @@ The `KitLambdaRole` is intentionally restrictive:
 - **No S3 read on other kits' bundles** — the role has no S3 permissions. Code is loaded at deploy time, not at runtime.
 - **Only `lambda:InvokeFunction` on the McpRouter** — this is the sole permission, scoped to the router's ARN. A compromised kit can invoke the router but nothing else.
 
-The McpRouter itself needs a wildcard `lambda:InvokeFunction` on `Kit-*` functions to invoke dynamically provisioned kits. This is configured in `infra/mcp.ts` via SST's IAM policy builder.
+The McpRouter has a wildcard permission `arn:aws:lambda:*:*:function:Kit-*` in `infra/mcp.ts`. The `KitLambdaRole` and `KitRuntimeLayer` are Pulumi resources managed by SST — created once and shared by all kits. Deploy scripts read the ARNs via `Resource.KitLambdaInfra.{roleArn, layerArn}`.
 
 ### waitUntilFunctionActiveV2 ordering
 
@@ -86,63 +106,66 @@ When updating an existing Lambda, you must wait for the code update to finish be
 
 ### Full deployment workflow
 
-A deploy script typically runs all three steps in sequence. Execute it under SST's shell so that resource bindings (bucket name, role ARN, etc.) are available:
+Build first, then deploy. Execute the deploy script under SST's shell so that resource bindings are available:
 
 ```bash
-npx sst shell -- npx tsx kits/crm/deploy.ts
+# 1. Build the layer (once, or when shared deps change)
+npm run build:layer
+
+# 2. Build the kit
+npx tsx kits/crm/build.ts
+
+# 3. Deploy (upload + registry + Lambda)
+npm run deploy:kit kits/crm/deploy.ts
 ```
 
-Example `deploy.ts`:
+Each kit has a `deploy.ts` that runs all three deploy steps:
 
 ```typescript
 import { resolve } from "node:path";
-import { uploadKitBundle, seedRegistry, provisionKitLambda } from "@kitstack/sdk/deploy";
+import { readFileSync } from "node:fs";
 import { Resource } from "sst";
-import manifest from "./.kitstack/build/manifest.json";
+import { uploadKitBundle } from "../../packages/sdk/src/deploy/upload";
+import { seedRegistry, type KitManifest } from "../../packages/sdk/src/deploy/seed-registry";
+import { provisionKitLambda } from "../../packages/sdk/src/deploy/deploy-lambda";
+
+const KIT_ID = "crm";
+const buildDir = resolve(import.meta.dirname, ".kitstack/build");
+const manifest: KitManifest = JSON.parse(
+  readFileSync(resolve(buildDir, "manifest.json"), "utf-8")
+);
 
 // 1. Upload build artifacts to S3
-const count = await uploadKitBundle({
-  buildDir: resolve(import.meta.dirname, ".kitstack/build"),
-  kitId: manifest.kitId,
-  bucketName: Resource.KitAssets.name,
+await uploadKitBundle({
+  buildDir,
+  kitId: KIT_ID,
+  bucketName: (Resource as any).KitAssets.name,
 });
-console.log(`Uploaded ${count} files\n`);
 
 // 2. Seed the registry so the McpRouter can discover tools and views
 await seedRegistry({
-  tursoUrl: process.env.TURSO_URL!,
-  tursoToken: process.env.TURSO_TOKEN!,
+  tursoUrl: (Resource as any).TursoDbUrl.value,
+  tursoToken: (Resource as any).TursoAuthToken.value,
   manifest,
-  shellS3Key: `apps/kits/${manifest.kitId}/shell.html`,
-  lambdaResource: `Kit-${manifest.kitId}`,
+  shellS3Key: `apps/kits/${KIT_ID}/shell.html`,
 });
-console.log("Registry seeded\n");
 
 // 3. Provision (or update) the sandboxed Lambda
+const { roleArn, layerArn } = (Resource as any).KitLambdaInfra;
 const result = await provisionKitLambda({
-  kitId: manifest.kitId,
-  bucketName: Resource.KitAssets.name,
-  bundleS3Key: `bundles/${manifest.kitId}/kit.mjs`,
-  roleArn: Resource.KitLambdaRole.arn,
-  runtimeLayerArn: Resource.KitRuntimeLayer.arn,
+  kitId: KIT_ID,
+  bucketName: (Resource as any).KitAssets.name,
+  bundleS3Key: `bundles/${KIT_ID}/kit.mjs`,
+  roleArn,
+  runtimeLayerArn: layerArn,
 });
-console.log(`Lambda ${result.created ? "created" : "updated"}: ${result.functionArn}`);
 ```
 
-### Build before deploy
+### First-party and third-party kits use the same pipeline
 
-The deploy script assumes `.kitstack/build/` already contains the output of `kitstack build`. Always build first:
+There is no distinction. All kits — whether maintained by the platform team or submitted by external developers — go through the exact same deploy pipeline: `build → upload → seed → provision`. This ensures the developer experience is identical and the platform dogfoods its own infrastructure.
 
-```bash
-npx kitstack build
-npx sst shell -- npx tsx kits/crm/deploy.ts
-```
-
-### First-party vs. third-party kits
-
-First-party kits (maintained by the platform team) can skip `provisionKitLambda` — they are declared as `sst.aws.Function` resources in `infra/mcp.ts` and deployed with `npx sst deploy`. For these kits, only upload and registry seed are needed.
-
-Third-party kits (submitted by external developers) always use `provisionKitLambda` to get a sandboxed Lambda. Their deploy script is the full three-step workflow above.
+The previous approach of declaring first-party kits as `sst.aws.Function` in `infra/mcp.ts` has been removed. All per-kit Lambda definitions are now dynamically provisioned via `provisionKitLambda()`.
 
 ### Common mistakes
 
