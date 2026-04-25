@@ -18,6 +18,9 @@ export interface TestKit {
     args?: Record<string, unknown>
   ): Promise<KitToolResult>;
 
+  /** Execute a view's loader and return its typed data. Useful for testing loaders without MCP overhead. */
+  loadView(viewSlug: string, ctx?: Partial<KitContext>): Promise<unknown>;
+
   /** Delete all data from tables and re-run migrations. */
   reset(): Promise<void>;
 
@@ -62,6 +65,7 @@ export async function createTestKit(
   await runMigrations();
 
   const toolMap = new Map(kitDef.tools.map((t) => [t.name, t]));
+  const viewMap = new Map((kitDef.views ?? []).map((v) => [v.slug, v]));
   const defaultCtx: KitContext = { userId: "test-user", kitId: kitDef.id };
 
   async function callAs(
@@ -111,6 +115,17 @@ export async function createTestKit(
     },
 
     callAs,
+
+    async loadView(viewSlug: string, ctxOverrides: Partial<KitContext> = {}) {
+      const view = viewMap.get(viewSlug);
+      if (!view) {
+        throw new Error(
+          `Unknown view: "${viewSlug}". Available views: ${[...viewMap.keys()].join(", ") || "(none)"}`
+        );
+      }
+      const ctx = { ...defaultCtx, ...ctxOverrides };
+      return view.loader(db, ctx);
+    },
 
     async reset() {
       await client.execute("PRAGMA foreign_keys = OFF");
