@@ -12,7 +12,7 @@ import {
 } from "fs";
 import { resolve, dirname, relative, join } from "path";
 import type { KitDefinition } from "./types";
-import { MigrationError } from "./errors";
+import { KitStackError, MigrationError } from "./errors";
 import { generateShell } from "./shell-template";
 
 interface BuildResult {
@@ -64,6 +64,10 @@ export async function buildKit(kitRoot: string) {
     const module = await import(configPath);
     kit = module.default;
   } catch (e: any) {
+    // Surface SDK validation errors with their code and doc URL
+    if (e instanceof KitStackError) {
+      fail(`${e.code}: ${e.message}\n         See: ${e.docUrl}`);
+    }
     if (e.code === "MODULE_NOT_FOUND" || e.code === "ERR_MODULE_NOT_FOUND") {
       fail(`Failed to load kit.config.ts: ${e.message}\n         Run npm install first.`);
     }
@@ -77,22 +81,11 @@ export async function buildKit(kitRoot: string) {
   log("\u2713", `Loaded kit.config.ts \u2014 "${kit.name}" (${kit.tools.length} tools, ${kit.views?.length ?? 0} views)`);
 
   // ── 3. VALIDATE ────────────────────────────────────────────
+  // defineKit() already validated: snake_case names, description length,
+  // kebab-case slugs, uniqueness, and .describe() warnings.
+  // Build adds file-system checks that defineKit can't do.
 
-  // Tool name uniqueness (defineKit already checks, but belt-and-suspenders)
-  const toolNames = kit.tools.map((t) => t.name);
-  const dupeTools = toolNames.filter((n, i) => toolNames.indexOf(n) !== i);
-  if (dupeTools.length > 0) {
-    fail(`Duplicate tool names: ${dupeTools.join(", ")}`);
-  }
-
-  // View slug uniqueness
   if (kit.views) {
-    const slugs = kit.views.map((v) => v.slug);
-    const dupeSlugs = slugs.filter((s, i) => slugs.indexOf(s) !== i);
-    if (dupeSlugs.length > 0) {
-      fail(`Duplicate view slugs: ${dupeSlugs.join(", ")}`);
-    }
-
     // Verify View.tsx exists for each view (convention: src/views/{slug}/View.tsx)
     for (const view of kit.views) {
       const viewDir = resolve(kitRoot, "src", "views", view.slug);
