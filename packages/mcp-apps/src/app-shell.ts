@@ -127,9 +127,8 @@ async function loadView(data: ViewData) {
 
   root.innerHTML = `
     <div class="ks-shell">
-      <div class="ks-header">
-        <h2>${esc(title)}</h2>
-        <button onclick="window.__ksRefresh()" class="ks-btn">Refresh</button>
+      <div class="ks-toolbar">
+        <button onclick="window.__ksRefresh()" class="ks-btn" title="Refresh data">&#x21bb;</button>
       </div>
       <div id="ks-content" class="ks-loading">Loading...</div>
     </div>
@@ -143,18 +142,22 @@ async function loadView(data: ViewData) {
     return;
   }
 
-  // Set up the MCP data bridge for React components
-  (window as any).__KITSTACK_MCP__ = {
-    callTool: (cmd: string, params: Record<string, unknown>) =>
-      sendRequest("tools/call", {
-        name: "kit",
-        arguments: { id: data.kit, cmd, params },
-      }),
-    kit: data.kit,
-    view: data.view,
-  };
-
   try {
+    // Get a JWT token for the app-data Lambda via MCP channel (stays inside iframe, never reaches LLM)
+    const tokenResult = await sendRequest("tools/call", {
+      name: "kit",
+      arguments: { id: data.kit, cmd: "get_app_token", params: {} },
+    });
+    const tokenText = tokenResult?.content?.find?.((c: any) => c.type === "text")?.text;
+    if (tokenText) {
+      const tokenData = JSON.parse(tokenText);
+      // Set up the JWT+fetch path for useAppData
+      (window as any).__KITSTACK__ = {
+        token: tokenData.token,
+        appDataUrl: tokenData.appDataUrl,
+        kit: tokenData.kit,
+      };
+    }
     // Load shared CSS
     loadCSS(`${cdn}/style.css`);
 

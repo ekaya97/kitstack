@@ -8,6 +8,7 @@ import type {
 import { Resource } from "sst";
 import { dispatchToolCall } from "./tool-dispatcher";
 import { getKitApps, readAppResource } from "./app-resources";
+import { signAppToken } from "../framework/app-token";
 
 // View → data command mapping. The server tells the shell what tool to call for each view.
 interface ViewDataConfig {
@@ -142,10 +143,19 @@ export async function handleKitCall(
     return handleDiscover(id, kitTools);
   }
 
-  // show_app moved to kit_view tool — redirect if someone calls it here
+  // show_app moved to kit_view tool
   if (cmd === "show_app") {
     return {
       content: [{ type: "text", text: `Use kit_view(id="${id}", view="...") to display interactive UI.` }],
+    };
+  }
+
+  // get_app_token — called by the app shell inside the iframe to get a JWT for data fetching
+  if (cmd === "get_app_token") {
+    const token = await signAppToken({ sub: userId, kit: id });
+    const appDataUrl = (Resource as any).AppData?.url?.replace(/\/$/, "") || "";
+    return {
+      content: [{ type: "text", text: JSON.stringify({ token, appDataUrl, kit: id }) }],
     };
   }
 
