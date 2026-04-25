@@ -11,11 +11,19 @@ export async function dev(args: string[]) {
   let dbPath = ".kitstack/dev.db";
   let resetDb = false;
   let stdio = false;
+  let views = false;
+  let viewsPort = 5174;
 
   for (let i = 0; i < args.length; i++) {
     switch (args[i]) {
       case "--stdio":
         stdio = true;
+        break;
+      case "--views":
+        views = true;
+        break;
+      case "--port":
+        viewsPort = parseInt(args[++i], 10);
         break;
       case "--config":
         configPath = args[++i];
@@ -32,8 +40,8 @@ export async function dev(args: string[]) {
     }
   }
 
-  if (!stdio) {
-    console.error("Only --stdio mode is supported currently. Usage: kitstack dev --stdio");
+  if (!stdio && !views) {
+    console.error("Specify a mode: --stdio (for Claude Desktop/Code) or --views (View DevKit).\nUsage: kitstack dev --stdio | kitstack dev --views");
     process.exit(1);
   }
 
@@ -51,6 +59,13 @@ export async function dev(args: string[]) {
   // Provision local SQLite
   const fullDbPath = resolve(process.cwd(), dbPath);
   const db = await provisionDevDb(fullDbPath, kit.migrationSql, { reset: resetDb });
+
+  // Views mode — start DevKit HTTP server
+  if (views) {
+    const { startDevKitServer } = await import("../../devkit/server.js");
+    await startDevKitServer({ kit, db, port: viewsPort });
+    return;
+  }
 
   // Create MCP handler
   const handler = createMcpHandler({ kit, db });
