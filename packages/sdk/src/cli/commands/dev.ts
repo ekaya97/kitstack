@@ -1,10 +1,45 @@
 import { resolve } from "node:path";
-import { createReadStream } from "node:fs";
 import { createInterface } from "node:readline";
 import { provisionDevDb } from "../../runtime/dev-db";
 import { createMcpHandler, type JsonRpcRequest } from "../../runtime/mcp-handler";
 import type { KitDefinition } from "../../types";
 
+/**
+ * Start the local development server for a kit.
+ *
+ * Loads the kit definition from `kit.config.ts`, provisions a local SQLite
+ * database at `.kitstack/dev.db`, and serves MCP JSON-RPC requests. Two
+ * transport modes are supported:
+ *
+ * - **`--stdio`** — reads newline-delimited JSON-RPC from stdin, writes
+ *   responses to stdout. Zero-latency, no network. For Claude Desktop/Code.
+ * - **`--views`** — starts the View DevKit HTTP server for local view
+ *   development with HMR.
+ *
+ * The stdio transport handles the full MCP protocol: `initialize`,
+ * `notifications/initialized`, `ping`, `tools/list`, and `tools/call`.
+ * All kit tools are registered flat (no onion routing) plus a `kit_view`
+ * tool if the kit declares views. Parse errors return JSON-RPC `-32700`,
+ * notifications (requests without `id`) produce no response.
+ *
+ * @param args - CLI arguments after `kitstack dev` (e.g., `["--stdio"]`)
+ *
+ * @example Claude Desktop MCP config:
+ * ```json
+ * { "command": "npx", "args": ["kitstack", "dev", "--stdio"] }
+ * ```
+ *
+ * @example Run from a kit directory with a fresh database:
+ * ```sh
+ * cd kits/crm
+ * npx kitstack dev --stdio --reset-db
+ * ```
+ *
+ * @example Custom config and database paths:
+ * ```sh
+ * npx kitstack dev --stdio --config ./my-kit.config.ts --db ./data/test.db
+ * ```
+ */
 export async function dev(args: string[]) {
   // Parse flags
   let configPath = "kit.config.ts";
