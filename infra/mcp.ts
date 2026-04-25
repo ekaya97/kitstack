@@ -65,7 +65,7 @@ export const appData = new sst.aws.Function("AppData", {
   memory: "256 MB",
   runtime: "nodejs22.x",
   architecture: "arm64",
-  url: true,
+  url: { cors: false },
   link: [
     userKitDbs,
     mcpJwtSecret,

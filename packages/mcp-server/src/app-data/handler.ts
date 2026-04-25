@@ -15,6 +15,8 @@ function getAllowedOrigin(requestOrigin: string | undefined): string {
   if (!requestOrigin) return ALLOWED_ORIGINS[0];
   // MCP App sandboxed iframes send "null" origin — allow them (auth is via JWT token)
   if (requestOrigin === "null") return "null";
+  // Claude.ai MCP Apps run in sandboxed iframes at *.claudemcpcontent.com
+  if (requestOrigin.endsWith(".claudemcpcontent.com")) return requestOrigin;
   return ALLOWED_ORIGINS.includes(requestOrigin) ? requestOrigin : ALLOWED_ORIGINS[0];
 }
 
@@ -98,11 +100,14 @@ export async function handler(
 
     audit({ action: "appdata.query", userId: payload.sub, kitId: payload.kit, detail: view });
 
+    // db.all() returns { rows: [...] } or an array directly depending on the driver
+    const rows = Array.isArray(result) ? result : (result.rows ?? []);
+
     return json({
       kit: payload.kit,
       view,
-      data: result.rows,
-      count: result.rows.length,
+      data: rows,
+      count: rows.length,
     }, 200, origin);
   } catch (err: any) {
     log.error("App Data error", { error: err.message });

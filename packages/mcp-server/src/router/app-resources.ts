@@ -83,6 +83,7 @@ export function listAppResources(activatedKitIds: Set<string>) {
   }> = [];
 
   const cdnUrl = getCdnUrl();
+  const appDataUrl = (Resource as any).AppData?.url?.replace(/\/$/, "") || "";
   resources.push({
     uri: APP_SHELL_URI,
     name: "KitStack App",
@@ -97,6 +98,7 @@ export function listAppResources(activatedKitIds: Set<string>) {
           ],
           connectDomains: [
             ...(cdnUrl ? [cdnUrl] : []),
+            ...(appDataUrl ? [appDataUrl] : []),
           ],
         },
       },
@@ -117,6 +119,7 @@ export async function readAppResource(
     if (!html) return null;
 
     const cdnUrl = getCdnUrl();
+    const appDataUrl = (Resource as any).AppData?.url?.replace(/\/$/, "") || "";
     return {
       uri,
       mimeType: RESOURCE_MIME_TYPE,
@@ -131,6 +134,7 @@ export async function readAppResource(
             ],
             connectDomains: [
               ...(cdnUrl ? [cdnUrl] : []),
+              ...(appDataUrl ? [appDataUrl] : []),
             ],
           },
         },
