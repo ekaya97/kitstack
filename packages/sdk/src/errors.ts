@@ -1,11 +1,12 @@
-// --- KitStack SDK Error Hierarchy ---
-// These errors are thrown during kit definition, build, or validation — not tool results.
-// Tool results use kit.error() / kit.notFound() etc. from result.ts.
-
 /**
- * Base error for all KitStack SDK errors.
- * Every error has a machine-readable code and a link to documentation.
+ * KitStack SDK error hierarchy.
+ *
+ * These are SDK-level errors (thrown during kit definition, build, or validation),
+ * NOT tool result errors. Tool results use kit.error() / kit.notFound() etc.
+ *
+ * Each error carries a machine-readable code and a link to the relevant docs page.
  */
+
 export class KitStackError extends Error {
   readonly code: string;
   readonly docUrl: string;
@@ -18,10 +19,7 @@ export class KitStackError extends Error {
   }
 }
 
-/**
- * Thrown when a kit definition is invalid (defineKit validation failures).
- * Examples: duplicate tool names, duplicate view slugs, missing required fields.
- */
+/** Kit definition problems (duplicate tools, invalid view slugs, etc.) */
 export class KitValidationError extends KitStackError {
   constructor(code: string, message: string) {
     super(code, message);
@@ -29,10 +27,7 @@ export class KitValidationError extends KitStackError {
   }
 }
 
-/**
- * Thrown when a tool definition is invalid.
- * Examples: non-snake_case name, missing/short description, missing load+handler.
- */
+/** Tool definition problems (missing impl, bad name, short description, etc.) */
 export class ToolValidationError extends KitStackError {
   constructor(code: string, message: string) {
     super(code, message);
@@ -40,10 +35,7 @@ export class ToolValidationError extends KitStackError {
   }
 }
 
-/**
- * Thrown when migration SQL fails to execute or validate.
- * Examples: syntax errors in SQL, conflicting table definitions.
- */
+/** SQL migration failures (invalid SQL, table conflicts, etc.) */
 export class MigrationError extends KitStackError {
   constructor(code: string, message: string) {
     super(code, message);
@@ -51,13 +43,18 @@ export class MigrationError extends KitStackError {
   }
 }
 
-/**
- * Thrown when a Drizzle schema definition is invalid.
- * Examples: schema/migration mismatch, missing tables referenced by tools.
- */
+/** Schema definition problems (invalid Drizzle schema, missing tables, etc.) */
 export class SchemaError extends KitStackError {
   constructor(code: string, message: string) {
     super(code, message);
     this.name = "SchemaError";
+  }
+}
+
+/** CLI authentication failures (expired token, invalid credentials, etc.) */
+export class AuthError extends KitStackError {
+  constructor(code: string, message: string) {
+    super(code, message);
+    this.name = "AuthError";
   }
 }

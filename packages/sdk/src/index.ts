@@ -30,4 +30,5 @@ export {
   ToolValidationError,
   MigrationError,
   SchemaError,
+  AuthError,
 } from "./errors";
