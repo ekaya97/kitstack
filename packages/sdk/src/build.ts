@@ -344,7 +344,7 @@ export default defineConfig({
     kitId: kit.id,
     kitName: kit.name,
     version: kit.version,
-    sdkVersion: "0.0.1",
+    sdkVersion: JSON.parse(readFileSync(resolve(import.meta.dirname, "..", "package.json"), "utf-8")).version,
     tools: kit.tools.map((t) => ({
       name: t.name,
       description: t.description,
