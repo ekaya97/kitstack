@@ -16,6 +16,11 @@ import { deleteEmail } from "./src/tools/delete-email";
 import { addEmails } from "./src/tools/add-emails";
 import { exportSequence } from "./src/tools/export-sequence";
 
+// Views
+import sequenceBuilderView from "./src/views/sequence-builder";
+import prospectListView from "./src/views/prospect-list";
+import emailPreviewView from "./src/views/email-preview";
+
 export default defineKit({
   id: "cold-outreach",
   version: "1.0.0",
@@ -36,5 +41,10 @@ export default defineKit({
     deleteEmail,
     addEmails,
     exportSequence,
+  ],
+  views: [
+    sequenceBuilderView,
+    prospectListView,
+    emailPreviewView,
   ],
 });
