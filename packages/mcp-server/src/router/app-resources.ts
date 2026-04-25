@@ -1,7 +1,7 @@
 import { GetObjectCommand, S3Client } from "@aws-sdk/client-s3";
 import { Resource } from "sst";
 import { RESOURCE_MIME_TYPE } from "@modelcontextprotocol/ext-apps/server";
-import { getViewsForKit, type KitViewItem } from "../framework/dynamo";
+import { getViewsForKit } from "../framework/dynamo";
 
 function getCdnUrl(): string {
   return (Resource as any).KitCdn?.url?.replace(/\/$/, "") || "";
@@ -12,31 +12,13 @@ const s3 = new S3Client({});
 /** The single app shell resource URI. Declared in KIT_TOOL_DEFINITION._meta.ui. */
 export const APP_SHELL_URI = "ui://kitstack/app";
 
-// ── Kit → App mapping (legacy hardcoded, used as fallback) ──────
+// ── Kit → App mapping (from registry) ──────
 
-interface KitApp {
+export interface KitApp {
   name: string;
   slug: string;
+  description: string;
 }
-
-const KIT_APPS_FALLBACK: Record<string, KitApp[]> = {
-  "cold-outreach": [
-    { name: "Sequence Builder", slug: "sequence-builder" },
-    { name: "Prospect List", slug: "prospect-list" },
-    { name: "Email Preview", slug: "email-preview" },
-  ],
-  "expense-tax-prep": [
-    { name: "Expense Table", slug: "expense-table" },
-    { name: "Category Dashboard", slug: "category-dashboard" },
-    { name: "Import Review", slug: "import-review" },
-    { name: "Steuerberater Export", slug: "steuerberater-export" },
-  ],
-  "meeting-action-tracker": [
-    { name: "Meeting Summary", slug: "meeting-summary" },
-    { name: "Action Tracker", slug: "action-tracker" },
-    { name: "Meeting History", slug: "meeting-history" },
-  ],
-};
 
 // ── S3 fetch with in-memory cache ──────────────────────────────
 
@@ -149,17 +131,15 @@ export async function readAppResource(
 }
 
 /**
- * Get apps/views for a kit.
- * Reads from the kit_views registry table. Falls back to hardcoded map for legacy kits.
+ * Get apps/views for a kit from the kit_views registry table.
  */
 export async function getKitApps(kitId: string): Promise<KitApp[]> {
-  // Try registry first
   const views = await getViewsForKit(kitId);
-  if (views.length > 0) {
-    return views.map((v) => ({ name: v.viewName, slug: v.viewSlug }));
-  }
-  // Fallback for legacy kits not yet in registry
-  return KIT_APPS_FALLBACK[kitId] || [];
+  return views.map((v) => ({
+    name: v.viewName,
+    slug: v.viewSlug,
+    description: v.viewDescription,
+  }));
 }
 
 /**

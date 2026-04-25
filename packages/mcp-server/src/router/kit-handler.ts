@@ -10,39 +10,8 @@ import { dispatchToolCall } from "./tool-dispatcher";
 import { getKitApps, getKitShellS3Key, readAppResource } from "./app-resources";
 import { getUserKitDb } from "../framework/dynamo";
 import { signAppToken } from "../framework/app-token";
+import { getKitFunctionId } from "./kit-resources";
 
-// View → data command mapping. The server tells the shell what tool to call for each view.
-interface ViewDataConfig {
-  cmd: string;
-  params?: Record<string, unknown>;
-  description: string; // when to show this view — used in discover
-}
-
-const VIEW_DATA: Record<string, Record<string, ViewDataConfig>> = {
-  "cold-outreach": {
-    "sequence-builder": { cmd: "list_sequences", description: "after creating or editing sequences and emails" },
-    "prospect-list": { cmd: "list_sequences", description: "after adding prospects or updating hooks" },
-    "email-preview": { cmd: "list_sequences", description: "to review email content before sending" },
-  },
-  crm: {
-    pipeline: { cmd: "list_deals", description: "to see deal pipeline and stages" },
-    contacts: { cmd: "list_contacts", description: "after adding or updating contacts" },
-    "contact-detail": { cmd: "list_contacts", description: "to view detailed contact info" },
-    dashboard: { cmd: "pipeline_dashboard", description: "for CRM metrics and activity overview" },
-    proposal: { cmd: "list_deals", description: "to review deal proposals" },
-  },
-  "expense-tax-prep": {
-    "expense-table": { cmd: "list_expenses", description: "after adding or importing expenses" },
-    "category-dashboard": { cmd: "quarterly_summary", description: "for spending breakdown by category" },
-    "import-review": { cmd: "list_expenses", description: "to review imported expenses" },
-    "steuerberater-export": { cmd: "export_steuerberater", description: "to prepare tax advisor export" },
-  },
-  "meeting-action-tracker": {
-    "meeting-summary": { cmd: "list_meetings", description: "after saving a meeting" },
-    "action-tracker": { cmd: "list_actions", description: "to see open action items across meetings" },
-    "meeting-history": { cmd: "list_meetings", description: "to browse past meetings" },
-  },
-};
 
 /** Resource URI for the universal KitStack app shell. */
 const APP_SHELL_URI = "ui://kitstack/app";
@@ -159,15 +128,7 @@ export async function handleKitCall(
       return { content: [{ type: "text", text: JSON.stringify({ data: null, error: "Kit not found" }) }] };
     }
 
-    const KIT_RESOURCE_MAP: Record<string, string> = {
-      "meeting-action-tracker": "KitMeeting",
-      crm: "KitCrm",
-      "expense-tax-prep": "KitExpense",
-      "cold-outreach": "KitOutreach",
-    };
-    const resourceName = KIT_RESOURCE_MAP[id];
-    const fn = resourceName ? (Resource as any)[resourceName] : null;
-    const functionId = fn?.arn ?? fn?.name ?? null;
+    const functionId = getKitFunctionId(id, allTools);
 
     if (!functionId) {
       return { content: [{ type: "text", text: JSON.stringify({ data: null, error: "Lambda not found" }) }] };
@@ -245,11 +206,11 @@ export async function handleKitViewCall(
     if (!apps.length) {
       return { content: [{ type: "text", text: `Kit "${args.id}" has no views.` }] };
     }
-    const viewData = VIEW_DATA[args.id];
     const list = apps
       .map((a) => {
-        const vd = viewData?.[a.slug];
-        return vd ? `- \`${a.slug}\`: ${a.name} — ${vd.description}` : `- \`${a.slug}\`: ${a.name}`;
+        return a.description
+          ? `- \`${a.slug}\`: ${a.name} — ${a.description}`
+          : `- \`${a.slug}\`: ${a.name}`;
       })
       .join("\n");
     return {
@@ -339,12 +300,10 @@ async function handleDiscover(
 
   // Point to kit_view for interactive UI
   const apps = await getKitApps(kitId);
-  const viewData = VIEW_DATA[kitId];
-  if (apps.length > 0 && viewData) {
+  if (apps.length > 0) {
     const viewList = apps
       .map((a) => {
-        const vd = viewData[a.slug];
-        return vd ? `\`${a.slug}\` — ${vd.description}` : `\`${a.slug}\``;
+        return a.description ? `\`${a.slug}\` — ${a.description}` : `\`${a.slug}\``;
       })
       .join("; ");
     text += `\n**Interactive UI:** \`kit_view(id="${kitId}", view="...")\` — ${viewList}\n`;
@@ -429,16 +388,7 @@ async function handleShowApp(
   let loaderData: unknown = null;
 
   if (kitTool) {
-    // Resolve the Lambda ARN from SST Resource bindings
-    const KIT_RESOURCE_MAP: Record<string, string> = {
-      "meeting-action-tracker": "KitMeeting",
-      crm: "KitCrm",
-      "expense-tax-prep": "KitExpense",
-      "cold-outreach": "KitOutreach",
-    };
-    const resourceName = KIT_RESOURCE_MAP[kitId];
-    const fn = resourceName ? (Resource as any)[resourceName] : null;
-    const functionId = fn?.arn ?? fn?.name ?? null;
+    const functionId = getKitFunctionId(kitId, allTools);
 
     if (functionId) {
       const userDb = await getUserKitDb(userId, kitId);
@@ -460,13 +410,10 @@ async function handleShowApp(
   }
 
   // Build the text payload with pre-loaded data
-  const viewConfig = VIEW_DATA[kitId]?.[app.slug];
   const dataPayload = JSON.stringify({
     kit: kitId,
     view: app.slug,
     app: app.name,
-    cmd: viewConfig?.cmd ?? "list_contacts",
-    params: viewConfig?.params ?? {},
     data: loaderData,
   });
 
