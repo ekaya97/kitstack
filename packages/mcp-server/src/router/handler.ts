@@ -102,12 +102,102 @@ async function checkRateLimit(userId: string): Promise<boolean> {
   }
 }
 
+// --- DB Proxy types (for sandboxed kit Lambda-to-Lambda invocations) ---
+
+interface DbProxyEvent {
+  __dbProxy: true;
+  invocationToken: string;
+  sql?: string;
+  args?: unknown[];
+  batch?: Array<{ sql: string; args?: unknown[] }>;
+}
+
+interface DbProxyResult {
+  columns?: string[];
+  rows?: unknown[][];
+  rowsAffected?: number;
+  lastInsertRowid?: bigint | number;
+  results?: unknown[];
+  error?: string;
+}
+
+/**
+ * Handle a DB proxy request from a sandboxed kit Lambda.
+ * Validates the invocation token, connects to the kit's Turso DB,
+ * and executes the SQL query on behalf of the kit.
+ */
+async function handleDbProxy(event: DbProxyEvent): Promise<DbProxyResult> {
+  const { invocationToken, sql, args, batch } = event;
+
+  // 1. Look up cached DB credentials from the invocation token
+  const cached = await getOAuthItem(`INVOCATION#${invocationToken}`, "DB_CREDS");
+  if (!cached) {
+    return { error: "INVALID_TOKEN" };
+  }
+
+  let creds: { dbUrl: string; dbToken: string; userId: string; kitId: string };
+  try {
+    creds = JSON.parse(cached.data ?? "{}");
+  } catch {
+    return { error: "CORRUPT_TOKEN_DATA" };
+  }
+
+  if (!creds.dbUrl) {
+    return { error: "MISSING_DB_URL" };
+  }
+
+  // 2. Connect to the kit's Turso database
+  const { createClient: createTursoClient } = await import("@libsql/client");
+  const client = createTursoClient({ url: creds.dbUrl, authToken: creds.dbToken });
+
+  try {
+    // 3. Execute query or batch
+    if (batch) {
+      const results = [];
+      for (const stmt of batch) {
+        const result = await client.execute({ sql: stmt.sql, args: stmt.args ?? [] });
+        results.push({
+          columns: result.columns,
+          rows: result.rows,
+          rowsAffected: result.rowsAffected,
+        });
+      }
+      return { results };
+    }
+
+    if (sql) {
+      const result = await client.execute({ sql, args: args ?? [] });
+      return {
+        columns: result.columns,
+        rows: result.rows,
+        rowsAffected: result.rowsAffected,
+        lastInsertRowid: result.lastInsertRowid,
+      };
+    }
+
+    return { error: "MISSING_SQL" };
+  } catch (err: any) {
+    log.error("DB proxy query error", { error: err.message, kitId: creds.kitId });
+    return { error: `QUERY_ERROR: ${err.message}` };
+  } finally {
+    client.close();
+  }
+}
+
 export async function handler(
-  event: APIGatewayProxyEventV2
-): Promise<APIGatewayProxyStructuredResultV2> {
-  const method = event.requestContext.http.method;
-  const path = event.rawPath;
-  const origin = event.headers.origin;
+  event: APIGatewayProxyEventV2 | DbProxyEvent
+): Promise<APIGatewayProxyStructuredResultV2 | DbProxyResult> {
+  // ── DB Proxy path (Lambda-to-Lambda from sandboxed kits) ──
+  if ((event as any).__dbProxy) {
+    return handleDbProxy(event as DbProxyEvent);
+  }
+
+  // From here on, event is guaranteed to be an HTTP API Gateway event
+  // (the __dbProxy branch returned early above)
+  const httpEvent = event as APIGatewayProxyEventV2;
+  const method = httpEvent.requestContext.http.method;
+  const path = httpEvent.rawPath;
+  const origin = httpEvent.headers.origin;
 
   // CORS preflight
   if (method === "OPTIONS") {
@@ -118,18 +208,18 @@ export async function handler(
     // --- OAuth Endpoints ---
 
     if (path === "/.well-known/oauth-authorization-server") {
-      return json(getOAuthMetadata(serverUrlFromEvent(event)), 200, origin);
+      return json(getOAuthMetadata(serverUrlFromEvent(httpEvent)), 200, origin);
     }
 
     if (path === "/register" && method === "POST") {
-      const body = safeParseBody(event.body, event.headers["content-type"]);
+      const body = safeParseBody(httpEvent.body, httpEvent.headers["content-type"]);
       if (!body) return json({ error: "Invalid request body" }, 400, origin);
       const result = await handleRegister(body, putOAuthItem);
       return json(result, 201, origin);
     }
 
     if (path === "/authorize" && method === "GET") {
-      const params = event.queryStringParameters || {};
+      const params = httpEvent.queryStringParameters || {};
       const authorizeParams = {
         response_type: params.response_type || "",
         client_id: params.client_id || "",
@@ -149,7 +239,7 @@ export async function handler(
       const sessionId = await storeAuthorizeSession(authorizeParams, putOAuthItem);
 
       const loginUrl = new URL(`${Resource.BetterAuthUrl.value || "http://localhost:3000"}/login`);
-      loginUrl.searchParams.set("callback", `${serverUrlFromEvent(event)}/authorize/callback`);
+      loginUrl.searchParams.set("callback", `${serverUrlFromEvent(httpEvent)}/authorize/callback`);
       loginUrl.searchParams.set("session_id", sessionId);
 
       return {
@@ -160,7 +250,7 @@ export async function handler(
     }
 
     if (path === "/authorize/callback" && method === "GET") {
-      const params = event.queryStringParameters || {};
+      const params = httpEvent.queryStringParameters || {};
       const userId = params.user_id;
       const sessionId = params.session_id;
 
@@ -192,10 +282,10 @@ export async function handler(
     }
 
     if (path === "/token" && method === "POST") {
-      const rawBody = event.isBase64Encoded
-        ? Buffer.from(event.body || "", "base64").toString()
-        : event.body;
-      const body = safeParseBody(rawBody, event.headers["content-type"]);
+      const rawBody = httpEvent.isBase64Encoded
+        ? Buffer.from(httpEvent.body || "", "base64").toString()
+        : httpEvent.body;
+      const body = safeParseBody(rawBody, httpEvent.headers["content-type"]);
       if (!body) return json({ error: "Invalid request body" }, 400, origin);
 
       const result = await handleTokenExchange(
@@ -215,7 +305,7 @@ export async function handler(
     // --- Token Revocation (RFC 7009) ---
 
     if (path === "/revoke" && method === "POST") {
-      const body = safeParseBody(event.body);
+      const body = safeParseBody(httpEvent.body);
       if (!body) return json({ error: "Invalid request body" }, 400, origin);
 
       const token = body.token;
@@ -279,13 +369,13 @@ export async function handler(
       const internalKey = Resource.McpInternalApiKey.value;
       if (internalKey) {
         const providedKey =
-          event.headers["x-internal-api-key"] || event.queryStringParameters?.api_key;
+          httpEvent.headers["x-internal-api-key"] || httpEvent.queryStringParameters?.api_key;
         if (providedKey !== internalKey) {
           return json({ error: "Unauthorized" }, 401, origin);
         }
       }
 
-      const userId = event.queryStringParameters?.userId;
+      const userId = httpEvent.queryStringParameters?.userId;
       if (!userId) {
         return json({ connected: false, reason: "missing_userId" }, 400, origin);
       }
@@ -334,7 +424,7 @@ export async function handler(
 
     if (path === "/" && method === "POST") {
       // Authenticate via authz layer
-      const authHeader = event.headers.authorization || event.headers.Authorization || "";
+      const authHeader = httpEvent.headers.authorization || httpEvent.headers.Authorization || "";
       const token = authHeader.replace("Bearer ", "");
       if (!token) {
         audit({ action: "auth.failed", detail: "missing authorization header" });
@@ -356,7 +446,7 @@ export async function handler(
         audit({ action: "auth.failed", userId, detail: "rate limit exceeded" });
         return json({
           jsonrpc: "2.0",
-          id: (safeParseBody(event.body) as any)?.id ?? null,
+          id: (safeParseBody(httpEvent.body) as any)?.id ?? null,
           error: {
             code: -32029,
             message: "Rate limit exceeded (60 requests/minute). Wait a moment before retrying. This can happen when loading a session with many tool results.",
@@ -364,7 +454,7 @@ export async function handler(
         }, 429, origin);
       }
 
-      const body = safeParseBody(event.body);
+      const body = safeParseBody(httpEvent.body);
       if (!body) return json({ error: "Invalid request body" }, 400, origin);
       const request = body as JsonRpcRequest;
 
