@@ -4,12 +4,12 @@ import type {
   McpToolDefinition,
   KitToolInput,
   UserKitDbItem,
-} from "../framework/types";
+} from "./types";
 import { Resource } from "sst";
 import { dispatchToolCall } from "./tool-dispatcher";
 import { getKitApps, getKitShellS3Key, readAppResource } from "./app-resources";
-import { getUserKitDb } from "../framework/dynamo";
-import { signAppToken } from "../framework/app-token";
+import { getUserKitDb } from "../db/dynamo";
+import { signAppToken } from "./app-token";
 import { getKitFunctionId } from "./kit-resources";
 
 

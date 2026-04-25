@@ -6,7 +6,7 @@
  * batched logs are sent before the function freezes.
  *
  * Usage:
- *   import { log, flushLogs } from "../framework/logger";
+ *   import { log, flushLogs } from "./logger";
  *   log.info("Tool dispatched", { userId, toolName });
  *   // ... at end of handler:
  *   await flushLogs();

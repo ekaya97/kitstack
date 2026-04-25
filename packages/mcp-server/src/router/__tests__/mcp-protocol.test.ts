@@ -1,6 +1,6 @@
 import { describe, it, expect, vi } from "vitest";
 import { handleMcpRequest } from "../mcp-protocol";
-import type { KitRegistryItem, UserKitDbItem, JsonRpcRequest } from "../../framework/types";
+import type { KitRegistryItem, UserKitDbItem, JsonRpcRequest } from "../types";
 import { textOf } from "../../test/helpers";
 
 const mockTools: KitRegistryItem[] = [

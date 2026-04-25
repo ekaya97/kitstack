@@ -1,6 +1,6 @@
 import { describe, it, expect, vi, beforeEach } from "vitest";
 import { dispatchToolCall } from "../tool-dispatcher";
-import type { KitRegistryItem } from "../../framework/types";
+import type { KitRegistryItem } from "../types";
 import { textOf } from "../../test/helpers";
 
 const mockTools: KitRegistryItem[] = [
@@ -23,7 +23,7 @@ vi.mock("../../framework/dynamo", () => ({
   getUserKitDb: vi.fn(),
 }));
 
-import { getUserKitDb } from "../../framework/dynamo";
+import { getUserKitDb } from "../../db/dynamo";
 
 beforeEach(() => {
   vi.clearAllMocks();

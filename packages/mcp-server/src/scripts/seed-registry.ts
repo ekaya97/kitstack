@@ -1,6 +1,6 @@
 import { zodToJsonSchema } from "../shared/zod-to-json-schema";
-import { putRegistryItem } from "../framework/dynamo";
-import type { KitDefinition, KitRegistryItem } from "../framework/types";
+import { putRegistryItem } from "../db/dynamo";
+import type { KitDefinition, KitRegistryItem } from "../router/types";
 
 // Import all kit definitions
 import meetingKit from "../kits/meeting/index";

@@ -6,7 +6,7 @@
  *
  * Run: npx sst shell -- npx tsx packages/mcp-server/src/scripts/migrate-registry-lambda-resource.ts
  */
-import { getTursoDb } from "../framework/authz";
+import { getTursoDb } from "../router/authz";
 import { sql } from "drizzle-orm";
 
 async function main() {

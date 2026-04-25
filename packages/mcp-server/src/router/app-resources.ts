@@ -1,7 +1,7 @@
 import { GetObjectCommand, S3Client } from "@aws-sdk/client-s3";
 import { Resource } from "sst";
 import { RESOURCE_MIME_TYPE } from "@modelcontextprotocol/ext-apps/server";
-import { getViewsForKit } from "../framework/dynamo";
+import { getViewsForKit } from "../db/dynamo";
 
 function getCdnUrl(): string {
   return (Resource as any).KitCdn?.url?.replace(/\/$/, "") || "";

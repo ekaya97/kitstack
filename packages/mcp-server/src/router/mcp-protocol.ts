@@ -4,7 +4,7 @@ import type {
   KitRegistryItem,
   UserKitDbItem,
   KitToolInput,
-} from "../framework/types";
+} from "./types";
 import { KIT_TOOL_DEFINITION, KIT_VIEW_TOOL_DEFINITION, handleKitCall, handleKitViewCall } from "./kit-handler";
 import { listAppResources, readAppResource } from "./app-resources";
 

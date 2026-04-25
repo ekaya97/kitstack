@@ -1,5 +1,5 @@
 import { generateClientId, generateClientSecret } from "./helpers";
-import type { OAuthStoreItem } from "../../framework/types";
+import type { OAuthStoreItem } from "../types";
 
 interface RegisterRequest {
   client_name?: string;

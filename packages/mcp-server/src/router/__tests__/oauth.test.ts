@@ -10,7 +10,7 @@ import { getOAuthMetadata } from "../oauth/metadata";
 import { handleRegister } from "../oauth/register";
 import { validateAuthorizeRequest, storeAuthorizeSession, issueAuthCode } from "../oauth/authorize";
 import { handleTokenExchange } from "../oauth/token";
-import type { OAuthStoreItem } from "../../framework/types";
+import type { OAuthStoreItem } from "../types";
 
 beforeEach(() => {
   vi.stubEnv("MCP_JWT_SECRET", "test-secret-that-is-at-least-32-chars-long!");

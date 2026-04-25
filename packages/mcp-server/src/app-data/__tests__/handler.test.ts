@@ -13,9 +13,9 @@ vi.mock("../../framework/kit-db", () => ({
 }));
 
 import { handler } from "../handler";
-import { verifyAppToken } from "../../framework/app-token";
-import { getUserKitDb } from "../../framework/dynamo";
-import { createKitDbClient } from "../../framework/kit-db";
+import { verifyAppToken } from "../../router/app-token";
+import { getUserKitDb } from "../../db/dynamo";
+import { createKitDbClient } from "../../db/kit-db";
 import type { APIGatewayProxyEventV2 } from "aws-lambda";
 
 function makeEvent(params: Record<string, string> = {}): APIGatewayProxyEventV2 {

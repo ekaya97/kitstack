@@ -1,6 +1,6 @@
 import crypto from "node:crypto";
 import { generateAuthCode } from "./helpers";
-import type { OAuthStoreItem } from "../../framework/types";
+import type { OAuthStoreItem } from "../types";
 
 export interface AuthorizeParams {
   response_type: string;

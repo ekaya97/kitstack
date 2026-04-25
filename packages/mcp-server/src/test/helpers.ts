@@ -1,4 +1,4 @@
-import type { KitToolResult } from "../framework/types";
+import type { KitToolResult } from "../router/types";
 
 /** Extract text from the first content block of a tool result. */
 export function textOf(result: KitToolResult): string {

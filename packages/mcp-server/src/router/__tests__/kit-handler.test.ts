@@ -1,6 +1,6 @@
 import { describe, it, expect, vi } from "vitest";
 import { KIT_TOOL_DEFINITION, handleKitCall } from "../kit-handler";
-import type { KitRegistryItem, UserKitDbItem } from "../../framework/types";
+import type { KitRegistryItem, UserKitDbItem } from "../types";
 import { textOf } from "../../test/helpers";
 
 const mockTools: KitRegistryItem[] = [

@@ -1,9 +1,9 @@
 import type { APIGatewayProxyEventV2, APIGatewayProxyStructuredResultV2 } from "aws-lambda";
-import { verifyAppToken } from "../framework/app-token";
-import { getUserKitDb } from "../framework/dynamo";
-import { createKitDbClient } from "../framework/kit-db";
-import { audit } from "../framework/audit";
-import { log, flushLogs } from "../framework/logger";
+import { verifyAppToken } from "../router/app-token";
+import { getUserKitDb } from "../db/dynamo";
+import { createKitDbClient } from "../db/kit-db";
+import { audit } from "../router/audit";
+import { log, flushLogs } from "../router/logger";
 import { Resource } from "sst";
 import { sql } from "drizzle-orm";
 

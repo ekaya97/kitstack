@@ -3,7 +3,7 @@ import {
   signAccessToken,
   generateRefreshToken,
 } from "./helpers";
-import type { OAuthStoreItem } from "../../framework/types";
+import type { OAuthStoreItem } from "../types";
 
 interface TokenRequest {
   grant_type: string;

@@ -1,8 +1,8 @@
-import type { KitRegistryItem, KitToolInvocation, KitToolResult } from "../framework/types";
-import { getUserKitDb } from "../framework/dynamo";
-import { mcpCheckTuple } from "../framework/authz";
-import { audit } from "../framework/audit";
-import { log } from "../framework/logger";
+import type { KitRegistryItem, KitToolInvocation, KitToolResult } from "./types";
+import { getUserKitDb } from "../db/dynamo";
+import { mcpCheckTuple } from "./authz";
+import { audit } from "./audit";
+import { log } from "./logger";
 import { getKitFunctionId, getKitAuthzSlug } from "./kit-resources";
 
 export async function dispatchToolCall(

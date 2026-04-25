@@ -1,4 +1,4 @@
-import type { KitRegistryItem } from "../framework/types";
+import type { KitRegistryItem } from "./types";
 
 /**
  * Resolve the Lambda function name for a kit.

@@ -8,17 +8,17 @@ import { validateAuthorizeRequest, storeAuthorizeSession, issueAuthCode } from "
 import { handleTokenExchange } from "./oauth/token";
 import { verifyAccessToken } from "./oauth/helpers";
 import { handleMcpRequest } from "./mcp-protocol";
-import { getAllRegistryItems, getUserKitDbs } from "../framework/dynamo";
-import { mcpRequireAuthorized } from "../framework/authz";
-import { audit } from "../framework/audit";
-import { log, flushLogs } from "../framework/logger";
+import { getAllRegistryItems, getUserKitDbs } from "../db/dynamo";
+import { mcpRequireAuthorized } from "./authz";
+import { audit } from "./audit";
+import { log, flushLogs } from "./logger";
 import {
   getOAuthItem,
   putOAuthItem,
   deleteOAuthItem,
 } from "./oauth-store";
 import { Resource } from "sst";
-import type { JsonRpcRequest } from "../framework/types";
+import type { JsonRpcRequest } from "./types";
 
 const lambda = new LambdaClient({});
 const dynamo = new DynamoDBClient({});
