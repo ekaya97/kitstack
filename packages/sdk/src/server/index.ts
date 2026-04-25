@@ -8,23 +8,69 @@ import { none } from "./auth/none";
 export type { AuthAdapter, OAuthServerMetadata } from "./auth";
 export { none } from "./auth";
 
+/**
+ * Configuration for {@link serve}.
+ *
+ * Connects a kit definition to a database, auth adapter, and transport layer
+ * to create a complete self-hosted MCP server. Used by `kitstack dev` internally
+ * and by developers deploying kits on their own infrastructure.
+ */
 export interface ServeOptions {
-  /** Single kit definition. */
+  /** Kit definition from `defineKit()`. */
   kit: KitDefinition;
-  /** Auth adapter. Defaults to none() (no auth, dev mode). */
+
+  /**
+   * Auth adapter for request authentication.
+   * Defaults to `none()` — all requests treated as a default user.
+   * Use `kitstack()` for KitStack identity provider or `oauth()` for custom auth.
+   */
   auth?: AuthAdapter;
-  /** Database connection config. */
+
+  /**
+   * Database connection config. Passed directly to `@libsql/client`'s `createClient()`.
+   *
+   * @example
+   * ```typescript
+   * // Local SQLite file
+   * db: { url: "file:.kitstack/dev.db" }
+   *
+   * // Turso cloud database
+   * db: { url: process.env.DATABASE_URL, authToken: process.env.DATABASE_TOKEN }
+   * ```
+   */
   db: { url: string; authToken?: string };
-  /** Transport mode. Default: "stdio". */
+
+  /**
+   * Transport mode.
+   * - `"stdio"` — reads JSON-RPC from stdin, writes to stdout (for Claude Desktop/Code)
+   * - `"http"` — HTTP server with `POST /` for JSON-RPC and OAuth metadata endpoint
+   *
+   * @default "stdio"
+   */
   transport?: "stdio" | "http";
-  /** HTTP port (only used with transport: "http"). Default: 3000. */
+
+  /**
+   * HTTP port. Only used when `transport` is `"http"`.
+   * @default 3000
+   */
   port?: number;
 }
 
 /**
  * Start a self-hosted MCP server for a kit.
  *
- * ```ts
+ * Wires together the MCP protocol handler, an auth adapter, and a database
+ * connection into a complete server. Supports stdio transport (for local dev
+ * with Claude Desktop/Code) and HTTP transport (for production deployments).
+ *
+ * The server registers all kit tools plus a `kit_view` tool (if the kit
+ * has views), handles the MCP `initialize` handshake with `io.modelcontextprotocol/ui`
+ * capabilities, and processes `tools/call` requests by dispatching to tool handlers.
+ *
+ * @param options - Server configuration (kit, auth, db, transport)
+ *
+ * @example Local development with stdio (what `kitstack dev --stdio` runs internally):
+ * ```typescript
  * import { serve, none } from "@kitstack/sdk/server";
  * import kit from "./kit.config";
  *
@@ -33,6 +79,22 @@ export interface ServeOptions {
  *   auth: none(),
  *   db: { url: "file:.kitstack/dev.db" },
  *   transport: "stdio",
+ * });
+ * ```
+ *
+ * @example Self-hosted HTTP server with Turso:
+ * ```typescript
+ * import { serve } from "@kitstack/sdk/server";
+ * import kit from "./kit.config";
+ *
+ * serve({
+ *   kit,
+ *   db: {
+ *     url: process.env.DATABASE_URL!,
+ *     authToken: process.env.DATABASE_TOKEN,
+ *   },
+ *   transport: "http",
+ *   port: 3000,
  * });
  * ```
  */

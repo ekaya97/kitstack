@@ -15,8 +15,27 @@ import type { KitDefinition } from "./types";
 import { KitStackError, MigrationError } from "./errors";
 import { generateShell } from "./shell-template";
 
-interface BuildResult {
+/**
+ * Result returned by {@link buildKit} on success.
+ *
+ * Contains the generated manifest (also persisted to `manifest.json`) and
+ * the absolute path to the build output directory. Consumers can inspect
+ * the manifest to verify tool/view counts, bundle sizes, and hashes.
+ *
+ * @example
+ * ```typescript
+ * import { buildKit } from "@kitstack/sdk/build";
+ *
+ * const result = await buildKit(process.cwd());
+ * console.log(result.manifest.kitId);   // "crm"
+ * console.log(result.manifest.tools);   // [{ name: "add_contact", ... }, ...]
+ * console.log(result.outputDir);        // "/path/to/kits/crm/.kitstack/build"
+ * ```
+ */
+export interface BuildResult {
+  /** The generated manifest object (also written to manifest.json). */
   manifest: Record<string, unknown>;
+  /** Absolute path to the build output directory (.kitstack/build/). */
   outputDir: string;
 }
 
@@ -42,6 +61,34 @@ function fileSizeKB(filePath: string): string {
   return (fileSize(filePath) / 1024).toFixed(1);
 }
 
+/**
+ * Validate and bundle a kit for deployment.
+ *
+ * Loads `kit.config.ts` from the kit root, validates tools/views/migrations,
+ * bundles the server handler with esbuild, builds view modules with Vite,
+ * compiles Tailwind CSS, generates a per-kit app shell, and writes a manifest.
+ *
+ * Output is written to `{kitRoot}/.kitstack/build/`.
+ *
+ * Validation errors from {@link defineKit} are surfaced with error codes
+ * and doc URLs. Migration SQL is validated against in-memory SQLite.
+ *
+ * @param kitRoot - Absolute path to the kit's root directory (containing kit.config.ts)
+ * @returns Build result with manifest and output directory path
+ *
+ * @example
+ * ```typescript
+ * // In kits/crm/build.ts
+ * import { buildKit } from "../../packages/sdk/src/build";
+ * buildKit(import.meta.dirname);
+ * ```
+ *
+ * @example
+ * ```typescript
+ * // From the CLI (kitstack build)
+ * await buildKit(process.cwd());
+ * ```
+ */
 export async function buildKit(kitRoot: string) {
   const configPath = resolve(kitRoot, "kit.config.ts");
   const handlerPath = resolve(kitRoot, "handler.ts");

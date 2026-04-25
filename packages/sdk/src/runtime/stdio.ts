@@ -20,6 +20,23 @@
 import type { Readable, Writable } from "node:stream";
 import type { McpHandler, JsonRpcRequest } from "./mcp-handler";
 
+/**
+ * Options for customizing the stdio transport's I/O streams.
+ *
+ * All streams default to the standard process streams (`stdin`, `stdout`,
+ * `stderr`). Override them to inject test doubles or redirect I/O in
+ * embedded scenarios.
+ *
+ * @example
+ * ```typescript
+ * import { runStdioTransport } from "@kitstack/sdk/runtime/stdio";
+ * import { PassThrough } from "node:stream";
+ *
+ * const fakeIn = new PassThrough();
+ * const fakeOut = new PassThrough();
+ * await runStdioTransport(handler, { input: fakeIn, output: fakeOut });
+ * ```
+ */
 export interface StdioTransportOptions {
   /**
    * Readable stream to read JSON-RPC requests from.
@@ -41,8 +58,32 @@ export interface StdioTransportOptions {
 }
 
 /**
- * Run the MCP handler over stdio. Resolves when stdin closes or a shutdown
- * signal is received.
+ * Run the MCP handler over stdio (NDJSON on stdin/stdout).
+ *
+ * Reads newline-delimited JSON-RPC messages from the input stream, routes
+ * each through `handler.handleRequest()`, and writes responses back.
+ * Diagnostic output goes to the logger stream (stderr by default) so that
+ * stdout remains a clean protocol channel.
+ *
+ * The returned promise resolves when stdin closes or a `SIGINT`/`SIGTERM`
+ * signal is received, making it safe to `await` in a top-level script.
+ *
+ * Used internally by `kitstack dev --stdio` and by the `serve()` function
+ * in stdio mode.
+ *
+ * @param handler - MCP handler created by {@link createMcpHandler}.
+ * @param opts    - Optional overrides for I/O streams (see {@link StdioTransportOptions}).
+ *
+ * @example
+ * ```typescript
+ * // Typical usage inside `kitstack dev --stdio`
+ * import { createMcpHandler } from "@kitstack/sdk/runtime/mcp-handler";
+ * import { runStdioTransport } from "@kitstack/sdk/runtime/stdio";
+ * import kit from "./kit.config";
+ *
+ * const handler = createMcpHandler({ kit, db });
+ * await runStdioTransport(handler);
+ * ```
  */
 export async function runStdioTransport(
   handler: McpHandler,

@@ -1,16 +1,62 @@
 /**
- * Generates a per-kit app shell HTML.
- * The shell handles MCP Apps protocol (postMessage, sandbox handshake, ui/initialize)
- * and loads view modules from CDN. Kit-specific config is baked in at build time.
+ * Configuration for generating a per-kit app shell HTML file.
+ *
+ * Passed to {@link generateShell} to bake kit-specific values (ID, CDN
+ * URLs, view metadata) into the output HTML at build time.
+ *
+ * @example
+ * ```typescript
+ * const config: ShellConfig = {
+ *   kitId: "crm",
+ *   platformCdn: "https://cdn.kitstack.dev/apps",
+ *   kitCdn: "https://cdn.kitstack.dev/apps/kits/crm",
+ *   views: [
+ *     { slug: "contacts", height: 500 },
+ *     { slug: "pipeline", height: 600 },
+ *   ],
+ * };
+ * ```
  */
-
-interface ShellConfig {
+export interface ShellConfig {
+  /** Kit identifier (e.g. "crm", "cold-outreach"). */
   kitId: string;
+  /** CDN base URL for platform shared assets (vendor.js, shared.js). */
   platformCdn: string;
+  /** CDN base URL for this kit's view modules and CSS. */
   kitCdn: string;
+  /** View definitions with their height preferences. */
   views: Array<{ slug: string; height?: number }>;
 }
 
+/**
+ * Generate a per-kit app shell HTML string.
+ *
+ * The shell implements the MCP Apps protocol (postMessage, sandbox handshake,
+ * `ui/initialize`) and loads view modules from CDN. Kit-specific config
+ * (IDs, CDN URLs, per-view heights) is baked in at build time.
+ *
+ * The generated shell has two rendering paths:
+ * - **React path:** When CDN is configured, loads vendor.js + shared.js + per-view module
+ * - **Markdown fallback:** When CDN is unavailable, fetches tool output and renders as HTML
+ *
+ * @param config - Shell configuration with kit ID, CDN URLs, and view definitions
+ * @returns Complete HTML string ready to be written to shell.html
+ *
+ * @example
+ * ```typescript
+ * // In the build pipeline (packages/sdk/src/build.ts)
+ * const shellHtml = generateShell({
+ *   kitId: "crm",
+ *   platformCdn: "https://cdn.kitstack.dev/apps",
+ *   kitCdn: "https://cdn.kitstack.dev/apps/kits/crm",
+ *   views: [
+ *     { slug: "pipeline", height: 600 },
+ *     { slug: "contacts", height: 500 },
+ *   ],
+ * });
+ * writeFileSync("shell.html", shellHtml);
+ * ```
+ */
 export function generateShell(config: ShellConfig): string {
   const viewsJson = JSON.stringify(
     Object.fromEntries(config.views.map((v) => [v.slug, { height: v.height ?? 400 }]))

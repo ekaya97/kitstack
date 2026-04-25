@@ -1,4 +1,4 @@
-# Dev Notes: Dev Command, Build Validation, Router Cleanup
+# Dev Notes: `kitstack dev --stdio`, Build Validation, VIEW_DATA Removal
 
 Tickets: T-0004, T-0019, T-0035
 
@@ -6,149 +6,178 @@ Tickets: T-0004, T-0019, T-0035
 
 ## What was built
 
-### T-0004: `kitstack dev --stdio`
+### Dev server with stdio transport (T-0004)
 
-The `dev` command at `packages/sdk/src/cli/commands/dev.ts` is the local development entry point. It loads a kit from `kit.config.ts`, provisions a local SQLite database, and serves MCP JSON-RPC over stdio.
+The `kitstack dev` command (`packages/sdk/src/cli/commands/dev.ts`) starts a local MCP server that connects a kit to Claude Desktop or Claude Code.
 
-**Architecture:** The command is thin glue — it wires three existing building blocks:
-- `provisionDevDb()` (T-0027) creates/migrates `.kitstack/dev.db`
-- `createMcpHandler()` (T-0024) handles MCP protocol dispatch
-- Node's `readline` reads newline-delimited JSON-RPC from stdin
+**Two transport modes:**
 
-```typescript
-// The core loop is ~15 lines:
-const rl = createInterface({ input: process.stdin });
-rl.on("line", async (line) => {
-  const request = JSON.parse(line.trim());
-  const response = await handler.handleRequest(request);
-  if (response !== null) {
-    process.stdout.write(JSON.stringify(response) + "\n");
-  }
-});
+- `--stdio` reads newline-delimited JSON-RPC from stdin and writes responses to stdout. This is the primary development workflow. Zero network overhead.
+- `--views` starts a Vite-backed HTTP server for developing view components with HMR (separate DevKit concern, not covered in detail here).
+
+**Startup sequence:**
+
+1. Parse CLI flags (`--stdio`, `--config`, `--db`, `--reset-db`, `--views`, `--port`).
+2. Load `kit.config.ts` via dynamic `import()` -- this runs `defineKit()` which validates tools, views, schemas.
+3. Provision a local SQLite database at `.kitstack/dev.db` using `provisionDevDb()`. Migration SQL runs on every start (idempotent CREATE TABLE IF NOT EXISTS).
+4. Create the MCP handler via `createMcpHandler({ kit, db })`.
+5. Wire up `readline` on stdin; each line is parsed as JSON-RPC and dispatched to the handler.
+
+**MCP protocol coverage:**
+
+| Method | Behavior |
+|--------|----------|
+| `initialize` | Returns server info + capabilities (including `io.modelcontextprotocol/ui` for MCP Apps) |
+| `notifications/initialized` | Acknowledged, no response (notification) |
+| `ping` | Returns `{}` |
+| `tools/list` | Returns the two-tool surface: `kit` + `kit_view` |
+| `tools/call` | Dispatches to `handleKit()` or `handleKitView()` |
+
+### Build validation step (T-0019)
+
+Validation happens in `kitstack build` (`packages/sdk/src/build.ts`), not in the dev server. This is intentional -- dev should be fast, build should be thorough.
+
+**What build validates:**
+
+- Kit config loads without errors (schema violations from `defineKit()` surface as `KitStackError` with error codes and doc URLs).
+- View.tsx files exist on disk for every declared view (`src/views/{slug}/View.tsx`).
+- Migration SQL is syntactically valid -- each statement is executed against an in-memory SQLite database.
+- DROP statements are rejected with `MIGRATION_DROP_FORBIDDEN` (hard rule, not configurable).
+- Server bundle size warnings (>1MB).
+- View module size warnings (>500KB per module).
+
+**Why validation is in build, not dev:**
+
+During `kitstack dev`, the developer is iterating. Running migration SQL against in-memory SQLite on every restart would add latency and mask real errors (the dev database already exists and may have drifted from the migration). Build runs once before publish and catches everything.
+
+### VIEW_DATA removal from router (T-0035)
+
+The original router design had a separate `VIEW_DATA` message type for delivering loader data to the app shell. This was removed in favor of inline data delivery.
+
+**How it works now:**
+
+When `kit_view(view="contacts")` is called, the handler:
+
+1. Runs the view's `loader(db, ctx)` to get data.
+2. Returns two content blocks in the tool result:
+   - A `text` block containing JSON: `{ kit, view, app, data }`.
+   - A `resource` block with `mimeType: "text/html;profile=mcp-app"` containing the pre-built shell HTML.
+
+The shell parses the JSON from the text block and mounts the view with the pre-loaded data. No second round-trip, no `VIEW_DATA` event, no router involvement.
+
+**Before (removed):**
+
+```
+Client -> tools/call kit_view(view) -> server
+Server -> tool result (shell HTML only) -> client
+Client renders shell -> shell sends VIEW_DATA request -> server
+Server -> VIEW_DATA response (loader data) -> shell
+Shell mounts view with data
 ```
 
-**Flags:**
-- `--stdio` — stdio transport (for Claude Desktop/Code)
-- `--views` — View DevKit mode (delegates to `devkit/server.ts`)
-- `--config <path>` — custom kit config path (default: `kit.config.ts`)
-- `--db <path>` — custom database path (default: `.kitstack/dev.db`)
-- `--reset-db` — delete and re-provision the database
+**After (current):**
 
-**Claude Desktop integration:**
-```json
-{ "command": "npx", "args": ["kitstack", "dev", "--stdio"] }
+```
+Client -> tools/call kit_view(view) -> server
+Server runs loader, returns [JSON data, shell HTML] -> client
+Client renders shell -> shell reads data from tool result -> mounts view
 ```
 
-### T-0019: Build validation wiring
-
-Wired the `defineKit()` validation (tool name/description checks, duplicate detection) into the build pipeline at `packages/sdk/src/build.ts`. Before this, validation only ran at runtime when `defineKit()` was called. Now `kitstack build` surfaces `KitStackError` codes and doc URLs.
-
-Key change: removed redundant manual duplicate checks from the build — `defineKit()` already handles those at load time. The build retains only the file-system check (verifying `View.tsx` exists for each view) since that's a build concern, not a definition concern.
-
-### T-0035: Router VIEW_DATA removal
-
-Removed the hardcoded `VIEW_DATA` map and `KIT_APPS_FALLBACK` from the production router (`packages/mcp-server/src/router/`). View descriptions now come exclusively from the `kit_views` registry table in Turso.
-
-Before: `getKitApps()` had a fallback map for non-CRM kits. `handleShowApp()` read view descriptions from a hardcoded `VIEW_DATA` object.
-
-After: `getKitApps()` reads only from the registry. `handleShowApp()` uses the `description` column from `kit_views`. The legacy `cmd`/`params` fields in the data payload were removed — loaders replace cmd-based data fetching.
+The `__load_view` internal command on the `kit` tool still exists for view reloads (called by `useKit().reload()` from the client-side SDK hooks), but the initial load no longer needs it.
 
 ---
 
 ## What was learned
 
-### Kit config loading requires absolute paths
+### Gotchas with stdio transport
 
-The `import()` call in the dev command needs an absolute path. When running `npx kitstack dev --stdio` from a kit directory, the relative `kit.config.ts` must be resolved against `process.cwd()`:
+**Never write non-JSON to stdout.** Any `console.log()` in tool handlers or loaders that writes to stdout will corrupt the JSON-RPC stream. Claude Desktop/Code will reject the line as a parse error. All developer-facing output goes to stderr via `console.error()`.
 
-```typescript
-const fullConfigPath = resolve(process.cwd(), configPath);
-const mod = await import(fullConfigPath);
-kit = mod.default ?? mod;
-```
+**Process lifecycle is managed by the client.** When Claude Desktop closes the MCP server, it closes stdin. The `readline` `close` event fires and we call `process.exit(0)`. There is no graceful shutdown protocol in MCP -- the client just kills the pipe. This means:
 
-The `mod.default ?? mod` pattern handles both `export default defineKit(...)` and `module.exports = defineKit(...)`.
+- No cleanup hooks run unless you listen for `close` explicitly.
+- Database connections are not explicitly closed (SQLite handles this fine via OS-level file handle cleanup).
+- If the kit has long-running async work when stdin closes, it may be orphaned. This has not been an issue in practice because tool handlers are short-lived.
 
-### Notifications must not produce responses
+**`--reset-db` is essential during schema iteration.** SQLite's `CREATE TABLE IF NOT EXISTS` is idempotent for the table name, but if you change column definitions, the old table persists with the old schema. During active schema development, always use `--reset-db` or manually delete `.kitstack/dev.db`.
 
-MCP notifications (JSON-RPC requests without an `id`) must return nothing — not even `null`. The handler returns `null` for notifications, and the stdio loop checks for this:
+**Parse errors return `id: null`.** When the incoming line is not valid JSON, we return a JSON-RPC error with `id: null` (per spec, since we cannot determine the request ID). Claude Desktop handles this gracefully.
 
-```typescript
-if (response !== null) {
-  process.stdout.write(JSON.stringify(response) + "\n");
-}
-```
+### Process lifecycle edge cases
 
-Sending a response to a notification violates the MCP spec and causes client-side errors.
+**Multiple concurrent requests.** The readline-based transport processes one line at a time, but `handler.handleRequest()` is async. If the client sends two requests before the first completes, they run concurrently. This is fine because the MCP handler is stateless per-request and SQLite serializes writes. However, if a kit tool mutates shared state (unlikely given the architecture), this could be a source of bugs.
 
-### Parse errors need careful handling
+**No backpressure.** If stdout's write buffer fills up (e.g., a tool returns a very large result), `process.stdout.write()` will buffer in Node.js. This has not been an issue in practice because tool results are typically small (a few KB of JSON + shell HTML).
 
-Invalid JSON on stdin must return a `-32700` parse error, not crash the process. The try/catch around `JSON.parse` ensures the dev server stays alive even if the client sends malformed input.
+### Build validation timing
 
-### Build validation is best as delegation, not duplication
-
-T-0019 started by adding validation checks to the build pipeline that duplicated what `defineKit()` already does. The better pattern: let `defineKit()` throw on load (it already does), catch the error in the build, and format it. The build only adds file-system checks that `defineKit()` can't do (like verifying `View.tsx` exists on disk).
-
-### Registry migration is safe with IF NOT EXISTS
-
-T-0035 removed the VIEW_DATA fallback, which means all kits must be registered in `kit_views` before they work. The CRM kit was already registered. Other kits need `INSERT INTO kit_views` during deployment. The `CREATE TABLE IF NOT EXISTS` in the migration SQL ensures the table exists without affecting existing data.
+Running migration validation at build time (not dev time) was the right call. During development, the `.kitstack/dev.db` file is the source of truth, and re-running migrations against in-memory SQLite would catch syntax errors but not semantic drift. Build validation catches the class of errors that matter before deployment: SQL that fails on a fresh database.
 
 ---
 
 ## How to use it
 
-### Running the dev server
+### Local development workflow with Claude Desktop
 
-From any kit directory:
+1. Create or navigate to your kit directory (e.g., `kits/crm`).
 
-```sh
-# Start stdio server (for Claude Desktop/Code)
-npx kitstack dev --stdio
+2. Add an MCP server entry to Claude Desktop's config (`~/Library/Application Support/Claude/claude_desktop_config.json`):
 
-# Start with a fresh database
-npx kitstack dev --stdio --reset-db
-
-# Use a custom config
-npx kitstack dev --stdio --config ./my-kit.config.ts
+```json
+{
+  "mcpServers": {
+    "crm": {
+      "command": "npx",
+      "args": ["tsx", "packages/sdk/src/cli/index.ts", "dev", "--stdio"],
+      "cwd": "/absolute/path/to/kitstack/kits/crm"
+    }
+  }
+}
 ```
 
-### Testing the dev server manually
+3. Restart Claude Desktop. The CRM kit's tools (`add_contact`, `list_contacts`, etc.) and views (`contacts`, `pipeline`, etc.) appear in the tool list.
 
-Pipe JSON-RPC to stdin:
+4. Iterate: edit tool handlers or view components, then restart the MCP server (Claude Desktop menu > restart server or restart the app).
 
-```sh
-echo '{"jsonrpc":"2.0","id":1,"method":"initialize","params":{}}' \
-  | npx kitstack dev --stdio
-```
-
-Multi-message test:
-
-```sh
-printf '{"jsonrpc":"2.0","id":1,"method":"initialize","params":{}}\n{"jsonrpc":"2.0","id":2,"method":"tools/list","params":{}}\n' \
-  | npx kitstack dev --stdio
-```
-
-### End-to-end with the CRM kit
+### Resetting the database
 
 ```sh
 cd kits/crm
-printf '{"jsonrpc":"2.0","id":1,"method":"initialize","params":{}}\n{"jsonrpc":"2.0","id":2,"method":"tools/call","params":{"name":"add_contact","arguments":{"name":"Alice"}}}\n{"jsonrpc":"2.0","id":3,"method":"tools/call","params":{"name":"list_contacts","arguments":{}}}\n' \
-  | npx tsx ../../packages/sdk/src/cli/index.ts dev --stdio --reset-db
+npx kitstack dev --stdio --reset-db
 ```
 
-This produces three responses: server info, "Contact added", and a markdown table with Alice.
+This deletes `.kitstack/dev.db` and re-runs migrations. Use this when you change your schema.
 
-### Build validation
+### Running build validation before publishing
 
-The build surfaces defineKit errors with codes and doc URLs:
-
-```
-KitValidationError [KIT_DUPLICATE_TOOLS]: Kit "crm" has duplicate tool names: list_contacts.
-  → https://docs.kitstack.dev/errors/KIT_DUPLICATE_TOOLS
+```sh
+cd kits/crm
+npx kitstack build
 ```
 
-View file checks run after defineKit validation:
+Output shows each validation step with checkmarks:
 
 ```
-View 'pipeline' references component but View.tsx not found at src/views/pipeline/View.tsx
+  Building kit at /path/to/kits/crm...
+
+  ✓ Loaded kit.config.ts — "CRM Kit" (12 tools, 5 views)
+  ✓ Migration SQL valid (8 statements)
+  ✓ Validation passed
+  ✓ Server bundle: .kitstack/build/kit.mjs (24.3 KB)
+  ...
 ```
+
+If migration SQL contains a DROP statement, build fails with:
+
+```
+  ✗ MIGRATION_DROP_FORBIDDEN: Migration SQL contains a DROP command...
+```
+
+### View development with the DevKit
+
+```sh
+cd kits/crm
+npx kitstack dev --views --port 5174
+```
+
+This starts a Vite dev server with HMR for view components. Open `http://localhost:5174` to see views rendered with mock data.

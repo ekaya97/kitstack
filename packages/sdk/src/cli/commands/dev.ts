@@ -22,23 +22,62 @@ import type { KitDefinition } from "../../types";
  * tool if the kit declares views. Parse errors return JSON-RPC `-32700`,
  * notifications (requests without `id`) produce no response.
  *
- * @param args - CLI arguments after `kitstack dev` (e.g., `["--stdio"]`)
+ * Loader data is delivered inline in the `kit_view` tool response (JSON
+ * text block + HTML embedded resource), not via a separate `VIEW_DATA`
+ * message. This was simplified from the original router design (T-0035)
+ * to avoid a round-trip and keep the shell stateless.
  *
- * @example Claude Desktop MCP config:
+ * Build validation (T-0019) runs at `kitstack build` time, not in the dev
+ * server. The dev command skips validation so iteration is fast; `build`
+ * catches schema errors, missing View.tsx files, and invalid migration SQL
+ * before deployment.
+ *
+ * @param args - CLI arguments after `kitstack dev` (e.g., `["--stdio"]`).
+ *   Supported flags: `--stdio`, `--views`, `--port <n>`, `--config <path>`,
+ *   `--db <path>`, `--reset-db`.
+ *
+ * @example Connect the CRM kit to Claude Desktop via stdio (real config from kits/crm):
  * ```json
- * { "command": "npx", "args": ["kitstack", "dev", "--stdio"] }
+ * {
+ *   "mcpServers": {
+ *     "crm": {
+ *       "command": "npx",
+ *       "args": ["tsx", "packages/sdk/src/cli/index.ts", "dev", "--stdio"],
+ *       "cwd": "/path/to/kitstack/kits/crm"
+ *     }
+ *   }
+ * }
  * ```
  *
- * @example Run from a kit directory with a fresh database:
+ * @example Run the CRM kit locally with a fresh database on each restart:
  * ```sh
  * cd kits/crm
  * npx kitstack dev --stdio --reset-db
  * ```
  *
- * @example Custom config and database paths:
+ * @example Point at a custom config and database (useful for integration tests):
  * ```sh
- * npx kitstack dev --stdio --config ./my-kit.config.ts --db ./data/test.db
+ * npx kitstack dev --stdio --config ./kits/crm/kit.config.ts --db ./tmp/test.db
  * ```
+ *
+ * @example Start the View DevKit for CRM view development with HMR:
+ * ```sh
+ * cd kits/crm
+ * npx kitstack dev --views --port 5174
+ * ```
+ *
+ * @remarks
+ * The stdio transport reads one JSON-RPC message per line from stdin. It
+ * relies on the LLM client (Claude Desktop, Claude Code) managing the
+ * child process lifecycle: when the client closes stdin, the `readline`
+ * `close` event fires and the process exits cleanly. There is no HTTP
+ * server, no port binding, and no keep-alive — the process lifetime
+ * matches the client session.
+ *
+ * Stderr is used for developer-facing log output (loading messages,
+ * errors) and does not interfere with the JSON-RPC protocol on stdout.
+ * Never write non-JSON to stdout in stdio mode or the client will reject
+ * the response as a parse error.
  */
 export async function dev(args: string[]) {
   // Parse flags
