@@ -9,12 +9,13 @@ Tickets: T-0053, T-0054, T-0055, T-0056, T-0057
 `packages/sdk/src/cli/commands/login.ts` implements a full browser-based OAuth flow for the KitStack CLI:
 
 1. A temporary HTTP server starts on `127.0.0.1:9876` (falls back to a random port via `server.listen(0)` if 9876 is in use).
-2. The CLI opens the user's browser to `https://kitstack.co/cli/authorize?callback=http://localhost:{port}`.
-3. The user authenticates through BetterAuth and clicks "Authorize".
-4. KitStack redirects back to the localhost callback with `?token=kst_...&email=...`.
-5. The CLI saves the credentials and shuts down the callback server.
+2. The CLI opens the user's browser to `https://kitstack.co/cli/authorize?callback=http://localhost:{port}` (override with `KITSTACK_AUTH_URL` env var for local dev).
+3. The `/cli/authorize` page checks the BetterAuth session (redirects to `/login` if needed).
+4. User clicks "Authorize" → `POST /api/cli/token` creates a BetterAuth session in Turso with `userAgent: "kitstack-cli"` and 1-year expiry.
+5. The page redirects to the localhost callback with `?token={sessionToken}&email=...`.
+6. The CLI saves the credentials and shuts down the callback server.
 
-The login command is idempotent — if credentials already exist, it prints a message and exits unless `--force` is passed.
+The login command times out after 2 minutes if no callback is received. It is idempotent — if credentials already exist, it prints a message and exits unless `--force` is passed.
 
 ### Token storage (`credentials.ts`)
 
@@ -26,7 +27,7 @@ The login command is idempotent — if credentials already exist, it prints a me
 | `saveCredentials(creds)` | Write credentials with `0600` permissions (creates `~/.kitstack/` if needed) |
 | `clearCredentials()` | Overwrites the file with `{}` (for future `kitstack logout`) |
 
-The `Credentials` interface contains three fields: `token` (string, `kst_` prefix), `email` (string), and `authenticatedAt` (ISO 8601 timestamp).
+The `Credentials` interface contains three fields: `token` (string, BetterAuth session token), `email` (string), and `authenticatedAt` (ISO 8601 timestamp).
 
 ### WebSocket relay client (`relay-client.ts`)
 
@@ -49,7 +50,7 @@ The `connectRelay()` function returns `Promise<never>` — it runs until the pro
 
 Three Lambda handlers back the WebSocket API Gateway:
 
-- **`connect.ts`** — `$connect` route. Validates the CLI token against the OAuthStore, enforces a max of 2 concurrent sessions per user, and stores the WebSocket connectionId keyed by sessionId with a 24-hour TTL.
+- **`connect.ts`** — `$connect` route. Validates the CLI token against the BetterAuth `session` table in Turso (checks token exists and is not expired), then stores the WebSocket connectionId keyed by sessionId in DynamoDB with a 24-hour TTL.
 - **`default.ts`** — `$default` route. Receives responses from the CLI (JSON `{ requestId, result }`) and stores them in OAuthStore with a 60-second TTL for the McpRouter relay route to poll.
 - **`disconnect.ts`** — `$disconnect` route. Best-effort cleanup. Since `$disconnect` does not guarantee query params, stale sessions rely on the 24-hour TTL for cleanup. A GSI on connectionId would make this more efficient but is not needed at the current scale (max 2 sessions per user).
 
@@ -61,14 +62,15 @@ The callback server binds to `127.0.0.1` (not `0.0.0.0`) to avoid firewall promp
 
 One subtlety: the callback server must respond with HTML (not a redirect or 204) because it is rendering the "Authenticated!" confirmation page directly in the browser tab. A redirect would require hosting a page on kitstack.co, adding a round trip.
 
-### Token format (`kst_` prefix)
+### Unified auth with BetterAuth
 
-CLI tokens are opaque strings prefixed with `kst_`. They are not JWTs — there is no client-side decoding or expiration check. The prefix serves two purposes:
+CLI tokens are standard BetterAuth session tokens — the same format used by the web app. There is no separate `kst_` token format or custom token storage. The `/api/cli/token` endpoint creates a BetterAuth session row in Turso's `session` table with `userAgent: "kitstack-cli"` and a 1-year expiry.
 
-1. **Grep-ability** — if a token leaks into logs or source control, `kst_` is easy to search for.
-2. **Validation shortcut** — the relay connect handler can reject obviously malformed tokens before hitting DynamoDB.
+The relay `$connect` handler validates tokens by querying the `session` table directly (checking token exists and `expires_at > now()`). This means CLI sessions can be revoked from the web app's session management UI, and there's a single source of truth for all authentication.
 
-Tokens are stored in DynamoDB under `CLI_TOKEN#{token}` → `META` and are revocable from the KitStack dashboard. No expiration by default; revocation is explicit.
+The web app routes involved:
+- `web/src/app/cli/authorize/page.tsx` — client-side page that checks BetterAuth session, shows "Authorize" button
+- `web/src/app/api/cli/token/route.ts` — creates the session, validates callback is localhost
 
 ### WebSocket reconnection with exponential backoff
 
@@ -118,7 +120,7 @@ npx kitstack login
 
 # Check current credentials
 cat ~/.kitstack/credentials.json
-# { "token": "kst_...", "email": "dev@example.com", "authenticatedAt": "2026-04-25T..." }
+# { "token": "abc123...", "email": "dev@example.com", "authenticatedAt": "2026-04-25T..." }
 
 # Re-authenticate (e.g., different account)
 npx kitstack login --force
