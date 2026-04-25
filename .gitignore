@@ -46,4 +46,9 @@ next-env.d.ts
 
 docs/
 
-.env.*packages/mcp-apps/dist-views/
+.env.*
+
+# mcp app build output
+packages/mcp-apps/dist-inline/
+packages/mcp-apps/dist-views/
+packages/mcp-apps/dist/
