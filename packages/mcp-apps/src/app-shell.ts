@@ -137,18 +137,13 @@ function loadCSS(url: string) {
 }
 
 async function loadView(data: ViewData) {
-  const title = data.app || data.view.replace(/-/g, " ").replace(/\b\w/g, (c) => c.toUpperCase());
   const folder = KIT_FOLDER[data.kit];
 
   root.innerHTML = `
     <div class="ks-shell">
-      <div class="ks-toolbar">
-        <button onclick="window.__ksRefresh()" class="ks-btn" title="Refresh data">&#x21bb;</button>
-      </div>
       <div id="ks-content" class="ks-loading">Loading...</div>
     </div>
   `;
-  (window as any).__ksRefresh = () => loadView(data);
 
   const cdn = CDN_BASE;
   if (!cdn || !folder) {
