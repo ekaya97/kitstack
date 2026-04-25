@@ -1,6 +1,36 @@
 import { existsSync, mkdirSync, writeFileSync } from "fs";
 import { resolve, join } from "path";
 
+/**
+ * Scaffold a new KitStack kit project with the standard directory layout,
+ * config files, an example tool, a dashboard view, and a test file.
+ *
+ * The kit name must be kebab-case (e.g. `"cold-outreach"`). The command
+ * creates a new directory in the current working directory, writes all
+ * template files, and prints next-step instructions.
+ *
+ * @param args - CLI positional arguments. `args[0]` is the kit name.
+ *
+ * @example
+ * ```typescript
+ * // Invoked via the CLI:
+ * //   npx kitstack init cold-outreach
+ * //
+ * // Produces this directory layout:
+ * //   cold-outreach/
+ * //     kit.config.ts      — defineKit() wiring
+ * //     package.json
+ * //     tsconfig.json
+ * //     tailwind.config.ts
+ * //     src/schema.ts      — Drizzle table definitions
+ * //     src/migrations.ts  — raw SQL migration string
+ * //     src/instructions.ts
+ * //     src/tools/example.ts
+ * //     src/views/dashboard/{index,loader,View}.tsx
+ * //     test/tools.test.ts — vitest + createTestKit() example
+ * //     .gitignore
+ * ```
+ */
 export async function init(args: string[]) {
   const name = args[0];
   if (!name) {
