@@ -66,6 +66,7 @@
     "@vitejs/plugin-react": "^4",
     "autoprefixer": "^10",
     "aws-cdk-lib": "2.171.1",
+    "aws-sdk-client-mock": "^4.1.0",
     "constructs": "10.4.2",
     "drizzle-kit": "^0.30",
     "jsdom": "^25",
