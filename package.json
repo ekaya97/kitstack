@@ -22,6 +22,7 @@
     "deploy:kit": "sst shell -- npx tsx"
   },
   "dependencies": {
+    "@aws-sdk/client-apigatewaymanagementapi": "^3.1037.0",
     "@aws-sdk/client-dynamodb": "^3.1035.0",
     "@aws-sdk/client-lambda": "^3.1035.0",
     "@aws-sdk/client-s3": "^3.1035.0",
@@ -70,7 +71,7 @@
     "drizzle-kit": "^0.30",
     "jsdom": "^25",
     "postcss": "^8",
-    "sst": "^4.12.2",
+    "sst": "^3",
     "tailwindcss": "^3",
     "typescript": "^5",
     "vite-plugin-singlefile": "^2.3.3",

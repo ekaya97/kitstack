@@ -159,10 +159,10 @@ async function handleDbProxy(event: DbProxyEvent): Promise<DbProxyResult> {
     if (batch) {
       const results = [];
       for (const stmt of batch) {
-        const result = await client.execute({ sql: stmt.sql, args: stmt.args ?? [] });
+        const result = await client.execute({ sql: stmt.sql, args: (stmt.args ?? []) as any });
         results.push({
           columns: result.columns,
-          rows: result.rows,
+          rows: result.rows as any,
           rowsAffected: result.rowsAffected,
         });
       }
@@ -170,10 +170,10 @@ async function handleDbProxy(event: DbProxyEvent): Promise<DbProxyResult> {
     }
 
     if (sql) {
-      const result = await client.execute({ sql, args: args ?? [] });
+      const result = await client.execute({ sql, args: (args ?? []) as any });
       return {
         columns: result.columns,
-        rows: result.rows,
+        rows: result.rows as any,
         rowsAffected: result.rowsAffected,
         lastInsertRowid: result.lastInsertRowid,
       };

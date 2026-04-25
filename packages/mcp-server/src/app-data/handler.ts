@@ -99,7 +99,7 @@ export async function handler(
     audit({ action: "appdata.query", userId: payload.sub, kitId: payload.kit, detail: view });
 
     // db.all() returns { rows: [...] } or an array directly depending on the driver
-    const rows = Array.isArray(result) ? result : (result.rows ?? []);
+    const rows = Array.isArray(result) ? result : ((result as any).rows ?? []);
 
     return json({
       kit: payload.kit,

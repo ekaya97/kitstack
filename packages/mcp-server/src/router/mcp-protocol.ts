@@ -52,7 +52,7 @@ export async function handleMcpRequest(
         console.log("[MCP] Client initialize params:", JSON.stringify(request.params, null, 2));
         response = {
           jsonrpc: "2.0",
-          id: request.id,
+          id: request.id ?? null,
           result: {
             protocolVersion: "2025-11-25",
             serverInfo: SERVER_INFO,
@@ -64,7 +64,7 @@ export async function handleMcpRequest(
       case "tools/list":
         response = {
           jsonrpc: "2.0",
-          id: request.id,
+          id: request.id ?? null,
           result: { tools: [KIT_TOOL_DEFINITION, KIT_VIEW_TOOL_DEFINITION] },
         };
         break;
@@ -90,7 +90,7 @@ export async function handleMcpRequest(
       default:
         response = {
           jsonrpc: "2.0",
-          id: request.id,
+          id: request.id ?? null,
           error: { code: -32601, message: `Method not found: ${request.method}` },
         };
     }
@@ -100,7 +100,7 @@ export async function handleMcpRequest(
     return {
       response: {
         jsonrpc: "2.0",
-        id: request.id,
+        id: request.id ?? null,
         error: { code: -32603, message: err.message || "Internal error" },
       },
     };
@@ -122,13 +122,13 @@ async function handleToolsCall(
   if (params?.name === "kit_view") {
     const args = (params.arguments || {}) as { id?: string; view?: string };
     const result = await handleKitViewCall(args, userId, getUserKitDbs, getAllTools, invokeKitLambda);
-    return { jsonrpc: "2.0" as const, id: request.id, result };
+    return { jsonrpc: "2.0" as const, id: request.id ?? null, result };
   }
 
   if (params?.name !== "kit") {
     return {
       jsonrpc: "2.0",
-      id: request.id,
+      id: request.id ?? null,
       error: { code: -32602, message: `Unknown tool: ${params?.name}. Use "kit" or "kit_view".` },
     };
   }
@@ -145,7 +145,7 @@ async function handleToolsCall(
 
   return {
     jsonrpc: "2.0",
-    id: request.id,
+    id: request.id ?? null,
     result,
   };
 }
@@ -161,7 +161,7 @@ async function handleResourcesList(
 
   return {
     jsonrpc: "2.0",
-    id: request.id,
+    id: request.id ?? null,
     result: { resources },
   };
 }
@@ -175,7 +175,7 @@ async function handleResourcesRead(
   if (!uri) {
     return {
       jsonrpc: "2.0",
-      id: request.id,
+      id: request.id ?? null,
       error: { code: -32602, message: "Missing uri parameter" },
     };
   }
@@ -187,14 +187,14 @@ async function handleResourcesRead(
   if (!content) {
     return {
       jsonrpc: "2.0",
-      id: request.id,
+      id: request.id ?? null,
       error: { code: -32602, message: `Resource not found: ${uri}` },
     };
   }
 
   return {
     jsonrpc: "2.0",
-    id: request.id,
+    id: request.id ?? null,
     result: { contents: [content] },
   };
 }
