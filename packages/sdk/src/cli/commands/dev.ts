@@ -114,10 +114,8 @@ export async function dev(args: string[]) {
     }
   }
 
-  if (!stdio && !views) {
-    console.error("Specify a mode: --stdio (for Claude Desktop/Code) or --views (View DevKit).\nUsage: kitstack dev --stdio | kitstack dev --views");
-    process.exit(1);
-  }
+  // Default mode is relay (no flags = relay mode)
+  const relay = !stdio && !views;
 
   // Load kit definition
   const fullConfigPath = resolve(process.cwd(), configPath);
@@ -143,6 +141,44 @@ export async function dev(args: string[]) {
 
   // Create MCP handler
   const handler = createMcpHandler({ kit, db });
+
+  // Relay mode — connect to DevRelay WebSocket
+  if (relay) {
+    const { loadCredentials } = await import("../credentials.js");
+    const { connectRelay } = await import("../../runtime/relay-client.js");
+    const { randomUUID } = await import("node:crypto");
+
+    const creds = loadCredentials();
+    if (!creds) {
+      console.error("\n  Not logged in. Run: kitstack login\n");
+      process.exit(1);
+    }
+
+    const sessionId = randomUUID().slice(0, 8);
+    const relayUrl = process.env.KITSTACK_RELAY_URL || "wss://relay.kitstack.co";
+    const publicUrl = `https://mcp.kitstack.co/dev/${sessionId}`;
+
+    console.error(`\n  ${kit.name} dev server`);
+    console.error(`  Connecting to relay...\n`);
+
+    await connectRelay({
+      sessionId,
+      token: creds.token,
+      handler,
+      relayUrl,
+      onReady: () => {
+        console.error(`  Connected! Public URL:\n`);
+        console.error(`  ${publicUrl}\n`);
+        console.error(`  Add this URL to your LLM client's MCP server list.`);
+        console.error(`  Press Ctrl+C to stop.\n`);
+      },
+      onDisconnect: () => {
+        console.error("  Disconnected from relay. Reconnecting...");
+      },
+    });
+
+    return;
+  }
 
   // Stdio transport: newline-delimited JSON-RPC
   const rl = createInterface({ input: process.stdin });
