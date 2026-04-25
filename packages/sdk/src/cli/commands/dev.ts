@@ -1,4 +1,5 @@
 import { resolve } from "node:path";
+import { existsSync } from "node:fs";
 import { createInterface } from "node:readline";
 import { provisionDevDb } from "../../runtime/dev-db";
 import { createMcpHandler, type JsonRpcRequest } from "../../runtime/mcp-handler";
@@ -126,6 +127,17 @@ export async function dev(args: string[]) {
   } catch (err: any) {
     console.error(`Failed to load kit config from ${configPath}: ${err.message}`);
     process.exit(1);
+  }
+
+  // Generate migrations from Drizzle schema if drizzle.config.ts exists
+  const drizzleConfigPath = resolve(process.cwd(), "drizzle.config.ts");
+  if (existsSync(drizzleConfigPath) && !kit.migrationSql) {
+    const { execSync } = await import("node:child_process");
+    try {
+      execSync("npx drizzle-kit generate", { cwd: process.cwd(), stdio: "inherit" });
+    } catch {
+      console.warn("[kitstack] Warning: drizzle-kit generate failed. Continuing with existing migrations.");
+    }
   }
 
   // Provision local SQLite

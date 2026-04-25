@@ -1,4 +1,6 @@
 import { resolve } from "path";
+import { existsSync } from "node:fs";
+import { execSync } from "node:child_process";
 import { buildKit } from "../../build";
 
 const BUILD_HELP = `
@@ -26,6 +28,16 @@ export async function build(args: string[]) {
   }
 
   console.log(`\n  Building kit at ${kitRoot}...\n`);
+
+  // Generate migrations from Drizzle schema if drizzle.config.ts exists
+  const drizzleConfig = resolve(kitRoot, "drizzle.config.ts");
+  if (existsSync(drizzleConfig)) {
+    try {
+      execSync("npx drizzle-kit generate", { cwd: kitRoot, stdio: "inherit" });
+    } catch {
+      console.warn("  Warning: drizzle-kit generate failed. Continuing with existing migrations.\n");
+    }
+  }
 
   try {
     await buildKit(kitRoot);

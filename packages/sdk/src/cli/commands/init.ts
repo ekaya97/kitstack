@@ -23,7 +23,8 @@ import { resolve, join } from "path";
  * //     tsconfig.json
  * //     tailwind.config.ts
  * //     src/schema.ts      — Drizzle table definitions
- * //     src/migrations.ts  — raw SQL migration string
+ * //     drizzle.config.ts  — drizzle-kit config (schema + migrations path)
+ * //     migrations/        — drizzle-kit generated SQL (committed to git)
  * //     src/instructions.ts
  * //     src/tools/example.ts
  * //     src/views/dashboard/{index,loader,View}.tsx
@@ -61,6 +62,7 @@ export async function init(args: string[]) {
     "src/tools",
     "src/views",
     "src/views/dashboard",
+    "migrations",
     "test",
   ];
   for (const d of dirs) {
@@ -79,8 +81,8 @@ export async function init(args: string[]) {
     "tsconfig.json": tsconfigTemplate(),
     "tailwind.config.ts": tailwindConfigTemplate(),
     "src/schema.ts": schemaTemplate(),
-    "src/migrations.ts": migrationsTemplate(),
     "src/instructions.ts": instructionsTemplate(displayName),
+    "drizzle.config.ts": drizzleConfigTemplate(),
     "src/tools/example.ts": exampleToolTemplate(),
     "src/views/dashboard/index.ts": viewIndexTemplate(),
     "src/views/dashboard/loader.ts": viewLoaderTemplate(),
@@ -106,8 +108,8 @@ export async function init(args: string[]) {
 
 function kitConfigTemplate(id: string, displayName: string) {
   return `import { defineKit } from "@kitstack/sdk";
+import { resolve } from "node:path";
 import * as schema from "./src/schema";
-import { migrationSql } from "./src/migrations";
 import { instructions } from "./src/instructions";
 import { listItems } from "./src/tools/example";
 import dashboard from "./src/views/dashboard";
@@ -118,7 +120,7 @@ export default defineKit({
   name: "${displayName}",
   description: "TODO: describe what this kit does",
   schema,
-  migrationSql,
+  migrationsDir: resolve(import.meta.dirname, "migrations"),
   instructions,
   tools: [listItems],
   views: [dashboard],
@@ -140,6 +142,7 @@ function packageJsonTemplate(name: string) {
   "devDependencies": {
     "typescript": "^5.0.0",
     "vitest": "^2.0.0",
+    "drizzle-kit": "^0.30.0",
     "@types/react": "^19.0.0",
     "react": "^19.0.0"
   },
@@ -192,15 +195,17 @@ export const items = sqliteTable("items", {
 `;
 }
 
-function migrationsTemplate() {
-  return `export const migrationSql = \`
-CREATE TABLE IF NOT EXISTS items (
-  id TEXT PRIMARY KEY,
-  name TEXT NOT NULL,
-  description TEXT,
-  created_at INTEGER
-);
-\`;
+function drizzleConfigTemplate() {
+  return `import type { Config } from "drizzle-kit";
+
+export default {
+  schema: "./src/schema.ts",
+  out: "./migrations",
+  dialect: "sqlite",
+  dbCredentials: {
+    url: "file:.kitstack/dev.db",
+  },
+} satisfies Config;
 `;
 }
 
