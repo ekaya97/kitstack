@@ -5,6 +5,7 @@ import type { Email } from "@shared/types";
 
 /** Highlight merge fields like {firstName}, {company} with accent color */
 function highlightMergeFields(text: string): (string | JSX.Element)[] {
+  if (!text) return [""];
   const parts = text.split(/(\{[^}]+\})/g);
   return parts.map((part, i) => {
     if (part.startsWith("{") && part.endsWith("}")) {
@@ -22,6 +23,7 @@ function highlightMergeFields(text: string): (string | JSX.Element)[] {
 }
 
 function renderBody(body: string): JSX.Element[] {
+  if (!body) return [];
   return body.split("\n").map((line, i) => (
     <p key={i} className={line.trim() === "" ? "h-3" : "leading-relaxed"}>
       {highlightMergeFields(line)}
@@ -76,7 +78,7 @@ export function EmailPreview() {
               <div className="flex items-center gap-2 mb-1">
                 <span className="text-[10px] text-ks-faint uppercase tracking-wider">Subject</span>
                 <span className="font-mono text-[10px] px-1.5 py-0.5 rounded bg-ks-paper-deep text-ks-muted">
-                  Step {email.position} &middot; +{email.day_offset}d
+                  Step {email.position} &middot; +{email.delay_days}d
                 </span>
               </div>
               <div className="text-[15px] font-medium text-ks-ink leading-snug">
@@ -110,7 +112,7 @@ export function EmailPreview() {
                         : "border-ks-hair hover:bg-ks-paper-warm text-ks-muted"
                     }`}
                   >
-                    Step {e.position}: +{e.day_offset}d
+                    Step {e.position}: +{e.delay_days}d
                   </button>
                 ))}
               </div>

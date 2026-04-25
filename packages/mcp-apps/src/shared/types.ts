@@ -108,29 +108,32 @@ export interface Email {
   id: string;
   sequence_id: string;
   position: number;
-  day_offset: number;
+  delay_days: number;
   subject: string;
   body: string;
+  created_at?: string;
 }
 
 export interface Prospect {
   id: string;
   name: string;
-  company: string;
-  email: string;
-  linkedin: string | null;
-  status: "new" | "contacted" | "replied" | "converted";
-  personalization_hooks: string[];
-  sequence_id: string | null;
+  company?: string | null;
+  email?: string | null;
+  linkedin_url?: string | null;
+  status: string;
+  personalization_hooks?: string | null; // JSON string in DB
+  sequence_id: string;
+  created_at?: string;
 }
 
-export type ProspectStatus = Prospect["status"];
+export type ProspectStatus = "pending" | "contacted" | "replied" | "bounced" | "opted_out";
 
-export const PROSPECT_STATUS_COLORS: Record<ProspectStatus, string> = {
-  new: "bg-ks-paper-deep text-ks-ink",
+export const PROSPECT_STATUS_COLORS: Record<string, string> = {
+  pending: "bg-ks-paper-deep text-ks-ink",
   contacted: "bg-blue-50 text-blue-800",
   replied: "bg-amber-50 text-amber-800",
-  converted: "bg-emerald-50 text-emerald-800",
+  bounced: "bg-red-50 text-red-800",
+  opted_out: "bg-gray-50 text-gray-600",
 };
 
 // --- Meeting Kit ---
