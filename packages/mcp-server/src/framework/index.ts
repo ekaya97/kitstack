@@ -1,7 +1,4 @@
-export { defineKit } from "./define-kit";
-export { defineTool } from "./define-tool";
-export { createKitHandler } from "./kit-runtime";
-export { createKitDbClient } from "./kit-db";
+// Active framework modules (used by router)
 export { signAppToken, verifyAppToken } from "./app-token";
 export type {
   KitDefinition,
