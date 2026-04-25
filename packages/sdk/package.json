@@ -10,6 +10,7 @@
     "./view": "./views/src/shared/use-kit.ts",
     "./testing": "./src/testing/index.ts",
     "./runtime": "./src/runtime/index.ts",
+    "./server": "./src/server/index.ts",
     "./tailwind-preset": "./src/tailwind-preset.ts"
   },
   "peerDependencies": {
