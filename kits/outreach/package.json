@@ -1,0 +1,16 @@
+{
+  "name": "@kitstack/outreach-kit",
+  "version": "0.0.1",
+  "private": true,
+  "type": "module",
+  "dependencies": {
+    "@kitstackdev/kit": "workspace:../../packages/sdk",
+    "drizzle-orm": "^0.38.0",
+    "@libsql/client": "^0.14.0",
+    "zod": "^3.22.0",
+    "nanoid": "^5.0.0"
+  },
+  "devDependencies": {
+    "typescript": "^5.0.0"
+  }
+}
