@@ -31,10 +31,15 @@ export const handler = async (event: KitToolInvocation): Promise<KitToolResult |
   if (event.loaderSlug) {
     const view = viewMap.get(event.loaderSlug);
     if (!view) {
-      return { error: `Unknown view: ${event.loaderSlug}` };
+      return { data: null, error: `Unknown view: ${event.loaderSlug}` };
     }
-    const data = await view.loader(db, ctx);
-    return { data };
+    try {
+      const data = await view.loader(db, ctx);
+      return { data };
+    } catch (err: any) {
+      console.error(`[Loader] ${event.loaderSlug} failed:`, err.message);
+      return { data: null, error: err.message };
+    }
   }
 
   // ── Tool invocation ──

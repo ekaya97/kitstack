@@ -20,7 +20,7 @@ async function uploadFile(bucketName: string, filePath: string, s3Key: string) {
       Key: s3Key,
       Body: body,
       ContentType: CONTENT_TYPES[ext] || "application/octet-stream",
-      CacheControl: "no-cache",
+      CacheControl: "max-age=0, no-cache, no-store, must-revalidate",
     })
   );
   console.log(`  ✓ ${s3Key} (${(body.length / 1024).toFixed(1)} KB)`);

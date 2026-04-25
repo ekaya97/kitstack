@@ -182,44 +182,75 @@ export function mount(container, data) {
     }
     log("\u2713", `Generated ${kit.views.length} view entries`);
 
-    // ── 6. BUNDLE VIEWS ────────────────────────────────────────
+    // ── 6. BUNDLE VIEWS (Vite) ──────────────────────────────────
 
-    const entryPoints = kit.views.map((v) => resolve(entriesDir, `${v.slug}.tsx`));
-
-    // Resolve @shared/* to the platform's shared directory
+    // Generate a temporary vite config for this kit's views
     const sharedDir = resolve(kitRoot, "..", "..", "mcp-apps", "src", "shared");
+    const input: Record<string, string> = {};
+    for (const view of kit.views) {
+      input[`${kit.id}/${view.slug}`] = resolve(entriesDir, `${view.slug}.tsx`);
+    }
+
+    const viteConfigContent = `
+import { defineConfig } from "vite";
+import react from "@vitejs/plugin-react";
+import { resolve } from "path";
+
+export default defineConfig({
+  plugins: [react()],
+  resolve: {
+    alias: {
+      "@shared": ${JSON.stringify(sharedDir)},
+    },
+  },
+  build: {
+    outDir: ${JSON.stringify(viewsDir)},
+    emptyOutDir: false,
+    cssCodeSplit: false,
+    rollupOptions: {
+      input: ${JSON.stringify(input)},
+      output: {
+        format: "es",
+        entryFileNames: "[name].js",
+        chunkFileNames: "[name].js",
+        assetFileNames: "[name][extname]",
+        manualChunks(id) {
+          if (id.includes("node_modules/react-dom") || id.includes("node_modules/react/") || id.includes("node_modules/scheduler")) {
+            return "vendor";
+          }
+          if (id.includes("src/shared/")) {
+            return "shared";
+          }
+        },
+      },
+    },
+  },
+});
+`;
+
+    const viteConfigPath = resolve(outputDir, "_vite.config.ts");
+    writeFileSync(viteConfigPath, viteConfigContent);
 
     try {
-      await esbuild({
-        entryPoints,
-        bundle: true,
-        format: "esm",
-        platform: "browser",
-        target: "es2022",
-        outdir: viewsDir,
-        splitting: false,
-        jsx: "automatic",
-        external: [
-          "react",
-          "react-dom",
-          "react-dom/client",
-          "react/jsx-runtime",
-          "react/jsx-dev-runtime",
-        ],
-        alias: {
-          "@shared": sharedDir,
-        },
-        sourcemap: false,
-        minify: true,
-        logLevel: "silent",
-        absWorkingDir: kitRoot,
-      });
+      execSync(
+        `npx vite build --config "${viteConfigPath}"`,
+        { cwd: kitRoot, stdio: "pipe" }
+      );
 
       const viewFiles = readdirSync(viewsDir).filter((f) => f.endsWith(".js"));
       const totalSize = viewFiles.reduce((s, f) => s + fileSize(resolve(viewsDir, f)), 0);
-      log("\u2713", `View bundles: ${viewFiles.length} modules (${(totalSize / 1024).toFixed(1)} KB total)`);
+      // Check for nested kit folder (Vite outputs to {kitId}/{view}.js)
+      const kitViewDir = resolve(viewsDir, kit.id);
+      if (existsSync(kitViewDir)) {
+        const nestedFiles = readdirSync(kitViewDir).filter((f) => f.endsWith(".js"));
+        const nestedSize = nestedFiles.reduce((s, f) => s + fileSize(resolve(kitViewDir, f)), 0);
+        log("\u2713", `View bundles: ${nestedFiles.length} view modules + ${viewFiles.length} shared chunks (${((totalSize + nestedSize) / 1024).toFixed(1)} KB total)`);
+      } else {
+        log("\u2713", `View bundles: ${viewFiles.length} modules (${(totalSize / 1024).toFixed(1)} KB total)`);
+      }
     } catch (e: any) {
-      fail(`View bundle failed: ${e.message}`);
+      const stderr = e.stderr?.toString() || e.message;
+      fail(`View bundle failed: ${stderr}`);
     }
 
     // ── 7. CSS (TAILWIND) ──────────────────────────────────────

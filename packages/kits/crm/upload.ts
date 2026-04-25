@@ -1,5 +1,5 @@
 /**
- * Upload CRM kit view modules + CSS to S3 KitAssets bucket.
+ * Upload CRM kit build artifacts to S3 KitAssets bucket.
  * Run from project root: npx sst shell -- npx tsx packages/kits/crm/upload.ts
  */
 import { S3Client, PutObjectCommand } from "@aws-sdk/client-s3";
@@ -24,10 +24,25 @@ async function uploadFile(bucketName: string, filePath: string, s3Key: string) {
       Key: s3Key,
       Body: body,
       ContentType: CONTENT_TYPES[ext] || "application/octet-stream",
-      CacheControl: "no-cache",
+      CacheControl: "max-age=0, no-cache, no-store, must-revalidate",
     })
   );
   console.log(`  ✓ ${s3Key} (${(body.length / 1024).toFixed(1)} KB)`);
+}
+
+async function uploadDir(bucketName: string, dir: string, prefix: string): Promise<number> {
+  if (!existsSync(dir)) return 0;
+  let count = 0;
+  for (const entry of readdirSync(dir)) {
+    const entryPath = resolve(dir, entry);
+    if (statSync(entryPath).isDirectory()) {
+      count += await uploadDir(bucketName, entryPath, `${prefix}/${entry}`);
+    } else {
+      await uploadFile(bucketName, entryPath, `${prefix}/${entry}`);
+      count++;
+    }
+  }
+  return count;
 }
 
 async function upload() {
@@ -37,33 +52,19 @@ async function upload() {
   let count = 0;
 
   if (!existsSync(viewsDir)) {
-    console.error("No build output found. Run the build first: cd packages/kits/crm && npx tsx build.ts");
+    console.error("No build output found. Run the build first.");
     process.exit(1);
   }
 
-  console.log("Uploading CRM kit view modules...\n");
+  console.log("Uploading CRM kit...\n");
 
-  // Upload view JS modules → apps/crm/{view}.js (same paths as existing first-party views)
-  for (const entry of readdirSync(viewsDir)) {
-    const entryPath = resolve(viewsDir, entry);
-    if (!statSync(entryPath).isFile()) continue;
+  // Upload views directory recursively → apps/ (vendor.js, shared.js, crm/*.js, style.css)
+  count += await uploadDir(bucketName, viewsDir, "apps");
 
-    if (entry.endsWith(".js")) {
-      // View modules go under apps/crm/
-      await uploadFile(bucketName, entryPath, `apps/crm/${entry}`);
-      count++;
-    } else if (entry === "style.css") {
-      // Kit CSS — for now upload alongside the platform style.css as crm-style.css
-      // The existing shell loads apps/style.css (platform). This is for future use.
-      await uploadFile(bucketName, entryPath, `apps/crm/style.css`);
-      count++;
-    }
-  }
-
-  // Upload generated shell (for future use — not active yet)
+  // Upload generated shell
   const shellPath = resolve(buildDir, "shell.html");
   if (existsSync(shellPath)) {
-    await uploadFile(bucketName, shellPath, `apps/crm/shell.html`);
+    await uploadFile(bucketName, shellPath, "apps/crm/shell.html");
     count++;
   }
 

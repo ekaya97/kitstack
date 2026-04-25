@@ -177,6 +177,11 @@ async function loadView(data) {
       copyToClipboard: (text) => navigator.clipboard.writeText(text),
     };
 
+    // Debug: show data status BEFORE loading scripts
+    const key = KIT_ID + "/" + data.view;
+    const debugInfo = "key=" + key + " hasData=" + (data.data != null) + " type=" + typeof data.data + " isArr=" + Array.isArray(data.data) + (Array.isArray(data.data) ? " len=" + data.data.length : "");
+    root.innerHTML = '<div style="font-size:11px;color:#999;padding:4px;border-bottom:1px solid #eee;margin-bottom:4px">' + debugInfo + '</div><div id="ks-content"><div class="ks-loading">Loading view...</div></div>';
+
     // Load assets
     loadCSS(KIT_CDN + "/style.css");
     await loadScript(CDN + "/vendor.js");
@@ -185,9 +190,8 @@ async function loadView(data) {
 
     // Mount with pre-loaded data from the loader (embedded in tool result by the router)
     const views = window.__KITSTACK_VIEWS__;
-    const key = KIT_ID + "/" + data.view;
+
     if (views?.[key]) {
-      root.innerHTML = '<div id="ks-content"></div>';
       const container = document.getElementById("ks-content");
       views[key].mount(container, data.data);
 

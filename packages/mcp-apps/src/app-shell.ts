@@ -112,6 +112,7 @@ interface ViewData {
   params?: Record<string, unknown>;
   app?: string;
   cdn?: string;
+  data?: unknown;
 }
 
 const loadedScripts = new Set<string>();
@@ -208,7 +209,7 @@ async function loadView(data: ViewData) {
       const container = document.getElementById("ks-content")!;
       container.innerHTML = "";
       container.className = "";
-      views[`${folder}/${data.view}`].mount(container);
+      views[`${folder}/${data.view}`].mount(container, data.data);
 
       // Notify host of content size after render
       requestAnimationFrame(() => {
