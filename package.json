@@ -3,10 +3,10 @@
   "version": "0.1.0",
   "private": true,
   "scripts": {
-    "dev": "sst dev next dev",
-    "build": "next build",
-    "start": "next start",
-    "lint": "next lint",
+    "dev": "sst dev -- next dev web",
+    "build": "next build web",
+    "start": "next start web",
+    "lint": "next lint web",
     "test": "vitest",
     "test:run": "vitest run",
     "test:coverage": "vitest run --coverage",
@@ -15,10 +15,9 @@
     "db:push": "drizzle-kit push",
     "db:studio": "drizzle-kit studio",
     "dev:db": "turso dev --db-file databases/local.db",
-    "db:seed": "tsx src/db/seed.ts",
-    "postbuild": "next-sitemap",
-    "upload": "sst shell tsx scripts/upload-assets.ts",
-    "upload:apps": "sst shell -- npx tsx packages/mcp-apps/upload-apps.ts",
+    "db:seed": "tsx web/src/db/seed.ts",
+    "postbuild": "next-sitemap --config web/next-sitemap.config.js",
+    "upload:apps": "sst shell -- npx tsx packages/sdk/views/upload-apps.ts",
     "seed:registry": "sst shell -- npx tsx packages/mcp-server/src/scripts/seed-registry.ts"
   },
   "dependencies": {
@@ -74,5 +73,12 @@
     "typescript": "^5",
     "vite-plugin-singlefile": "^2.3.3",
     "vitest": "^2"
-  }
+  },
+  "description": "Two-tier AI tool platform: free skills (downloadable .zip) and subscription kits (persistent MCP apps). One connector, all your tools.",
+  "main": "index.js",
+  "directories": {
+    "doc": "docs"
+  },
+  "author": "",
+  "license": "ISC"
 }

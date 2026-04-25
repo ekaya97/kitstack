@@ -48,7 +48,14 @@ docs/
 
 .env.*
 
-# mcp app build output
-packages/mcp-apps/dist-inline/
-packages/mcp-apps/dist-views/
-packages/mcp-apps/dist/
+# build outputs
+packages/sdk/views/dist-inline/
+packages/sdk/views/dist-views/
+packages/sdk/views/dist/
+.kitstack/
+
+# tracking
+.track/
+
+# next.js (in web/)
+web/.next/

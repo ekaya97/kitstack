@@ -39,22 +39,22 @@ const kitLambdaDefaults = {
 
 export const kitMeeting = new sst.aws.Function("KitMeeting", {
   ...kitLambdaDefaults,
-  handler: "packages/mcp-server/src/kits/meeting/handler.handler",
+  handler: "deprecated/kit-definitions/kits/meeting/handler.handler",
 });
 
 export const kitCrm = new sst.aws.Function("KitCrm", {
   ...kitLambdaDefaults,
-  handler: "packages/kits/crm/handler.handler",
+  handler: "kits/crm/handler.handler",
 });
 
 export const kitExpense = new sst.aws.Function("KitExpense", {
   ...kitLambdaDefaults,
-  handler: "packages/mcp-server/src/kits/expense/handler.handler",
+  handler: "deprecated/kit-definitions/kits/expense/handler.handler",
 });
 
 export const kitOutreach = new sst.aws.Function("KitOutreach", {
   ...kitLambdaDefaults,
-  handler: "packages/mcp-server/src/kits/outreach/handler.handler",
+  handler: "deprecated/kit-definitions/kits/outreach/handler.handler",
 });
 
 // --- App Data Lambda (JWT → Turso → JSON for iframe apps) ---

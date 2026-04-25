@@ -1,0 +1,25 @@
+{
+  "name": "@kitstackdev/kit",
+  "version": "0.0.1",
+  "type": "module",
+  "exports": {
+    ".": "./src/index.ts",
+    "./view": "./views/src/shared/use-kit.ts",
+    "./tailwind-preset": "./src/tailwind-preset.ts"
+  },
+  "peerDependencies": {
+    "zod": "^3.22.0",
+    "drizzle-orm": "^0.38.0"
+  },
+  "dependencies": {
+    "esbuild": "^0.24.0",
+    "tsx": "^4.0.0"
+  },
+  "devDependencies": {
+    "typescript": "^5.0.0",
+    "@types/react": "^19.0.0",
+    "react": "^19.0.0",
+    "@types/node": "^22.0.0",
+    "@tailwindcss/typography": "^0.5.19"
+  }
+}

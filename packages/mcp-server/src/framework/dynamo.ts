@@ -12,7 +12,7 @@ import { eq } from "drizzle-orm";
 import { Resource } from "sst";
 import type { KitRegistryItem, UserKitDbItem } from "./types";
 import { getTursoDb } from "./authz";
-import { kitRegistryTable, kitViewsTable } from "../../../../src/db/schema";
+import { kitRegistryTable, kitViewsTable } from "../db/schema";
 
 const client = new DynamoDBClient({});
 

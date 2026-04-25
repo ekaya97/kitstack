@@ -343,7 +343,7 @@ export default defineView({
 
 See section 2.7 for the full type-safe loader → component data flow.
 
-**Key design:** Views and tools are decoupled. Tools serve the LLM (text output). Views have their own loaders for typed data. Both can share business logic via a `queries/` layer. The LLM decides when to show a view based on the view's `description`.
+**Key design:** Views and tools are decoupled. Tools serve the LLM (text output). Views have their own loaders for typed data. Loaders call `tool.load()` to reuse the tool's data function — no separate `queries/` layer needed (see section 2.7). The LLM decides when to show a view based on the view's `description`.
 
 #### 2.6.5 How it works end-to-end
 
@@ -460,19 +460,20 @@ The SDK provides end-to-end type flow from Drizzle schema through to view compon
 
 #### 2.7.1 The type chain
 
+**Updated after prototype validation:** Tools have `load()` which returns typed data. Loaders call `tool.load()` directly. No separate `queries/` layer needed.
+
 ```
 schema.ts (Drizzle)
     │ (table types: sequences.$inferSelect)
     ▼
-queries/sequences.ts (optional shared layer)
-    │ (function return types)
-    ├───────────────────────────────┐
-    ▼                               ▼
-tools/list-sequences.ts          views/sequence-builder/loader.ts
-    │ handler returns               │ loader returns typed data
-    │ kit.text(markdown)            │ (return type inferred)
-    ▼                               ▼
-LLM (reads text)                 views/sequence-builder/View.tsx
+tools/list-sequences.ts
+    │
+    ├── load(db, args, ctx) → typed data
+    │       │           │
+    │    handler()    loader calls tool.load()
+    │       │              │
+    │       ▼              ▼
+    │  kit.text(md)    views/sequence-builder/View.tsx
                                     │ LoaderData<typeof view> = loader return type
                                     ▼
                                  Typed React component (full autocomplete)
@@ -662,31 +663,37 @@ For v1, eager loading in the loader + `mcp.callTool()` as an escape hatch is suf
 
 Views are React components that need to interact with the platform: call tools, reload data, download files, import files. Without SDK support, every view reimplements the same `useState` boilerplate for loading/error states, capability detection, and invalidation. The SDK provides three hooks that cover the entire view interaction surface.
 
-#### 2.8.1 `useKit()` — access loader data + reload
+#### 2.8.1 `useKit()` — access loader data + reload + loading state
 
-The primary hook. Provides pre-loaded data from the loader and a `reload()` function that re-runs the loader via the MCP channel (like SvelteKit's `invalidate()`).
+The primary hook. Provides pre-loaded data from the loader, a `reload()` function for invalidation, a `loading` flag for UI feedback, and auto-reload on mount to handle stale MCP client cache.
 
 ```typescript
 import { useKit } from "@kitstack/sdk/view";
-import type { LoaderData } from "@kitstack/sdk";
+import type { Infer } from "@kitstack/sdk";
 import type { loader } from "./loader";
 
-type Data = LoaderData<typeof loader>;
+function PipelineView({ data: initialData }: { data: Infer<typeof loader> }) {
+  const { data, loading, reload } = useKit<Infer<typeof loader>>();
+  const deals = data ?? initialData;
 
-function SequenceBuilder() {
-  const { data, reload, callTool, capabilities } = useKit<Data>();
-  // data: typed from loader return type
-  // reload(): re-runs loader server-side, updates data
-  // callTool(name, params): raw MCP tool call (escape hatch)
-  // capabilities: { downloadFile, openLinks, clipboardWrite }
+  // loading: true during reload (show skeleton or dim content)
+  // data: starts as pre-loaded snapshot, updates after reload
+  // reload(): re-runs loader via MCP channel, updates data
 }
 ```
 
-**`reload()` implementation:** Sends a `tools/call` via the MCP channel with a special invocation that re-runs the view's loader server-side. The server executes `loader(db, ctx)`, serializes the result, and returns it. The hook updates `data` and triggers a React re-render. This is the invalidation mechanism — call it after mutations to refresh the view.
+**Auto-reload on mount:** The hook automatically reloads fresh data when the view mounts. This handles the case where the MCP client re-renders a cached tool result on page refresh — the stale snapshot shows instantly (fast first paint), then gets replaced with current server data. Opt-out with `useKit({ reloadOnMount: false })` for static views.
+
+**`reload()` implementation:** Calls `__load_view` via the MCP bridge (`callTool("__load_view", { view: slug })`). The router dispatches to the kit Lambda with `{ loaderSlug }`, runs the loader, returns fresh data as JSON. The hook parses the response and calls `setData()`.
 
 ```typescript
+interface KitOptions {
+  reloadOnMount?: boolean;  // default: true
+}
+
 interface Kit<TData> {
   data: TData;
+  loading: boolean;
   reload: () => Promise<void>;
   callTool: (name: string, params?: Record<string, unknown>) => Promise<string>;
   capabilities: {
@@ -1008,6 +1015,10 @@ packages/sdk/
     "./view": {
       "types": "./dist/view/index.d.mts",
       "import": "./dist/view/index.mjs"
+    },
+    "./tailwind-preset": {
+      "types": "./dist/tailwind-preset.d.mts",
+      "import": "./dist/tailwind-preset.mjs"
     },
     "./internal/*": null
   },
@@ -1339,6 +1350,7 @@ $ npx @kitstack/sdk init my-crm-kit
 ```
 my-crm-kit/
 ├── kit.config.ts             # defineKit() — wires tools, views, schema, migrations, instructions
+├── tailwind.config.ts        # Extends @kitstack/sdk/tailwind-preset with kit's ks-* theme
 ├── package.json              # @kitstack/sdk + zod + drizzle-orm as deps
 ├── tsconfig.json
 ├── src/
@@ -1356,6 +1368,8 @@ my-crm-kit/
 │   └── tools.test.ts         # Example test using createTestKit()
 └── .gitignore                # .kitstack/, node_modules/, dist/
 ```
+
+View directories have 3 files each — no `main.tsx`. The build generates entry points from `defineView({ component, slug })` (see section 7.4.4).
 
 `kit.config.ts` is the table of contents — it imports everything and wires it together, like `sst.config.ts` or `drizzle.config.ts`:
 
@@ -1411,35 +1425,157 @@ kitstack dev [options]
 
 ### 7.4 `kitstack build`
 
-Validates the kit and produces a deployment bundle.
+Validates the kit and produces a deployment bundle. Uses esbuild for both server and client builds (fast, no Vite dependency for production builds — Vite is only for `kitstack dev` HMR).
 
-1. Load kit definition from `kit.config.ts`
-2. Run all validations (tool descriptions, arg descriptions, snake_case names, migration SQL, view references)
-3. Bundle with esbuild into a single `.mjs` file (tree-shaken, externals: `@kitstack/sdk/runtime`, `zod`, `drizzle-orm`, `@libsql/client`)
-4. Build view components (if any) into ES modules: `.kitstack/build/views/{slug}.js`
-5. Output to `.kitstack/build/kit.mjs`
-6. Generate manifest: `.kitstack/build/manifest.json`
+#### 7.4.1 Build pipeline
+
+```
+kitstack build
+    │
+    ├── 1. LOCATE — find kit.config.ts (or --config <path>)
+    │       Error: "kit.config.ts not found. Run from your kit's root directory."
+    │
+    ├── 2. LOAD — import kit definition via tsx/jiti
+    │       Error: "Cannot find module 'zod'. Run npm install first."
+    │       Error: "SyntaxError in src/tools/add-contact.ts line 15"
+    │       Error: "kit.config.ts must export a default defineKit() call."
+    │
+    ├── 3. VALIDATE — SDK validations on the in-memory KitDefinition
+    │       Errors: duplicate names, bad slug format, missing descriptions
+    │       File checks: resolve each view's component path, verify it exists
+    │       SQL check: run migrationSql against in-memory SQLite
+    │       Error: "View 'pipeline' references component './View.tsx' but file not found."
+    │       Error: "Migration SQL error at statement 3: near 'CREAT': syntax error"
+    │
+    ├── 4. BUNDLE SERVER — esbuild tools + loaders + queries into kit.mjs
+    │       Format: ESM, platform: node, target: node22
+    │       External: @libsql/client, drizzle-orm (in Lambda runtime layer)
+    │       Output: .kitstack/build/kit.mjs
+    │       Error: "Server bundle failed: Could not resolve 'some-pkg' in src/tools/add-contact.ts"
+    │
+    ├── 5. GENERATE VIEW ENTRIES — create main.tsx for each view
+    │       From: defineView({ component: "./View.tsx", slug: "pipeline" })
+    │       Output: .kitstack/build/_entries/{slug}.tsx
+    │       (auto-generated — imports component, exports mount(), registers __KITSTACK_VIEWS__)
+    │
+    ├── 6. BUNDLE VIEWS — Vite with manualChunks for React
+    │       Vite builds per-view modules with shared vendor.js (React) and shared.js (SDK hooks)
+    │       manualChunks: react/react-dom/scheduler → vendor.js, src/shared/ → shared.js
+    │       CSS: Tailwind processed from kit's own tailwind.config (see 7.4.3)
+    │       Output: .kitstack/build/views/vendor.js + shared.js + {kitId}/{slug}.js + style.css
+    │       Error: "View 'pipeline' build failed: Cannot resolve './SomeComponent'"
+    │       Note: esbuild can't be used for views — bare specifiers (import from "react")
+    │       don't resolve in browser ES modules, and bundling React per-view creates
+    │       duplicate instances that don't share state.
+    │
+    ├── 7. MANIFEST — generate manifest.json
+    │       Output: .kitstack/build/manifest.json
+    │
+    └── 8. SUMMARY
+            ✓ Kit "crm" built successfully
+            Server:  kit.mjs (42 KB)
+            Views:   5 modules (38 KB total)
+            CSS:     style.css (12 KB)
+            Manifest: .kitstack/build/manifest.json
+```
+
+#### 7.4.2 Error handling
+
+**Fail fast, fail clear.** First error stops the build. No partial output.
+
+Every error includes:
+1. Which step and file failed
+2. The actual error (from esbuild, SQLite, TypeScript)
+3. How to fix it (actionable guidance)
+
+**Clean up on failure.** If any step fails, delete `.kitstack/build/`. No partial artifacts.
+
+**Exit codes for CI:**
+- `0` — success
+- `1` — validation error (names, descriptions, file refs, SQL)
+- `2` — server bundle error (esbuild)
+- `3` — view bundle error (Vite/Tailwind)
+
+**Warnings** (don't fail the build, print to stderr):
+- Missing `.describe()` on Zod fields
+- Tool description too short/long
+- React version mismatch between kit and platform
+- Bundle size exceeds recommended limit
+
+`--strict` flag turns all warnings into errors.
+
+#### 7.4.3 View CSS: per-kit Tailwind
+
+Each kit has its own `tailwind.config.ts` for consistent styling across its views. The build processes Tailwind for the kit's view source files and produces a per-kit `style.css`.
+
+**How it works:**
+1. Kit developer creates `tailwind.config.ts` at the kit root (scaffolded by `kitstack init`)
+2. `kitstack build` runs Tailwind on the kit's view component source (`src/views/**/*.tsx`)
+3. Output: `.kitstack/build/views/style.css` (one CSS file for the whole kit)
+4. At runtime: the shell loads the kit's `style.css` from CDN alongside the view module
+
+**Default config:** `kitstack init` scaffolds a `tailwind.config.ts` that extends the KitStack platform theme — same `ks-*` color palette, same fonts (Instrument Serif, Inter, JetBrains Mono). Kit developers can customize or add to it.
+
+```typescript
+// tailwind.config.ts (scaffolded by kitstack init)
+import type { Config } from "tailwindcss";
+import kitStackPreset from "@kitstack/sdk/tailwind-preset";
+
+export default {
+  presets: [kitStackPreset],   // ks-paper, ks-ink, ks-accent, etc.
+  content: ["./src/views/**/*.tsx"],
+} satisfies Config;
+```
+
+This gives kits:
+- **Consistent base** — same `ks-*` tokens as first-party kits, so views feel native
+- **Extensibility** — kits can add custom colors, utilities, components
+- **Isolation** — each kit's CSS is scoped to its own views, no conflicts between kits
+- **Tree-shaking** — Tailwind only includes classes actually used in the kit's views
+
+**Platform CSS vs kit CSS:** The platform's `style.css` (loaded by the shell) provides base styles + fonts. The kit's `style.css` provides kit-specific Tailwind output. Both are loaded — the kit's CSS can override or extend platform styles.
+
+#### 7.4.4 Generated entry points (no manual main.tsx)
+
+Developers don't write `main.tsx`. The build generates it from `defineView({ component, slug })`:
+
+```typescript
+// Generated: .kitstack/build/_entries/pipeline.tsx
+import { createRoot } from "react-dom/client";
+import Component from "../../src/views/pipeline/View";
+
+export function mount(container: HTMLElement) {
+  createRoot(container).render(<Component />);
+}
+
+((window as any).__KITSTACK_VIEWS__ ??= {})["crm/pipeline"] = { mount };
+```
+
+The kit ID (`"crm"`) comes from `defineKit({ id })`. The slug (`"pipeline"`) comes from `defineView({ slug })`. The component path comes from `defineView({ component: "./View.tsx" })` resolved relative to the view's `index.ts`.
+
+#### 7.4.5 Manifest
 
 ```json
-// .kitstack/build/manifest.json
 {
-  "kitId": "cold-outreach",
-  "kitName": "Cold Outreach",
+  "kitId": "crm",
+  "kitName": "CRM Kit",
   "version": "1.0.0",
+  "sdkVersion": "0.1.0",
   "tools": [
-    { "name": "create_sequence", "description": "Create a new email sequence..." },
-    { "name": "list_sequences", "description": "List all sequences..." },
-    { "name": "generate_emails", "description": "Generate email copies..." }
+    { "name": "add_contact", "description": "Add a new contact to the CRM" },
+    { "name": "list_contacts", "description": "List all contacts in the CRM" }
   ],
   "views": [
-    { "slug": "sequence-builder", "name": "Sequence Builder", "description": "after creating or editing sequences" },
-    { "slug": "prospect-list", "name": "Prospect List", "description": "after adding prospects" },
-    { "slug": "email-preview", "name": "Email Preview", "description": "to review email content" }
+    { "slug": "pipeline", "name": "Pipeline", "description": "to see deal pipeline and stages" },
+    { "slug": "contacts", "name": "Contacts", "description": "after adding or updating contacts" }
   ],
-  "migrationSql": "CREATE TABLE IF NOT EXISTS sequences (...);",
-  "bundleHash": "sha256:abc123...",
-  "bundleSizeBytes": 12480,
-  "sdkVersion": "0.1.0"
+  "migrationSql": "CREATE TABLE IF NOT EXISTS contacts (...);",
+  "serverBundle": { "file": "kit.mjs", "hash": "sha256:abc...", "sizeBytes": 42000 },
+  "viewModules": [
+    { "slug": "pipeline", "file": "views/pipeline.js", "sizeBytes": 9200 },
+    { "slug": "contacts", "file": "views/contacts.js", "sizeBytes": 6100 }
+  ],
+  "viewCss": { "file": "views/style.css", "sizeBytes": 12000 }
 }
 ```
 
@@ -1603,6 +1739,154 @@ export async function provisionDevDb(dbPath: string, migrationSql: string, opts?
   return db;
 }
 ```
+
+### 8.4 View DevKit (`kitstack dev --views`)
+
+A local MCP Apps renderer for view development. Same double iframe, same postMessage protocol, same sandbox constraints as Claude.ai — but running entirely on localhost with Vite HMR.
+
+```
+kitstack dev --views
+
+  Opens browser at http://localhost:5174
+
+  ┌──────────────────────────────────────────────────────┐
+  │  KitStack View DevKit                  localhost:5174 │
+  ├──────────┬───────────────────────────────────────────┤
+  │          │                                           │
+  │  Views   │  Kit: CRM    View: Pipeline               │
+  │          │  Size: [mobile] [tablet] [desktop]         │
+  │ pipeline │                                           │
+  │ contacts │  ┌─────────────────────────────────────┐  │
+  │ contact- │  │  ┌───────────────────────────────┐  │  │
+  │  detail  │  │  │ (inner iframe — your view)    │  │  │
+  │ dashboard│  │  │                               │  │  │
+  │ proposal │  │  │  Prospect | Proposal | ...    │  │  │
+  │          │  │  │                               │  │  │
+  │          │  │  └───────────────────────────────┘  │  │
+  │          │  │ (outer iframe — sandbox proxy mock) │  │
+  │          │  └─────────────────────────────────────┘  │
+  │          │                                           │
+  │          │  Data: [loader] [custom JSON]  [↻ reload] │
+  │          │  Tool calls: update_deal(dealId, stage)    │
+  │          │  Caps: ☑ clipboard  ☐ download  ☑ links   │
+  └──────────┴───────────────────────────────────────────┘
+```
+
+#### 8.4.1 What it is
+
+A standalone local client that speaks the MCP Apps protocol. It replaces Claude.ai as the host for view development. The developer works entirely on localhost — no CDN, no Lambda, no sandbox proxy, no Claude.ai.
+
+Think Storybook, but for MCP Apps: discovers all views from the kit definition, renders them in an environment identical to production, with real data and real tool calls.
+
+#### 8.4.2 Architecture
+
+```
+Browser (localhost:5174)
+    │
+    ├── Host page (DevKit UI)
+    │     ├── Sidebar: view list (from kit.config.ts)
+    │     ├── Toolbar: viewport size, capability toggles, data inspector
+    │     └── Viewport: double iframe
+    │           ├── Outer iframe (mock sandbox proxy)
+    │           │     Sends sandbox-proxy-ready
+    │           │     Receives sandbox-resource-ready (shell HTML)
+    │           │     Forwards postMessage between inner iframe and host
+    │           └── Inner iframe (view)
+    │                 Runs the shell HTML
+    │                 Loads view module via Vite dev server (HMR)
+    │                 postMessage ↔ mock proxy ↔ host page
+    │
+    ├── Vite dev server (serves view modules with HMR)
+    │     src/views/pipeline/View.tsx → hot module replacement
+    │     @shared/* resolved to packages/mcp-apps/src/shared/
+    │
+    └── Kit backend (in-process, same as kitstack dev --stdio)
+          Local SQLite DB (.kitstack/dev.db)
+          Tool handlers (from kit.config.ts)
+          Loader execution (from view definitions)
+```
+
+#### 8.4.3 What the host page implements
+
+The host page is a mock MCP Apps client. It implements the postMessage protocol that Claude.ai uses:
+
+| Protocol message | Host page behavior |
+|---|---|
+| `ui/initialize` (from app) | Responds with host capabilities (configurable via toggles) |
+| `ui/notifications/initialized` (from app) | Sends `ui/notifications/tool-result` with loader data |
+| `tools/call` (from app) | Routes to kit's actual tool handler (in-process), returns result |
+| `ui/download-file` (from app) | Triggers browser download |
+| `ui/open-link` (from app) | Opens URL in new tab |
+| `ui/notifications/size-changed` (from app) | Resizes the viewport iframe |
+
+The host page also handles the `__load_view` command — runs the loader against local SQLite, returns fresh data. This means `reload()` works in dev mode exactly as it does in production.
+
+#### 8.4.4 Dev workflow
+
+```
+$ kitstack dev --views
+
+  KitStack View DevKit
+  Kit: CRM (12 tools, 5 views)
+  DB:  .kitstack/dev.db
+
+  http://localhost:5174
+
+  Watching for changes...
+```
+
+1. Developer opens `localhost:5174`
+2. Sidebar shows all views from `kit.config.ts`
+3. Click a view → host runs the loader → renders shell + view in double iframe
+4. Edit `View.tsx` → Vite HMR → view updates instantly in the iframe
+5. Edit `loader.ts` → Vite restarts the loader → click reload to see new data
+6. Edit `styles.css` → Tailwind rebuilds → CSS hot-reloads
+7. Toggle capabilities → re-renders view with different feature flags
+8. Resize viewport → test responsive behavior
+9. Inspect tool calls → see every `callTool` the view makes with args + response
+
+#### 8.4.5 Panel features
+
+**View selector (sidebar):** Lists all views from `kit.views`. Click to switch. Shows view name, slug, and description.
+
+**Viewport sizing:** Preset sizes (mobile 375px, tablet 768px, desktop 1024px, full width) or custom. The inner iframe resizes — tests responsive layouts.
+
+**Capability toggles:** Toggle `downloadFile`, `openLinks`, `clipboardWrite`. The mock host responds to `ui/initialize` with these capabilities. Views that use `useFile()` adapt (e.g., fallback to clipboard when download is off).
+
+**Data inspector:** Shows the current loader data as JSON. Editable — change a field, click apply, view re-renders with modified data. Useful for testing edge cases (empty arrays, null fields, long strings).
+
+**Tool call log:** Every `callTool` the view makes is logged with timestamp, tool name, args, and response. Useful for debugging mutation flows (did `update_deal` actually fire? what did it return?).
+
+**Reload button:** Re-runs the loader against the local DB. Shows fresh data. Tests the `useKit().reload()` flow.
+
+#### 8.4.6 Why double iframe in dev
+
+The double iframe is NOT just for sandbox security — it affects how the view receives data. The `sandbox-proxy-ready` → `sandbox-resource-ready` handshake, the `tool-result` notification timing, the `postMessage` origin checks — these are all things that break differently in a single iframe vs double iframe.
+
+By running the exact same architecture locally, the developer catches postMessage bugs, timing issues, and handshake problems before deploying to Claude.ai. If it works in the DevKit, it works in production.
+
+#### 8.4.7 Implementation
+
+The DevKit is a Vite app (`packages/sdk-stub/src/devkit/`) that ships with the SDK:
+
+```
+src/devkit/
+  index.html         Host page (sidebar + viewport + panels)
+  host.ts            Mock MCP Apps client (postMessage protocol)
+  proxy.html         Mock sandbox proxy (outer iframe)
+  backend.ts         In-process kit backend (tools + loaders + local DB)
+  panels/
+    data-inspector.tsx
+    tool-log.tsx
+    capability-toggles.tsx
+    viewport-controls.tsx
+```
+
+The CLI command `kitstack dev --views`:
+1. Imports `kit.config.ts` to get views, tools, schema
+2. Provisions local SQLite at `.kitstack/dev.db`, runs migrations
+3. Starts Vite dev server with the DevKit app as entry + view modules as importable
+4. Opens browser
 
 ---
 
@@ -2515,6 +2799,7 @@ Dogfood:
 - All per-kit hardcoded Lambdas removed from `infra/mcp.ts`
 - `kitstack init` — scaffold a new kit
 - `kitstack dev --stdio` — local MCP server for Claude Desktop/Code
+- `kitstack dev --views` — View DevKit (local MCP Apps renderer with HMR, see section 8.4)
 - `kitstack build` — validate and bundle
 
 ### Phase 3 — CLI auth + relay
@@ -2781,7 +3066,7 @@ Step 9: Migrate remaining kits
 Step 10: CLI scaffold
   Implement kitstack CLI entry point (commander or citty)
   kitstack init — scaffold new kit project from templates
-  kitstack build — validate + esbuild bundle + view component builds + manifest
+  kitstack build — validate + esbuild server bundle + Vite view builds + manifest
   ✓ Artifact: kitstack init test-kit creates a working project
 
 Step 11: Local dev server

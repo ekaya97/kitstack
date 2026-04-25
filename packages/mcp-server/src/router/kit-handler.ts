@@ -151,6 +151,47 @@ export async function handleKitCall(
     };
   }
 
+  // __load_view — called by views to re-run a loader and get fresh data
+  if (cmd === "__load_view" && params?.view) {
+    const viewSlug = params.view as string;
+    const kitTool = allTools.find((t) => t.kitId === id);
+    if (!kitTool) {
+      return { content: [{ type: "text", text: JSON.stringify({ data: null, error: "Kit not found" }) }] };
+    }
+
+    const KIT_RESOURCE_MAP: Record<string, string> = {
+      "meeting-action-tracker": "KitMeeting",
+      crm: "KitCrm",
+      "expense-tax-prep": "KitExpense",
+      "cold-outreach": "KitOutreach",
+    };
+    const resourceName = KIT_RESOURCE_MAP[id];
+    const fn = resourceName ? (Resource as any)[resourceName] : null;
+    const functionId = fn?.arn ?? fn?.name ?? null;
+
+    if (!functionId) {
+      return { content: [{ type: "text", text: JSON.stringify({ data: null, error: "Lambda not found" }) }] };
+    }
+
+    const userDb = await getUserKitDb(userId, id);
+    if (!userDb) {
+      return { content: [{ type: "text", text: JSON.stringify({ data: null, error: "DB not provisioned" }) }] };
+    }
+
+    try {
+      const result = await invokeKitLambda(functionId, {
+        loaderSlug: viewSlug,
+        userId,
+        kitId: id,
+        dbUrl: userDb.dbUrl,
+        dbToken: userDb.dbToken,
+      }) as any;
+      return { content: [{ type: "text", text: JSON.stringify({ data: result?.data ?? null }) }] };
+    } catch (err: any) {
+      return { content: [{ type: "text", text: JSON.stringify({ data: null, error: err.message }) }] };
+    }
+  }
+
   // get_app_token — called by the app shell inside the iframe to get a JWT for data fetching
   if (cmd === "get_app_token") {
     const token = await signAppToken({ sub: userId, kit: id });
