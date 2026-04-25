@@ -46,9 +46,12 @@ window.addEventListener("message", (event) => {
   }
 
   if (msg.method === "ui/notifications/sandbox-proxy-ready") {
-    sendNotification("ui/notifications/sandbox-resource-ready", {
-      html: document.documentElement.outerHTML,
-    });
+    if (!(window as any).__ks_proxy_ready_sent__) {
+      (window as any).__ks_proxy_ready_sent__ = true;
+      sendNotification("ui/notifications/sandbox-resource-ready", {
+        html: document.documentElement.outerHTML,
+      });
+    }
     return;
   }
 
