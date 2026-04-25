@@ -16,30 +16,20 @@ export type { KitStackAuthConfig, OAuthConfig } from "./auth";
  * to create a complete self-hosted MCP server. Used by `kitstack dev` internally
  * and by developers deploying kits on their own infrastructure.
  */
-export interface ServeOptions {
-  /** Kit definition from `defineKit()`. */
-  kit: KitDefinition;
+/** Database connection config passed to `@libsql/client`'s `createClient()`. */
+interface DbConfig {
+  url: string;
+  authToken?: string;
+}
 
+/** Base options shared by single-kit and monolith modes. */
+interface ServeBaseOptions {
   /**
    * Auth adapter for request authentication.
    * Defaults to `none()` — all requests treated as a default user.
    * Use `kitstack()` for KitStack identity provider or `oauth()` for custom auth.
    */
   auth?: AuthAdapter;
-
-  /**
-   * Database connection config. Passed directly to `@libsql/client`'s `createClient()`.
-   *
-   * @example
-   * ```typescript
-   * // Local SQLite file
-   * db: { url: "file:.kitstack/dev.db" }
-   *
-   * // Turso cloud database
-   * db: { url: process.env.DATABASE_URL, authToken: process.env.DATABASE_TOKEN }
-   * ```
-   */
-  db: { url: string; authToken?: string };
 
   /**
    * Transport mode.
@@ -56,6 +46,56 @@ export interface ServeOptions {
    */
   port?: number;
 }
+
+/**
+ * Single-kit serve options — one kit, one database.
+ *
+ * @example
+ * ```typescript
+ * serve({ kit, db: { url: "file:dev.db" } });
+ * ```
+ */
+interface ServeSingleOptions extends ServeBaseOptions {
+  kit: KitDefinition;
+  kits?: undefined;
+  db: DbConfig;
+  databases?: undefined;
+}
+
+/**
+ * Monolith serve options — multiple kits, per-kit databases.
+ *
+ * Each kit gets its own database connection. Tools are namespaced
+ * by kit ID to avoid collisions.
+ *
+ * @example
+ * ```typescript
+ * serve({
+ *   kits: [crmKit, outreachKit],
+ *   databases: {
+ *     crm: { url: process.env.CRM_DB! },
+ *     "cold-outreach": { url: process.env.OUTREACH_DB! },
+ *   },
+ *   transport: "http",
+ *   port: 3000,
+ * });
+ * ```
+ */
+interface ServeMonolithOptions extends ServeBaseOptions {
+  kit?: undefined;
+  kits: KitDefinition[];
+  db?: undefined;
+  databases: Record<string, DbConfig>;
+}
+
+/**
+ * Configuration for {@link serve}.
+ *
+ * Supports two modes:
+ * - **Single kit:** `{ kit, db }` — one kit, one database
+ * - **Monolith:** `{ kits, databases }` — multiple kits, per-kit databases
+ */
+export type ServeOptions = ServeSingleOptions | ServeMonolithOptions;
 
 /**
  * Start a self-hosted MCP server for a kit.
@@ -100,23 +140,72 @@ export interface ServeOptions {
  * ```
  */
 export async function serve(options: ServeOptions): Promise<void> {
-  const { kit, db: dbConfig, transport = "stdio", port = 3000 } = options;
+  const { transport = "stdio", port = 3000 } = options;
   const auth = options.auth ?? none();
 
-  // Connect to database
-  const client = createClient({
-    url: dbConfig.url,
-    authToken: dbConfig.authToken,
-  });
-  const db = drizzle(client);
+  let handler: ReturnType<typeof createMcpHandler>;
+  let displayKit: KitDefinition;
 
-  // Create MCP handler
-  const handler = createMcpHandler({ kit, db });
+  if (options.kits) {
+    // Monolith mode — merge kits into a single handler
+    // Each kit gets its own DB. Tools are served under the combined kit.
+    const kits = options.kits;
+    const allTools = [];
+    const allViews = [];
+
+    for (const k of kits) {
+      const dbConf = options.databases[k.id];
+      if (!dbConf) {
+        throw new Error(
+          `Missing database config for kit "${k.id}". Add it to the databases map.`
+        );
+      }
+      // Prefix tool names with kit ID to avoid collisions
+      for (const t of k.tools) {
+        allTools.push({ ...t, name: `${k.id}/${t.name}` });
+      }
+      for (const v of k.views ?? []) {
+        allViews.push({ ...v, slug: `${k.id}/${v.slug}` });
+      }
+    }
+
+    // Use the first kit's DB as the default handler DB (tools route internally)
+    const firstKit = kits[0];
+    const firstDbConf = options.databases[firstKit.id];
+    const client = createClient({
+      url: firstDbConf.url,
+      authToken: firstDbConf.authToken,
+    });
+    const db = drizzle(client);
+
+    displayKit = {
+      id: "monolith",
+      version: "1.0.0",
+      name: `KitStack (${kits.length} kits)`,
+      description: kits.map((k) => k.name).join(", "),
+      schema: {},
+      migrationSql: "",
+      instructions: kits.map((k) => k.instructions).join("\n\n"),
+      tools: allTools as any,
+      views: allViews.length > 0 ? (allViews as any) : undefined,
+    };
+
+    handler = createMcpHandler({ kit: displayKit, db });
+  } else {
+    // Single kit mode
+    const client = createClient({
+      url: options.db.url,
+      authToken: options.db.authToken,
+    });
+    const db = drizzle(client);
+    displayKit = options.kit;
+    handler = createMcpHandler({ kit: displayKit, db });
+  }
 
   if (transport === "stdio") {
-    await startStdio(handler, kit);
+    await startStdio(handler, displayKit);
   } else {
-    await startHttp(handler, auth, kit, port);
+    await startHttp(handler, auth, displayKit, port);
   }
 }
 
