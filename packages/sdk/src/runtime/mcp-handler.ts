@@ -1,13 +1,19 @@
 /**
- * Core MCP JSON-RPC protocol handler.
+ * Core MCP JSON-RPC protocol handler with two-tool split.
+ *
+ * Registers exactly two tools:
+ * - `kit` — text-only progressive discovery & CRUD
+ *     kit()              → list available actions
+ *     kit(cmd)           → describe an action's parameters
+ *     kit(cmd, params)   → run an action
+ * - `kit_view` — embedded resource rendering
+ *     kit_view()         → list available views
+ *     kit_view(view)     → execute loader, return shell HTML + pre-loaded data
  *
  * Shared by `kitstack dev` and `serve()`. Stateless per-request after
- * initialization — the factory pre-computes tool maps and the tools/list
- * response so each request is a fast lookup + dispatch.
+ * initialization.
  *
- * Handles: initialize, notifications/initialized, ping, tools/list, tools/call.
- *
- * T-0024
+ * T-0024, T-0025
  */
 
 import type { LibSQLDatabase } from "drizzle-orm/libsql";
@@ -15,9 +21,11 @@ import type {
   KitDefinition,
   KitContext,
   KitToolResult,
+  KitToolContentBlock,
   ToolDefinition,
 } from "../types";
 import { zodToJsonSchema } from "./zod-to-json-schema";
+import { generateShell } from "../shell-template";
 
 // ---------------------------------------------------------------------------
 // JSON-RPC types
@@ -46,7 +54,7 @@ interface McpToolDefinition {
 }
 
 // ---------------------------------------------------------------------------
-// JSON-RPC error codes (from spec + MCP convention)
+// JSON-RPC error codes
 // ---------------------------------------------------------------------------
 
 const ERR_METHOD_NOT_FOUND = -32601;
@@ -70,6 +78,18 @@ export interface McpHandlerConfig {
   db: LibSQLDatabase;
   /** Override default context values. */
   ctx?: Partial<KitContext>;
+  /**
+   * Base URL for the platform CDN (vendor.js, shared.js).
+   * In dev: local Vite dev server. In prod: CDN URL.
+   */
+  platformCdn?: string;
+  /**
+   * Base URL for this kit's view assets (per-view .js, style.css).
+   * In dev: local Vite dev server. In prod: CDN URL.
+   */
+  kitCdn?: string;
+  /** Pre-built shell HTML. If omitted, generated from shell-template.ts. */
+  shellHtml?: string;
 }
 
 export interface McpHandler {
@@ -80,15 +100,15 @@ export interface McpHandler {
   handleRequest(request: JsonRpcRequest): Promise<JsonRpcResponse | null>;
 
   /**
-   * Call a kit tool directly. Used by loaders, tests, and view reload.
-   * Validates args via Zod safeParse before dispatching.
+   * Call a kit tool directly by name. Used by loaders, tests, and internal
+   * dispatch. Validates args via Zod safeParse before calling the handler.
    */
   callTool(
     name: string,
     args: Record<string, unknown>
   ): Promise<KitToolResult>;
 
-  /** The pre-computed MCP tool list (for tools/list). */
+  /** The pre-computed MCP tool list (kit + kit_view). */
   readonly tools: readonly McpToolDefinition[];
 }
 
@@ -107,21 +127,66 @@ export function createMcpHandler(config: McpHandlerConfig): McpHandler {
     (kit.views ?? []).map((v) => [v.slug, v])
   );
 
-  // Build the MCP tool list (returned by tools/list)
-  const mcpTools: McpToolDefinition[] = kit.tools.map((t) => ({
-    name: t.name,
-    description: t.description,
-    inputSchema: zodToJsonSchema(t.args),
-  }));
+  // Pre-generate shell HTML for kit_view embedded resources
+  const shellHtml =
+    config.shellHtml ??
+    (kit.views?.length
+      ? generateShell({
+          kitId: kit.id,
+          platformCdn: config.platformCdn ?? "",
+          kitCdn: config.kitCdn ?? "",
+          views: (kit.views ?? []).map((v) => ({
+            slug: v.slug,
+            height: v.height,
+          })),
+        })
+      : "");
 
-  // Add kit_view tool if the kit declares views
+  // -----------------------------------------------------------------------
+  // Build the two-tool MCP definitions
+  // -----------------------------------------------------------------------
+
+  const toolNames = kit.tools.map((t) => t.name).join(", ");
+
+  const kitTool: McpToolDefinition = {
+    name: "kit",
+    description: [
+      `${kit.name} — ${kit.description}`,
+      "",
+      "  kit()              → list available actions",
+      "  kit(cmd)           → describe an action's parameters",
+      "  kit(cmd, params)   → run an action",
+      "",
+      `Actions: ${toolNames}`,
+    ].join("\n"),
+    inputSchema: {
+      type: "object",
+      properties: {
+        cmd: {
+          type: "string",
+          description: "Action name, e.g. 'add_contact'",
+        },
+        params: {
+          type: "object",
+          description: "Action parameters",
+        },
+      },
+    },
+  };
+
+  const mcpTools: McpToolDefinition[] = [kitTool];
+
   if (kit.views?.length) {
     const viewList = kit.views
       .map((v) => `${v.slug} — ${v.description}`)
       .join("; ");
     mcpTools.push({
       name: "kit_view",
-      description: `Show interactive UI for ${kit.name}. Views: ${viewList}`,
+      description: [
+        `Show interactive UI for ${kit.name}.`,
+        `Call kit_view() to list views, or kit_view(view) to display one.`,
+        `Views: ${viewList}`,
+      ].join(" "),
       inputSchema: {
         type: "object",
         properties: {
@@ -137,7 +202,6 @@ export function createMcpHandler(config: McpHandlerConfig): McpHandler {
     });
   }
 
-  // Freeze the tool list so consumers can't mutate it
   Object.freeze(mcpTools);
 
   // -----------------------------------------------------------------------
@@ -148,29 +212,13 @@ export function createMcpHandler(config: McpHandlerConfig): McpHandler {
     name: string,
     args: Record<string, unknown>
   ): Promise<KitToolResult> {
-    // __load_view: reload a view's data (called by useKit().reload())
-    if (name === "__load_view") {
-      const viewSlug = args.view as string;
-      const view = viewSlug ? viewMap.get(viewSlug) : undefined;
-      if (!view) {
-        return errorResult(`Unknown view: ${viewSlug}`);
-      }
-      const data = await view.loader(db, defaultCtx);
-      return { content: [{ type: "text", text: JSON.stringify(data) }] };
-    }
-
-    // kit_view: render an interactive view
-    if (name === "kit_view") {
-      return handleKitView(args);
-    }
-
-    // Regular tool dispatch
     const tool = toolMap.get(name);
     if (!tool) {
-      return errorResult(`Unknown tool: ${name}`);
+      return errorResult(
+        `Unknown tool: "${name}". Available: ${[...toolMap.keys()].join(", ")}`
+      );
     }
 
-    // Validate arguments
     const parsed = tool.args.safeParse(args);
     if (!parsed.success) {
       const issues = parsed.error.issues
@@ -183,7 +231,81 @@ export function createMcpHandler(config: McpHandlerConfig): McpHandler {
   }
 
   // -----------------------------------------------------------------------
-  // kit_view handling
+  // kit() — progressive discovery & execution
+  // -----------------------------------------------------------------------
+
+  async function handleKit(
+    args: Record<string, unknown>
+  ): Promise<KitToolResult> {
+    const cmd = args.cmd as string | undefined;
+    const params = args.params as Record<string, unknown> | undefined;
+
+    // kit() → list available actions
+    if (!cmd) {
+      return handleKitList();
+    }
+
+    // __load_view: reload a view's data (called by useKit().reload())
+    if (cmd === "__load_view") {
+      const viewSlug = params?.view as string;
+      const view = viewSlug ? viewMap.get(viewSlug) : undefined;
+      if (!view) {
+        return errorResult(`Unknown view: "${viewSlug}"`);
+      }
+      const data = await view.loader(db, defaultCtx);
+      return {
+        content: [
+          { type: "text", text: JSON.stringify({ data }) },
+        ],
+      };
+    }
+
+    // kit(cmd) → describe parameters
+    if (!params) {
+      return handleKitDescribe(cmd);
+    }
+
+    // kit(cmd, params) → run
+    return callTool(cmd, params);
+  }
+
+  function handleKitList(): KitToolResult {
+    let text = `## ${kit.name}\n\n${kit.description}\n\n`;
+    text += `### Actions\n\n`;
+    text += `| Action | Description |\n|--------|-------------|\n`;
+    for (const t of kit.tools) {
+      text += `| \`${t.name}\` | ${t.description} |\n`;
+    }
+    text += `\n**Usage:** \`kit(cmd="action_name", params={...})\``;
+
+    if (kit.views?.length) {
+      text += `\n\n**Interactive UI:** \`kit_view(view="...")\` — `;
+      text += kit.views
+        .map((v) => `${v.slug} — ${v.description}`)
+        .join("; ");
+    }
+
+    return { content: [{ type: "text", text }] };
+  }
+
+  function handleKitDescribe(cmd: string): KitToolResult {
+    const tool = toolMap.get(cmd);
+    if (!tool) {
+      return errorResult(
+        `Unknown action: "${cmd}". Run kit() to see available actions.`
+      );
+    }
+
+    const schema = zodToJsonSchema(tool.args);
+    let text = `## ${cmd}\n\n${tool.description}\n\n`;
+    text += `### Parameters\n\n\`\`\`json\n${JSON.stringify(schema, null, 2)}\n\`\`\`\n\n`;
+    text += `**Run:** \`kit(cmd="${cmd}", params={...})\``;
+
+    return { content: [{ type: "text", text }] };
+  }
+
+  // -----------------------------------------------------------------------
+  // kit_view() — embedded resource rendering
   // -----------------------------------------------------------------------
 
   async function handleKitView(
@@ -191,35 +313,60 @@ export function createMcpHandler(config: McpHandlerConfig): McpHandler {
   ): Promise<KitToolResult> {
     const viewSlug = args.view as string | undefined;
 
-    // No slug → list available views
+    // kit_view() → list available views
     if (!viewSlug) {
-      const listing = (kit.views ?? [])
-        .map((v) => `- **${v.slug}** — ${v.description}`)
+      if (!kit.views?.length) {
+        return { content: [{ type: "text", text: "This kit has no views." }] };
+      }
+      const list = kit.views
+        .map((v) => `- \`${v.slug}\`: ${v.name} — ${v.description}`)
         .join("\n");
-      return {
-        content: [
-          {
-            type: "text",
-            text: listing || "This kit has no views.",
-          },
-        ],
-      };
+      let text = `## Available Views\n\n${list}\n\n`;
+      text += `**Usage:** \`kit_view(view="${kit.views[0].slug}")\``;
+      return { content: [{ type: "text", text }] };
     }
 
+    // kit_view(view) → execute loader + return embedded resource
     const view = viewMap.get(viewSlug);
     if (!view) {
-      return errorResult(`Unknown view: ${viewSlug}`);
+      return errorResult(
+        `Unknown view: "${viewSlug}". Run kit_view() to see available views.`
+      );
     }
 
-    // Execute the view's loader (server-side data)
-    const data = await view.loader(db, defaultCtx);
-    const dataJson = JSON.stringify({ view: view.slug, data });
+    // Execute the loader to get pre-loaded data
+    let loaderData: unknown = null;
+    try {
+      loaderData = await view.loader(db, defaultCtx);
+    } catch (err: any) {
+      console.error(`[kit_view] Loader failed for "${viewSlug}":`, err.message);
+    }
 
-    // Return data as text. The transport layer (stdio/relay) is responsible
-    // for attaching the shell HTML as an embedded resource if needed.
-    return {
-      content: [{ type: "text", text: dataJson }],
-    };
+    // Build data payload (parsed by the shell to mount the view)
+    const dataPayload = JSON.stringify({
+      kit: kit.id,
+      view: view.slug,
+      app: view.name,
+      data: loaderData,
+    });
+
+    // Build the view-specific URI
+    const viewUri = `ui://kitstack/${kit.id}/${view.slug}`;
+
+    // Return two content blocks: JSON data + HTML shell embedded resource
+    const content: KitToolContentBlock[] = [
+      { type: "text", text: dataPayload },
+      {
+        type: "resource",
+        resource: {
+          uri: viewUri,
+          mimeType: "text/html;profile=mcp-app",
+          text: shellHtml,
+        },
+      },
+    ];
+
+    return { content };
   }
 
   // -----------------------------------------------------------------------
@@ -271,7 +418,19 @@ export function createMcpHandler(config: McpHandlerConfig): McpHandler {
           const toolArgs =
             ((params as any)?.arguments as Record<string, unknown>) ?? {};
 
-          const result = await callTool(toolName, toolArgs);
+          let result: KitToolResult;
+          if (toolName === "kit") {
+            result = await handleKit(toolArgs);
+          } else if (toolName === "kit_view") {
+            result = await handleKitView(toolArgs);
+          } else {
+            return rpcError(
+              id,
+              ERR_INVALID_PARAMS,
+              `Unknown tool: "${toolName}". Use "kit" or "kit_view".`
+            );
+          }
+
           return rpcResult(id, result);
         }
 

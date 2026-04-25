@@ -70,6 +70,14 @@ const testKitDef = defineKit({
   tools: [addItem, listItems, countItems],
 });
 
+// Helper: extract text from the first text content block
+function textOf(result: { content: Array<{ type: string; text?: string }> }) {
+  const block = result.content.find((c) => c.type === "text") as
+    | { type: "text"; text: string }
+    | undefined;
+  return block?.text ?? "";
+}
+
 // -- Tests --
 
 describe("createTestKit", () => {
@@ -92,7 +100,7 @@ describe("createTestKit", () => {
     testKit = await createTestKit(testKitDef);
     const result = await testKit.call("add_item", { name: "Widget" });
     expect(result.isError).toBeUndefined();
-    expect(result.content[0].text).toContain("Widget");
+    expect(textOf(result)).toContain("Widget");
   });
 
   it("supports direct DB access for assertions", async () => {
@@ -111,8 +119,8 @@ describe("createTestKit", () => {
     testKit = await createTestKit(testKitDef);
     const result = await testKit.call("nonexistent_tool", {});
     expect(result.isError).toBe(true);
-    expect(result.content[0].text).toContain("nonexistent_tool");
-    expect(result.content[0].text).toContain("Available tools");
+    expect(textOf(result)).toContain("nonexistent_tool");
+    expect(textOf(result)).toContain("Available tools");
   });
 
   it("validates arguments with Zod", async () => {
@@ -120,14 +128,14 @@ describe("createTestKit", () => {
     // name is required string, passing number should fail
     const result = await testKit.call("add_item", { name: 123 as any });
     expect(result.isError).toBe(true);
-    expect(result.content[0].text).toContain("Invalid arguments");
+    expect(textOf(result)).toContain("Invalid arguments");
   });
 
   it("call() defaults args to empty object", async () => {
     testKit = await createTestKit(testKitDef);
     const result = await testKit.call("list_items");
     expect(result.isError).toBeUndefined();
-    expect(result.content[0].text).toBe("No items.");
+    expect(textOf(result)).toBe("No items.");
   });
 
   it("reset() clears all data", async () => {
@@ -135,7 +143,7 @@ describe("createTestKit", () => {
     await testKit.call("add_item", { name: "Before Reset" });
     await testKit.reset();
     const result = await testKit.call("list_items");
-    expect(result.content[0].text).toBe("No items.");
+    expect(textOf(result)).toBe("No items.");
   });
 
   it("callAs() uses custom context", async () => {
@@ -165,7 +173,7 @@ describe("createTestKit", () => {
 
     const result = await testKit.call("count_items");
     expect(result.isError).toBeUndefined();
-    const data = JSON.parse(result.content[0].text);
+    const data = JSON.parse(textOf(result));
     expect(data.total).toBe(2);
   });
 
