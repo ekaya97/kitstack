@@ -1,9 +1,9 @@
 import { useState } from "react";
-import { useKit, useFile } from "../../sdk-view";
-import type { LoaderData } from "../../sdk";
-import type proposalView from "./index";
+import { useFile } from "@shared/use-kit";
+import type { Infer } from "../../sdk";
+import type { loader } from "./loader";
 
-type Data = LoaderData<typeof proposalView>;
+type Data = Infer<typeof loader>;
 
 const STATUS_STYLES: Record<string, string> = {
   draft: "bg-ks-paper-deep text-ks-ink",
@@ -12,8 +12,7 @@ const STATUS_STYLES: Record<string, string> = {
   rejected: "bg-red-50 text-red-800",
 };
 
-export function ProposalView() {
-  const { data } = useKit<Data>();
+export function ProposalView({ data }: { data: Data }) {
   const file = useFile();
   const [selectedIdx, setSelectedIdx] = useState(0);
 

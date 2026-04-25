@@ -1,8 +1,7 @@
-import { useKit } from "../../sdk-view";
-import type { LoaderData } from "../../sdk";
-import type dashboardView from "./index";
+import type { Infer } from "../../sdk";
+import type { loader } from "./loader";
 
-type Data = LoaderData<typeof dashboardView>;
+type Data = Infer<typeof loader>;
 
 const ACTIVITY_ICONS: Record<string, string> = {
   call: "📞",
@@ -12,8 +11,7 @@ const ACTIVITY_ICONS: Record<string, string> = {
   task: "☑️",
 };
 
-export function DashboardView() {
-  const { data } = useKit<Data>();
+export function DashboardView({ data }: { data: Data }) {
 
   const maxStageValue = Math.max(...data.stages.map((s) => s.value), 1);
 

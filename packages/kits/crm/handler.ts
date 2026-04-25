@@ -1,7 +1,8 @@
 /**
  * Lambda handler for the CRM kit.
- * Bridges the SDK-pattern tools (db, args, ctx) to the existing
- * KitToolInvocation format from the McpRouter.
+ * Handles two invocation types:
+ * - Tool: { toolName, args, userId, kitId, dbUrl, dbToken }
+ * - Loader: { loaderSlug, userId, kitId, dbUrl, dbToken }
  */
 import { createClient } from "@libsql/client";
 import { drizzle } from "drizzle-orm/libsql";
@@ -9,8 +10,9 @@ import type { KitContext, KitToolResult } from "./src/sdk";
 import kit from "./kit.config";
 
 interface KitToolInvocation {
-  toolName: string;
-  args: Record<string, unknown>;
+  toolName?: string;
+  loaderSlug?: string;
+  args?: Record<string, unknown>;
   userId: string;
   kitId: string;
   dbUrl: string;
@@ -18,17 +20,35 @@ interface KitToolInvocation {
 }
 
 const toolMap = new Map(kit.tools.map((t) => [t.name, t]));
+const viewMap = new Map((kit.views ?? []).map((v) => [v.slug, v]));
 
-export const handler = async (event: KitToolInvocation): Promise<KitToolResult> => {
+export const handler = async (event: KitToolInvocation): Promise<KitToolResult | unknown> => {
+  const client = createClient({ url: event.dbUrl, authToken: event.dbToken });
+  const db = drizzle(client);
+  const ctx: KitContext = { userId: event.userId, kitId: event.kitId };
+
+  // ── Loader invocation ──
+  if (event.loaderSlug) {
+    const view = viewMap.get(event.loaderSlug);
+    if (!view) {
+      return { error: `Unknown view: ${event.loaderSlug}` };
+    }
+    const data = await view.loader(db, ctx);
+    return { data };
+  }
+
+  // ── Tool invocation ──
+  const toolName = event.toolName;
+
   // Instruction meta-tool
-  if (event.toolName === `kitstack_${kit.id}_instructions`) {
+  if (toolName === `kitstack_${kit.id}_instructions`) {
     return { content: [{ type: "text", text: kit.instructions }] };
   }
 
-  const tool = toolMap.get(event.toolName);
+  const tool = toolMap.get(toolName!);
   if (!tool) {
     return {
-      content: [{ type: "text", text: `Unknown tool: ${event.toolName}` }],
+      content: [{ type: "text", text: `Unknown tool: ${toolName}` }],
       isError: true,
     };
   }
@@ -45,10 +65,6 @@ export const handler = async (event: KitToolInvocation): Promise<KitToolResult> 
       isError: true,
     };
   }
-
-  const client = createClient({ url: event.dbUrl, authToken: event.dbToken });
-  const db = drizzle(client);
-  const ctx: KitContext = { userId: event.userId, kitId: event.kitId };
 
   return await tool.handler(db, parsed.data, ctx);
 };

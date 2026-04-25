@@ -10,7 +10,8 @@
     "esModuleInterop": true,
     "paths": {
       "@kitstack/sdk": ["../../sdk-stub/src/index.ts"],
-      "@kitstack/sdk/view": ["../../sdk-stub/src/view/index.ts"]
+      "@kitstack/sdk/view": ["../../sdk-stub/src/view/index.ts"],
+      "@shared/*": ["../../mcp-apps/src/shared/*"]
     }
   },
   "include": ["src/", "kit.config.ts", "test/"]

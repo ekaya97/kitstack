@@ -1,8 +1,5 @@
-import { useKit, useTool } from "../../sdk-view";
-import type { LoaderData } from "../../sdk";
-import type contactDetailView from "./index";
-
-type Data = LoaderData<typeof contactDetailView>;
+import type { Infer } from "../../sdk";
+import type { loader } from "./loader";
 
 const ACTIVITY_ICONS: Record<string, string> = {
   call: "📞",
@@ -12,8 +9,7 @@ const ACTIVITY_ICONS: Record<string, string> = {
   task: "☑️",
 };
 
-export function ContactDetailView() {
-  const { data, reload } = useKit<Data>();
+export function ContactDetailView({ data }: { data: Infer<typeof loader> }) {
 
   if (!data) {
     return <div className="p-4 text-ks-muted">Contact not found.</div>;

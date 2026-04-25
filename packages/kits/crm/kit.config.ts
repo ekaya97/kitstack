@@ -15,6 +15,7 @@ import { getContactDetailTool } from "./src/tools/get-contact-detail";
 import { pipelineDashboard } from "./src/tools/pipeline-dashboard";
 import { generateProposal } from "./src/tools/generate-proposal";
 import { exportData } from "./src/tools/export";
+import { listProposals } from "./src/tools/list-proposals";
 
 // Views
 import contactsView from "./src/views/contacts";
@@ -25,6 +26,7 @@ import proposalView from "./src/views/proposal";
 
 export default defineKit({
   id: "crm",
+  version: "1.0.0",
   name: "CRM Kit",
   description: "Full CRM with contacts, deals, pipeline, and proposals",
   schema,
@@ -42,6 +44,7 @@ export default defineKit({
     pipelineDashboard,
     generateProposal,
     exportData,
+    listProposals,
   ],
   views: [
     contactsView,

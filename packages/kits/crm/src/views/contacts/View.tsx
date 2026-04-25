@@ -1,15 +1,12 @@
 import { useState } from "react";
-import { useKit, useTool, useFile } from "../../sdk-view";
-import type { LoaderData } from "../../sdk";
-import type contactsView from "./index";
+import { useTool, useFile } from "@shared/use-kit";
+import type { Infer } from "../../sdk";
+import type { loader } from "./loader";
 
-type Data = LoaderData<typeof contactsView>;
-
-export function ContactsView() {
-  const { data, reload } = useKit<Data>();
+export function ContactsView({ data }: { data: Infer<typeof loader> }) {
   const file = useFile();
   const [search, setSearch] = useState("");
-  const [sortBy, setSortBy] = useState<"name" | "company" | "dealCount">("name");
+  const [sortBy, setSortBy] = useState<"name" | "company">("name");
 
   const filtered = data.filter((c) => {
     const q = search.toLowerCase();
@@ -21,7 +18,6 @@ export function ContactsView() {
   });
 
   const sorted = [...filtered].sort((a, b) => {
-    if (sortBy === "dealCount") return (b.dealCount ?? 0) - (a.dealCount ?? 0);
     const av = a[sortBy] ?? "";
     const bv = b[sortBy] ?? "";
     return av.localeCompare(bv);
@@ -29,8 +25,8 @@ export function ContactsView() {
 
   const handleExport = () => {
     const csv =
-      "name,company,email,source,deals\n" +
-      sorted.map((c) => `"${c.name}","${c.company ?? ""}","${c.email ?? ""}","${c.source ?? ""}","${c.dealCount}"`).join("\n");
+      "name,company,email,source\n" +
+      sorted.map((c) => `"${c.name}","${c.company ?? ""}","${c.email ?? ""}","${c.source ?? ""}"`).join("\n");
     file.download("contacts.csv", "text/csv", csv);
   };
 
@@ -63,7 +59,6 @@ export function ContactsView() {
             <th className="py-2 cursor-pointer" onClick={() => setSortBy("company")}>Company</th>
             <th className="py-2">Email</th>
             <th className="py-2">Source</th>
-            <th className="py-2 cursor-pointer" onClick={() => setSortBy("dealCount")}>Deals</th>
             <th className="py-2">Last Contacted</th>
           </tr>
         </thead>
@@ -74,7 +69,6 @@ export function ContactsView() {
               <td className="py-2 text-ks-muted">{c.company ?? "—"}</td>
               <td className="py-2 text-ks-muted">{c.email ?? "—"}</td>
               <td className="py-2 text-ks-muted">{c.source ?? "—"}</td>
-              <td className="py-2 font-mono">{c.dealCount}</td>
               <td className="py-2 text-ks-muted">{c.lastContactedAt ?? "—"}</td>
             </tr>
           ))}

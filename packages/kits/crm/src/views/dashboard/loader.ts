@@ -1,6 +1,6 @@
 import { defineLoader } from "../../sdk";
-import { getPipelineSummary } from "../../queries/deals";
+import { pipelineDashboard } from "../../tools/pipeline-dashboard";
 
 export const loader = defineLoader(async (db, ctx) => {
-  return getPipelineSummary(db);
+  return pipelineDashboard.load(db, {}, ctx);
 });

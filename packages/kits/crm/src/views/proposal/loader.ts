@@ -1,6 +1,6 @@
 import { defineLoader } from "../../sdk";
-import { getProposalsWithDeals } from "../../queries/proposals";
+import { listProposals } from "../../tools/list-proposals";
 
 export const loader = defineLoader(async (db, ctx) => {
-  return getProposalsWithDeals(db);
+  return listProposals.load(db, {}, ctx);
 });

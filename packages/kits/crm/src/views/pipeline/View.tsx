@@ -1,8 +1,8 @@
-import { useKit, useTool } from "../../sdk-view";
-import type { LoaderData } from "../../sdk";
-import type pipelineView from "./index";
+import { useTool } from "@shared/use-kit";
+import type { Infer } from "../../sdk";
+import type { loader } from "./loader";
 
-type Data = LoaderData<typeof pipelineView>;
+type Data = Infer<typeof loader>;
 
 const STAGES = ["prospect", "proposal", "negotiation", "won", "lost"] as const;
 
@@ -22,12 +22,11 @@ const STAGE_COLORS: Record<string, string> = {
   lost: "bg-red-50",
 };
 
-export function PipelineView() {
-  const { data, reload } = useKit<Data>();
-  const updateDeal = useTool("update_deal", { invalidate: reload });
+export function PipelineView({ data }: { data: Data }) {
+  const updateDeal = useTool("update_deal");
 
   // Group deals by stage
-  const byStage = new Map<string, Data>();
+  const byStage = new Map<string, Data[number][]>();
   for (const stage of STAGES) byStage.set(stage, []);
   for (const deal of data) {
     byStage.get(deal.stage)?.push(deal);

@@ -19,4 +19,5 @@ export type {
   ViewDefinition,
   LoaderFn,
   LoaderData,
+  Infer,
 } from "../../../sdk-stub/src/index";

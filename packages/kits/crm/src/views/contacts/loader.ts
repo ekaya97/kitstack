@@ -1,6 +1,6 @@
 import { defineLoader } from "../../sdk";
-import { getContactsWithStats } from "../../queries/contacts";
+import { listContacts } from "../../tools/list-contacts";
 
 export const loader = defineLoader(async (db, ctx) => {
-  return getContactsWithStats(db);
+  return listContacts.load(db, { limit: 100 }, ctx);
 });

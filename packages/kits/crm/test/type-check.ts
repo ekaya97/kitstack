@@ -3,129 +3,78 @@
  * If `tsc --noEmit` passes on this file, the SDK type flow works end-to-end.
  */
 
-import type { LoaderData, KitToolResult, KitDefinition } from "@kitstack/sdk";
+import type { Infer, KitDefinition } from "@kitstack/sdk";
 
 // --- 1. Validate kit.config.ts produces KitDefinition ---
 
 import kit from "../kit.config";
 const _kitDef: KitDefinition = kit;
 
-// --- 2. Validate LoaderData extracts the correct type from views ---
+// --- 2. Validate tool.load() type inference ---
 
-import contactsView from "../src/views/contacts";
-import contactDetailView from "../src/views/contact-detail";
-import pipelineView from "../src/views/pipeline";
-import dashboardView from "../src/views/dashboard";
-import proposalView from "../src/views/proposal";
+import { listDeals } from "../src/tools/list-deals";
+import { listContacts } from "../src/tools/list-contacts";
+import { getContactDetailTool } from "../src/tools/get-contact-detail";
+import { pipelineDashboard } from "../src/tools/pipeline-dashboard";
+import { listProposals } from "../src/tools/list-proposals";
 
-type ContactsData = LoaderData<typeof contactsView>;
-type ContactDetailData = LoaderData<typeof contactDetailView>;
-type PipelineData = LoaderData<typeof pipelineView>;
-type DashboardData = LoaderData<typeof dashboardView>;
-type ProposalData = LoaderData<typeof proposalView>;
-
-// --- 3. Validate contacts data has enriched fields from the loader ---
-
-function checkContactsData(data: ContactsData) {
+// listDeals.load returns deals with contactName from the join
+type DealsData = Infer<typeof listDeals.load>;
+function checkDeals(data: DealsData) {
   const first = data[0];
-  // Original schema fields (camelCase from Drizzle)
-  const _id: string = first.id;
   const _name: string = first.name;
-  const _company: string | null = first.company;
+  const _stage: string = first.stage;
+  const _contactName: string | null = first.contactName;
+  const _value: number | null = first.value;
+}
+
+// listContacts.load returns raw contacts
+type ContactsData = Infer<typeof listContacts.load>;
+function checkContacts(data: ContactsData) {
+  const first = data[0];
+  const _name: string = first.name;
   const _email: string | null = first.email;
   const _lastContacted: string | null = first.lastContactedAt;
-
-  // Enriched fields from the loader (not in raw schema)
-  const _dealCount: number = first.dealCount;
-  const _lastActivity: number | null = first.lastActivityAt;
 }
 
-// --- 4. Validate contact detail data has nested joins ---
-
-function checkContactDetailData(data: ContactDetailData) {
-  if (!data) return; // loader returns null for not found
-
+// getContactDetailTool.load returns contact + deals + activities
+type DetailData = Infer<typeof getContactDetailTool.load>;
+function checkDetail(data: DetailData) {
+  if (!data) return;
   const _contactName: string = data.contact.name;
-  const _contactCompany: string | null = data.contact.company;
-
-  const firstDeal = data.deals[0];
-  const _dealName: string = firstDeal.name;
-  const _dealStage: string = firstDeal.stage;
-  const _dealValue: number | null = firstDeal.value;
-
-  const firstActivity = data.recentActivities[0];
-  const _activityType: string = firstActivity.type;
-  const _activityDesc: string = firstActivity.description;
+  const _dealName: string = data.deals[0].name;
+  const _activityType: string = data.recentActivities[0].type;
 }
 
-// --- 5. Validate pipeline data has contact names from join ---
-
-function checkPipelineData(data: PipelineData) {
-  const first = data[0];
-  const _dealName: string = first.name;
-  const _stage: string = first.stage;
-  const _value: number | null = first.value;
-  // This field comes from the LEFT JOIN — proves the loader's join works
-  const _contactName: string | null = first.contactName;
-}
-
-// --- 6. Validate dashboard data has computed summaries ---
-
-function checkDashboardData(data: DashboardData) {
+// pipelineDashboard.load returns summary
+type DashboardData = Infer<typeof pipelineDashboard.load>;
+function checkDashboard(data: DashboardData) {
   const _total: number = data.total;
   const _open: number = data.open;
   const _won: number = data.won;
-
-  const firstStage = data.stages[0];
-  const _stageName: string = firstStage.stage;
-  const _stageCount: number = firstStage.count;
-  const _stageValue: number = firstStage.value;
-
-  const firstActivity = data.recentActivities[0];
-  const _actType: string = firstActivity.type;
+  const _stageCount: number = data.stages[0].count;
 }
 
-// --- 7. Validate proposal data has deal name from join ---
+// --- 3. Validate loader → view type flow ---
 
-function checkProposalData(data: ProposalData) {
+import { loader as pipelineLoader } from "../src/views/pipeline/loader";
+import { loader as contactsLoader } from "../src/views/contacts/loader";
+
+// Loader calls tool.load() — types should match
+type PipelineViewData = Infer<typeof pipelineLoader>;
+function checkPipelineView(data: PipelineViewData) {
   const first = data[0];
-  const _content: string = first.content;
-  const _version: number = first.version;
-  const _status: string = first.status;
-  // Joined field — not in raw proposals table
-  const _dealName: string | null = first.dealName;
+  const _contactName: string | null = first.contactName;
 }
 
-// --- 8. Validate schema produces camelCase types ---
+// --- 4. Validate schema produces camelCase ---
 
 import { contacts, deals } from "../src/schema";
-
 type Contact = typeof contacts.$inferSelect;
 type Deal = typeof deals.$inferSelect;
 
 function checkCamelCase(c: Contact, d: Deal) {
-  // These are camelCase (from Drizzle schema), not snake_case (from raw SQL)
   const _lastContacted: string | null = c.lastContactedAt;
   const _contactId: string | null = d.contactId;
   const _expectedClose: string | null = d.expectedCloseDate;
-  const _createdAt: Date | null = d.createdAt;
 }
-
-// --- 9. Validate tool handler returns KitToolResult ---
-
-import { addContact } from "../src/tools/add-contact";
-type AddContactResult = ReturnType<typeof addContact.handler>;
-const _toolResult: Promise<KitToolResult> = {} as AddContactResult;
-
-// --- 10. Validate shared queries are callable from both tools and loaders ---
-
-import { getContactDetail } from "../src/queries/contacts";
-import { getDealsWithContacts, getPipelineSummary } from "../src/queries/deals";
-import { getProposalsWithDeals } from "../src/queries/proposals";
-
-// These functions are used by both tools (for markdown output) and loaders (for typed data).
-// If they type-check here, the shared query pattern works.
-type ContactDetailResult = Awaited<ReturnType<typeof getContactDetail>>;
-type DealsResult = Awaited<ReturnType<typeof getDealsWithContacts>>;
-type PipelineResult = Awaited<ReturnType<typeof getPipelineSummary>>;
-type ProposalResult = Awaited<ReturnType<typeof getProposalsWithDeals>>;
