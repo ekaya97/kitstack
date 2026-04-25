@@ -101,6 +101,7 @@ export function listAppResources(activatedKitIds: Set<string>) {
             ...(appDataUrl ? [appDataUrl] : []),
           ],
         },
+        permissions: { clipboardWrite: {} },
       },
     },
   } as any);
@@ -137,6 +138,7 @@ export async function readAppResource(
               ...(appDataUrl ? [appDataUrl] : []),
             ],
           },
+          permissions: { clipboardWrite: {} },
         },
       },
     };

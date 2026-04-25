@@ -1,6 +1,8 @@
-import { useState, useMemo } from "react";
+import { useState, useMemo, useCallback } from "react";
 import { AppShell } from "@shared/app-shell";
 import { useAppData } from "@shared/use-app-data";
+import { useKitActions } from "@shared/use-kit-actions";
+import { ActionButton } from "@shared/action-button";
 import type { Prospect } from "@shared/types";
 
 function parseHooks(raw?: string | null): Record<string, string> {
@@ -8,8 +10,21 @@ function parseHooks(raw?: string | null): Record<string, string> {
   try { return JSON.parse(raw); } catch { return {}; }
 }
 
+function buildCsv(prospects: Prospect[]): string {
+  const headers = ["Name", "Company", "Email", "Status", "LinkedIn", "Hooks"];
+  const rows = prospects.map((p) => {
+    const hooks = parseHooks(p.personalization_hooks);
+    const hookStr = Object.entries(hooks).map(([k, v]) => `${k}: ${v}`).join("; ");
+    return [p.name, p.company || "", p.email || "", p.status, p.linkedin_url || "", hookStr]
+      .map((v) => `"${v.replace(/"/g, '""')}"`)
+      .join(",");
+  });
+  return [headers.join(","), ...rows].join("\n");
+}
+
 export function ProspectList() {
   const { data: prospects, loading, error, refetch } = useAppData<Prospect>("prospects");
+  const { downloadFile, canDownload } = useKitActions();
   const [search, setSearch] = useState("");
 
   const filtered = useMemo(() => {
@@ -25,6 +40,11 @@ export function ProspectList() {
     });
   }, [prospects, search]);
 
+  const handleExport = useCallback(async () => {
+    if (!prospects?.length) return;
+    await downloadFile("prospects.csv", "text/csv", buildCsv(prospects));
+  }, [prospects, downloadFile]);
+
   return (
     <AppShell title="Prospect List" loading={loading} error={error} onRetry={refetch}>
       <div className="flex items-center gap-3 mb-3">
@@ -35,6 +55,13 @@ export function ProspectList() {
           onChange={(e) => setSearch(e.target.value)}
           className="flex-1 px-3 py-2 text-sm border border-ks-hair rounded-lg bg-white placeholder:text-ks-faint focus:outline-none focus:border-ks-accent"
         />
+        {prospects && prospects.length > 0 && (
+          <ActionButton
+            label={canDownload ? "Export CSV" : "Copy CSV"}
+            successLabel={canDownload ? "Downloaded!" : "Copied!"}
+            onClick={handleExport}
+          />
+        )}
       </div>
 
       <div className="border border-ks-hair rounded-lg overflow-hidden">

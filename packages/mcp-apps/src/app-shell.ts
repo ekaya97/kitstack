@@ -60,13 +60,25 @@ window.addEventListener("message", (event) => {
   }
 });
 
+// Host capabilities — populated from ui/initialize response
+const hostCaps: Record<string, boolean> = {
+  downloadFile: false,
+  openLinks: false,
+  clipboardWrite: false,
+};
+
 async function init() {
   try {
-    await sendRequest("ui/initialize", {
+    const result = await sendRequest("ui/initialize", {
       protocolVersion: "2026-01-26",
       appCapabilities: {},
       appInfo: { name: "KitStack", version: "1.0.0" },
     });
+    // Store host capabilities for feature detection
+    const caps = result?.hostCapabilities ?? {};
+    hostCaps.downloadFile = !!caps.downloadFile;
+    hostCaps.openLinks = !!caps.openLinks;
+    hostCaps.clipboardWrite = true; // clipboard is always attempted, permission checked at use time
     sendNotification("ui/notifications/initialized");
   } catch (e) {
     console.error("[KitStack] Init failed:", e);
@@ -154,13 +166,38 @@ async function loadView(data: ViewData) {
     const tokenText = tokenResult?.content?.find?.((c: any) => c.type === "text")?.text;
     if (tokenText) {
       const tokenData = JSON.parse(tokenText);
-      // Set up the JWT+fetch path for useAppData
       (window as any).__KITSTACK__ = {
         token: tokenData.token,
         appDataUrl: tokenData.appDataUrl,
         kit: tokenData.kit,
       };
     }
+
+    // Set up the MCP bridge for React views — includes file operations
+    (window as any).__KITSTACK_MCP__ = {
+      callTool: (cmd: string, params: Record<string, unknown>) =>
+        sendRequest("tools/call", {
+          name: "kit",
+          arguments: { id: data.kit, cmd, params },
+        }),
+      kit: data.kit,
+      view: data.view,
+      capabilities: { ...hostCaps },
+
+      downloadFile: (filename: string, mimeType: string, content: string) =>
+        sendRequest("ui/download-file", {
+          contents: [{
+            type: "resource",
+            resource: { uri: `file:///${filename}`, mimeType, text: content },
+          }],
+        }),
+
+      openLink: (url: string) =>
+        sendRequest("ui/open-link", { url }),
+
+      copyToClipboard: (text: string) =>
+        navigator.clipboard.writeText(text),
+    };
     // Load shared CSS
     loadCSS(`${cdn}/style.css`);
 

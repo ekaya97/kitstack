@@ -1,6 +1,8 @@
 import { useState, useMemo } from "react";
 import { AppShell } from "@shared/app-shell";
 import { useAppData } from "@shared/use-app-data";
+import { useKitActions } from "@shared/use-kit-actions";
+import { ActionButton } from "@shared/action-button";
 import type { Email } from "@shared/types";
 
 function highlightMergeFields(text: string): (string | JSX.Element)[] {
@@ -38,6 +40,7 @@ function getMergeFields(text: string): string[] {
 
 export function EmailPreview() {
   const { data: emails, loading, error, refetch } = useAppData<Email>("emails");
+  const { copyToClipboard } = useKitActions();
   const [selectedId, setSelectedId] = useState<string | null>(null);
 
   const email = useMemo(() => {
@@ -84,6 +87,14 @@ export function EmailPreview() {
 
             <div className="px-4 py-4 text-sm text-ks-ink2">
               {renderBody(email.body)}
+            </div>
+
+            <div className="border-t border-ks-hair px-4 py-2 bg-ks-paper-warm/30 flex justify-end">
+              <ActionButton
+                label="Copy email"
+                successLabel="Copied!"
+                onClick={async () => copyToClipboard(`Subject: ${email.subject}\n\n${email.body}`)}
+              />
             </div>
           </div>
 
