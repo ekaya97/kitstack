@@ -178,7 +178,11 @@ export async function buildKit(kitRoot: string) {
       minify: false,
       logLevel: "silent",
     });
-    log("\u2713", `Server bundle: .kitstack/build/kit.mjs (${fileSizeKB(resolve(outputDir, "kit.mjs"))} KB)`);
+    const serverSize = fileSize(resolve(outputDir, "kit.mjs"));
+    log("\u2713", `Server bundle: .kitstack/build/kit.mjs (${(serverSize / 1024).toFixed(1)} KB)`);
+    if (serverSize > 1024 * 1024) {
+      console.warn(`  \u26A0 Server bundle is ${(serverSize / 1024 / 1024).toFixed(1)} MB. Consider splitting large dependencies.`);
+    }
   } catch (e: any) {
     fail(`Server bundle failed: ${e.message}`);
   }
@@ -275,8 +279,22 @@ export default defineConfig({
         const nestedFiles = readdirSync(kitViewDir).filter((f) => f.endsWith(".js"));
         const nestedSize = nestedFiles.reduce((s, f) => s + fileSize(resolve(kitViewDir, f)), 0);
         log("\u2713", `View bundles: ${nestedFiles.length} view modules + ${viewFiles.length} shared chunks (${((totalSize + nestedSize) / 1024).toFixed(1)} KB total)`);
+        // Warn on large view modules
+        for (const f of nestedFiles) {
+          const size = fileSize(resolve(kitViewDir, f));
+          if (size > 500 * 1024) {
+            console.warn(`  \u26A0 View module ${f} is ${(size / 1024).toFixed(0)} KB. Consider code-splitting or reducing dependencies.`);
+          }
+        }
       } else {
         log("\u2713", `View bundles: ${viewFiles.length} modules (${(totalSize / 1024).toFixed(1)} KB total)`);
+      }
+      // Warn on large shared chunks
+      for (const f of viewFiles) {
+        const size = fileSize(resolve(viewsDir, f));
+        if (size > 500 * 1024) {
+          console.warn(`  \u26A0 Shared chunk ${f} is ${(size / 1024).toFixed(0)} KB. This may slow down initial view loads.`);
+        }
       }
     } catch (e: any) {
       const stderr = e.stderr?.toString() || e.message;
