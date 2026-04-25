@@ -51,7 +51,13 @@ export async function login(args: string[]) {
   // Open browser
   await openBrowser(authUrl);
 
-  console.log("  Waiting for authorization...");
+  console.log("  Waiting for authorization (2 minutes)...");
+
+  // Timeout after 2 minutes
+  setTimeout(() => {
+    console.error("\n  Login timed out. Try again with: kitstack login\n");
+    process.exit(1);
+  }, 120_000);
 }
 
 function startCallbackServer(): Promise<number> {
@@ -86,7 +92,19 @@ function startCallbackServer(): Promise<number> {
       });
 
       res.writeHead(200, { "Content-Type": "text/html" });
-      res.end(htmlPage("Authenticated!", `<p>Authenticated as <strong>${escapeHtml(email)}</strong>.</p><p>You can close this tab and return to the terminal.</p>`));
+      res.end(htmlPage("Authenticated!", `
+        <p>Authenticated as <strong>${escapeHtml(email)}</strong>.</p>
+        <p id="countdown">Closing in 3 seconds...</p>
+        <script>
+          let s = 3;
+          const el = document.getElementById("countdown");
+          const t = setInterval(() => {
+            s--;
+            if (s <= 0) { clearInterval(t); window.close(); el.textContent = "You can close this tab."; }
+            else { el.textContent = "Closing in " + s + " second" + (s > 1 ? "s" : "") + "..."; }
+          }, 1000);
+        </script>
+      `));
 
       console.log(`\n  Authenticated as ${email}.`);
       console.log(`  Token saved to ~/.kitstack/credentials.json\n`);
