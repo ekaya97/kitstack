@@ -56,11 +56,13 @@ export async function provisionDevDb(
   const statements = migrationSql
     .split(";")
     .map((s) => s.trim())
-    .filter(Boolean);
+    .filter((s) => s.length > 0);
 
   for (const stmt of statements) {
     try {
-      await client.execute(stmt);
+      // Add IF NOT EXISTS to CREATE TABLE statements for idempotency
+      const safe = stmt.replace(/CREATE TABLE(?! IF NOT EXISTS)/gi, "CREATE TABLE IF NOT EXISTS");
+      await client.execute(safe);
     } catch (err: any) {
       throw new MigrationError(
         "MIGRATION_FAILED",
