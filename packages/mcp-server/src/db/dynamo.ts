@@ -10,9 +10,9 @@ import {
 import { marshall, unmarshall } from "@aws-sdk/util-dynamodb";
 import { eq } from "drizzle-orm";
 import { Resource } from "sst";
-import type { KitRegistryItem, UserKitDbItem } from "./types";
-import { getTursoDb } from "./authz";
-import { kitRegistryTable, kitViewsTable } from "../db/schema";
+import type { KitRegistryItem, UserKitDbItem } from "../router/types";
+import { getTursoDb } from "../router/authz";
+import { kitRegistryTable, kitViewsTable } from "./schema";
 
 const client = new DynamoDBClient({});
 

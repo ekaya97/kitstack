@@ -29,7 +29,7 @@ import {
   putRegistryItem,
   getUserKitDb,
   putUserKitDb,
-} from "../dynamo";
+} from "./dynamo";
 
 describe("Kit Registry operations", () => {
   it("getAllRegistryItems scans the registry table", async () => {

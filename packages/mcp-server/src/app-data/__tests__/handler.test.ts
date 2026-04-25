@@ -1,14 +1,14 @@
 import { describe, it, expect, vi, beforeEach } from "vitest";
 
-vi.mock("../../framework/app-token", () => ({
+vi.mock("../../router/app-token", () => ({
   verifyAppToken: vi.fn(),
 }));
 
-vi.mock("../../framework/dynamo", () => ({
+vi.mock("../../db/dynamo", () => ({
   getUserKitDb: vi.fn(),
 }));
 
-vi.mock("../../framework/kit-db", () => ({
+vi.mock("../../db/kit-db", () => ({
   createKitDbClient: vi.fn(),
 }));
 
