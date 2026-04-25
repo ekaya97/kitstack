@@ -1,27 +1,28 @@
-import { Resource } from "sst";
 import type { KitRegistryItem } from "../framework/types";
 
 /**
- * Resolve the Lambda function identifier (ARN or name) for a kit.
+ * Resolve the Lambda function name for a kit.
  *
- * Looks up the SST Resource name from the registry's `lambdaResource` field,
- * then resolves the actual ARN/name from SST Resource bindings at runtime.
+ * Uses the `Kit-{kitId}` naming convention. Kit Lambdas are provisioned
+ * dynamically via `provisionKitLambda()` from `@kitstack/sdk/deploy`,
+ * not hardcoded in SST config.
  *
- * Returns null if the kit has no Lambda configured or the resource isn't linked.
+ * Falls back to the registry's `lambdaResource` field if present, for
+ * backwards compatibility with kits deployed before the convention was
+ * adopted.
  */
 export function getKitFunctionId(
   kitId: string,
   allTools: KitRegistryItem[]
 ): string | null {
-  // Find any tool for this kit that has a lambdaResource value
+  // Check if the registry specifies a custom Lambda resource name
   const tool = allTools.find((t) => t.kitId === kitId && t.lambdaResource);
-  if (!tool?.lambdaResource) return null;
+  if (tool?.lambdaResource) {
+    return tool.lambdaResource;
+  }
 
-  const fn = (Resource as any)[tool.lambdaResource];
-  if (!fn) return null;
-
-  // In production: fn.arn is set. In sst dev: fn.name is the function name.
-  return fn.arn ?? fn.name ?? null;
+  // Convention: all kit Lambdas are named Kit-{kitId}
+  return `Kit-${kitId}`;
 }
 
 /**

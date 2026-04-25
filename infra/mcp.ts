@@ -27,35 +27,18 @@ export const oauthStore = new sst.aws.Dynamo("OAuthStore", {
   ttl: "ttl",
 });
 
-// --- Kit Lambdas (one per kit, lean cold starts) ---
+// --- Kit Lambda shared infra (for SDK deploy pipeline) ---
+// Kit Lambdas are provisioned dynamically via `provisionKitLambda()`.
+// All kits share one IAM role and one runtime layer.
+// Set these secrets after initial AWS setup:
+//   npx sst secret set KitLambdaRoleArn arn:aws:iam::ACCOUNT:role/KitLambdaRole
+//   npx sst secret set KitRuntimeLayerArn arn:aws:lambda:REGION:ACCOUNT:layer:KitRuntime:VERSION
 
-const kitLambdaDefaults = {
-  timeout: "30 seconds" as const,
-  memory: "256 MB" as const,
-  runtime: "nodejs22.x" as const,
-  architecture: "arm64" as const,
-  link: [posthogKey, posthogHost],
-};
+/** IAM role ARN for kit Lambdas (CloudWatch Logs only, no DB/VPC access). */
+export const kitLambdaRoleArn = new sst.Secret("KitLambdaRoleArn", "");
 
-export const kitMeeting = new sst.aws.Function("KitMeeting", {
-  ...kitLambdaDefaults,
-  handler: "deprecated/kit-definitions/kits/meeting/handler.handler",
-});
-
-export const kitCrm = new sst.aws.Function("KitCrm", {
-  ...kitLambdaDefaults,
-  handler: "kits/crm/handler.handler",
-});
-
-export const kitExpense = new sst.aws.Function("KitExpense", {
-  ...kitLambdaDefaults,
-  handler: "deprecated/kit-definitions/kits/expense/handler.handler",
-});
-
-export const kitOutreach = new sst.aws.Function("KitOutreach", {
-  ...kitLambdaDefaults,
-  handler: "deprecated/kit-definitions/kits/outreach/handler.handler",
-});
+/** Runtime layer ARN (drizzle-orm, @libsql/client, zod, nanoid). */
+export const kitRuntimeLayerArn = new sst.Secret("KitRuntimeLayerArn", "");
 
 // --- App Data Lambda (JWT → Turso → JSON for iframe apps) ---
 
@@ -87,12 +70,10 @@ export const mcpRouter = new sst.aws.Function("McpRouter", {
   link: [
     kitBucket,
     kitCdn,
+    kitLambdaRoleArn,
+    kitRuntimeLayerArn,
     userKitDbs,
     oauthStore,
-    kitMeeting,
-    kitCrm,
-    kitExpense,
-    kitOutreach,
     appData,
     tursoDbUrl,
     tursoAuthToken,
@@ -109,7 +90,7 @@ export const mcpRouter = new sst.aws.Function("McpRouter", {
   permissions: [
     {
       actions: ["lambda:InvokeFunction"],
-      resources: [kitMeeting.arn, kitCrm.arn, kitExpense.arn, kitOutreach.arn],
+      resources: ["arn:aws:lambda:*:*:function:Kit-*"],
     },
   ],
 });
