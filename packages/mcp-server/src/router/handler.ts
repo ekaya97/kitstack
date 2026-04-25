@@ -22,6 +22,7 @@ import {
   oauthStoreTable,
   mcpInternalApiKey,
   betterAuthUrl,
+  devRelayUrl,
 } from "../config";
 import type { JsonRpcRequest } from "./types";
 
@@ -421,6 +422,90 @@ export async function handler(
       });
 
       return json({ connected: hasActiveToken }, 200, origin);
+    }
+
+    // --- Dev Relay (POST /dev/{sessionId}) ---
+
+    if (path.startsWith("/dev/") && method === "POST") {
+      const sessionId = path.slice(5); // "/dev/abc123" → "abc123"
+      if (!sessionId) return json({ error: "Missing sessionId" }, 400, origin);
+
+      // Auth: same as MCP endpoint
+      const authHeader = httpEvent.headers.authorization || httpEvent.headers.Authorization || "";
+      const token = authHeader.replace("Bearer ", "");
+      if (!token) return json({ error: "Missing Authorization header" }, 401, origin);
+
+      let userId: string;
+      try {
+        const auth = await mcpRequireAuthorized(token);
+        userId = auth.userId;
+      } catch {
+        return json({ error: "Invalid or expired token" }, 401, origin);
+      }
+
+      // Look up the dev session
+      const session = await getOAuthItem(`DEV_SESSION#${sessionId}`, "CONNECTION");
+      if (!session) return json({ error: "Dev session not found" }, 404, origin);
+
+      const connectionId = (session as any).connectionId as string;
+      if (!connectionId) return json({ error: "Dev session has no connection" }, 500, origin);
+
+      // Parse the MCP request
+      const body = safeParseBody(httpEvent.body);
+      if (!body) return json({ error: "Invalid request body" }, 400, origin);
+
+      const requestId = `${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
+
+      // Forward to CLI via WebSocket
+      const wsEndpoint = devRelayUrl();
+      if (!wsEndpoint) return json({ error: "Relay not configured" }, 500, origin);
+
+      try {
+        const { ApiGatewayManagementApiClient, PostToConnectionCommand } =
+          await import("@aws-sdk/client-apigatewaymanagementapi");
+
+        // Convert wss:// URL to https:// management endpoint
+        const mgmtEndpoint = wsEndpoint
+          .replace("wss://", "https://")
+          .replace("ws://", "http://");
+
+        const mgmt = new ApiGatewayManagementApiClient({ endpoint: mgmtEndpoint });
+        await mgmt.send(new PostToConnectionCommand({
+          ConnectionId: connectionId,
+          Data: Buffer.from(JSON.stringify({
+            requestId,
+            method: (body as any).method,
+            params: (body as any).params,
+            id: (body as any).id,
+          })),
+        }));
+      } catch (err: any) {
+        log.error("Relay PostToConnection failed", { sessionId, error: err.message });
+        return json({ error: "Dev session disconnected" }, 502, origin);
+      }
+
+      // Poll DynamoDB for the response
+      const maxWait = 25; // 25 iterations × 200ms = 5 seconds max
+      for (let i = 0; i < maxWait; i++) {
+        const response = await getOAuthItem(`DEV_REQ#${requestId}`, "RESPONSE");
+        if (response) {
+          const responseBody = JSON.parse((response as any).body || "null");
+          // Clean up
+          deleteOAuthItem(`DEV_REQ#${requestId}`, "RESPONSE").catch(() => {});
+          return json({
+            jsonrpc: "2.0",
+            id: (body as any).id ?? null,
+            ...responseBody,
+          }, 200, origin);
+        }
+        await new Promise((r) => setTimeout(r, 200));
+      }
+
+      return json({
+        jsonrpc: "2.0",
+        id: (body as any).id ?? null,
+        error: { code: -32000, message: "Dev session timed out" },
+      }, 504, origin);
     }
 
     // --- MCP Protocol (POST /) ---

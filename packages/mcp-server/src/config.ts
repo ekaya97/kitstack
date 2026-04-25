@@ -28,6 +28,10 @@ export const mcpAllowedOrigins = (): string[] =>
 export const mcpInternalApiKey = () => Resource.McpInternalApiKey.value;
 export const betterAuthUrl = () => Resource.BetterAuthUrl.value || "http://localhost:3000";
 
+// --- Relay ---
+
+export const devRelayUrl = (): string => (Resource as any).DevRelay?.url?.replace(/\/$/, "") || "";
+
 // --- CDN & Storage ---
 
 export const kitCdnUrl = (): string => (Resource as any).KitCdn?.url?.replace(/\/$/, "") || "";

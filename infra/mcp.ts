@@ -88,42 +88,6 @@ export const appData = new sst.aws.Function("AppData", {
   ],
 });
 
-// --- Router Lambda (MCP protocol + OAuth + dispatch) ---
-
-export const mcpRouter = new sst.aws.Function("McpRouter", {
-  handler: "packages/mcp-server/src/router/handler.handler",
-  timeout: "60 seconds",
-  memory: "512 MB",
-  runtime: "nodejs22.x",
-  architecture: "arm64",
-  url: true,
-  link: [
-    kitBucket,
-    kitCdn,
-    kitLambdaInfra,
-    userKitDbs,
-    oauthStore,
-    appData,
-    tursoDbUrl,
-    tursoAuthToken,
-    tursoPlatformApiToken,
-    tursoOrgName,
-    betterAuthSecret,
-    betterAuthUrl,
-    mcpJwtSecret,
-    mcpAllowedOrigins,
-    mcpInternalApiKey,
-    posthogKey,
-    posthogHost,
-  ],
-  permissions: [
-    {
-      actions: ["lambda:InvokeFunction"],
-      resources: ["arn:aws:lambda:*:*:function:Kit-*"],
-    },
-  ],
-});
-
 // --- DevRelay WebSocket API (for kitstack dev relay mode) ---
 
 const relayConnect = new sst.aws.Function("RelayConnect", {
@@ -160,6 +124,47 @@ export const devRelay = new sst.aws.ApiGatewayWebSocket("DevRelay", {
 devRelay.route("$connect", relayConnect.arn);
 devRelay.route("$disconnect", relayDisconnect.arn);
 devRelay.route("$default", relayDefault.arn);
+
+// --- Router Lambda (MCP protocol + OAuth + dispatch) ---
+
+export const mcpRouter = new sst.aws.Function("McpRouter", {
+  handler: "packages/mcp-server/src/router/handler.handler",
+  timeout: "60 seconds",
+  memory: "512 MB",
+  runtime: "nodejs22.x",
+  architecture: "arm64",
+  url: true,
+  link: [
+    kitBucket,
+    kitCdn,
+    kitLambdaInfra,
+    userKitDbs,
+    oauthStore,
+    devRelay,
+    appData,
+    tursoDbUrl,
+    tursoAuthToken,
+    tursoPlatformApiToken,
+    tursoOrgName,
+    betterAuthSecret,
+    betterAuthUrl,
+    mcpJwtSecret,
+    mcpAllowedOrigins,
+    mcpInternalApiKey,
+    posthogKey,
+    posthogHost,
+  ],
+  permissions: [
+    {
+      actions: ["lambda:InvokeFunction"],
+      resources: ["arn:aws:lambda:*:*:function:Kit-*"],
+    },
+    {
+      actions: ["execute-api:ManageConnections"],
+      resources: ["*"],
+    },
+  ],
+});
 
 // --- MCP Router Domain ---
 

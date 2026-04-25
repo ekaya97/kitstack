@@ -171,7 +171,8 @@ export async function dev(args: string[]) {
 
     const sessionId = randomUUID().slice(0, 8);
     const relayUrl = process.env.KITSTACK_RELAY_URL || "wss://relay.kitstack.co";
-    const publicUrl = `https://mcp.kitstack.co/dev/${sessionId}`;
+    const mcpBaseUrl = process.env.KITSTACK_MCP_URL || "https://mcp.kitstack.co";
+    const publicUrl = `${mcpBaseUrl}/dev/${sessionId}`;
 
     console.error(`\n  ${kit.name} dev server`);
     console.error(`  Connecting to relay...\n`);
