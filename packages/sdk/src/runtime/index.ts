@@ -12,3 +12,5 @@ export {
 } from "./stdio";
 
 export { zodToJsonSchema } from "./zod-to-json-schema";
+
+export { createProxiedDbClient } from "./proxied-db";
