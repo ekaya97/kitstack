@@ -114,6 +114,43 @@ export const mcpRouter = new sst.aws.Function("McpRouter", {
   ],
 });
 
+// --- DevRelay WebSocket API (for kitstack dev relay mode) ---
+
+const relayConnect = new sst.aws.Function("RelayConnect", {
+  handler: "packages/mcp-server/src/relay/connect.handler",
+  timeout: "10 seconds",
+  memory: "128 MB",
+  runtime: "nodejs22.x",
+  architecture: "arm64",
+  link: [oauthStore],
+});
+
+const relayDisconnect = new sst.aws.Function("RelayDisconnect", {
+  handler: "packages/mcp-server/src/relay/disconnect.handler",
+  timeout: "10 seconds",
+  memory: "128 MB",
+  runtime: "nodejs22.x",
+  architecture: "arm64",
+  link: [oauthStore],
+});
+
+const relayDefault = new sst.aws.Function("RelayDefault", {
+  handler: "packages/mcp-server/src/relay/default.handler",
+  timeout: "10 seconds",
+  memory: "128 MB",
+  runtime: "nodejs22.x",
+  architecture: "arm64",
+  link: [oauthStore],
+});
+
+export const devRelay = new sst.aws.ApiGatewayWebSocket("DevRelay", {
+  domain: $dev ? undefined : "relay.kitstack.co",
+});
+
+devRelay.route("$connect", relayConnect.arn);
+devRelay.route("$disconnect", relayDisconnect.arn);
+devRelay.route("$default", relayDefault.arn);
+
 // --- MCP Router Domain ---
 
 export const mcpDomain = new sst.aws.Router("McpDomain", {
