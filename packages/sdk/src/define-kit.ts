@@ -1,8 +1,27 @@
+import type { z } from "zod";
 import type { KitDefinition, ToolDefinition, ViewDefinition } from "./types";
 import { KitValidationError, ToolValidationError } from "./errors";
 
 const SNAKE_CASE_RE = /^[a-z][a-z0-9]*(?:_[a-z0-9]+)*$/;
 const KEBAB_CASE_RE = /^[a-z][a-z0-9]*(?:-[a-z0-9]+)*$/;
+
+function warnMissingDescribe(toolName: string, schema: z.ZodType): void {
+  const def = (schema as any)?._def;
+  if (!def) return;
+
+  // Only inspect ZodObject shapes
+  const shape =
+    typeof def.shape === "function" ? def.shape() : def.shape;
+  if (!shape || typeof shape !== "object") return;
+
+  for (const [fieldName, fieldSchema] of Object.entries(shape)) {
+    if (!(fieldSchema as any)?.description) {
+      console.warn(
+        `[kitstack] Warning: Tool "${toolName}" arg "${fieldName}" has no description. Add .describe() to help the LLM fill this field correctly.`
+      );
+    }
+  }
+}
 
 export function defineKit(config: {
   id: string;
@@ -49,6 +68,11 @@ export function defineKit(config: {
       console.warn(
         `[kitstack] Warning: Tool "${tool.name}" description is long (${tool.description.length} chars). Consider being more concise.`
       );
+    }
+
+    // Warn: missing .describe() on Zod args fields
+    if (tool.args) {
+      warnMissingDescribe(tool.name, tool.args);
     }
 
     // Warn: tool name contains kit ID prefix
