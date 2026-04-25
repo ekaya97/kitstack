@@ -9,13 +9,6 @@ export type { AuthAdapter, OAuthServerMetadata } from "./auth";
 export { none, kitstack, oauth } from "./auth";
 export type { KitStackAuthConfig, OAuthConfig } from "./auth";
 
-/**
- * Configuration for {@link serve}.
- *
- * Connects a kit definition to a database, auth adapter, and transport layer
- * to create a complete self-hosted MCP server. Used by `kitstack dev` internally
- * and by developers deploying kits on their own infrastructure.
- */
 /** Database connection config passed to `@libsql/client`'s `createClient()`. */
 interface DbConfig {
   url: string;
@@ -134,6 +127,27 @@ export type ServeOptions = ServeSingleOptions | ServeMonolithOptions;
  *     url: process.env.DATABASE_URL!,
  *     authToken: process.env.DATABASE_TOKEN,
  *   },
+ *   transport: "http",
+ *   port: 3000,
+ * });
+ * ```
+ *
+ * @example Monolith mode — multiple kits in a single server:
+ * ```typescript
+ * import { serve, kitstack } from "@kitstack/sdk/server";
+ * import crmKit from "../kits/crm/kit.config";
+ * import outreachKit from "../kits/outreach/kit.config";
+ *
+ * serve({
+ *   kits: [crmKit, outreachKit],
+ *   databases: {
+ *     crm: { url: process.env.CRM_DB! },
+ *     "cold-outreach": { url: process.env.OUTREACH_DB! },
+ *   },
+ *   auth: kitstack({
+ *     clientId: process.env.KITSTACK_CLIENT_ID!,
+ *     clientSecret: process.env.KITSTACK_CLIENT_SECRET!,
+ *   }),
  *   transport: "http",
  *   port: 3000,
  * });
