@@ -19,7 +19,7 @@ export default $config({
   async run() {
     await import("./infra/secrets");
     await import("./infra/storage");
-    const { mcpRouter, appData, kitMeeting, kitCrm, kitExpense, kitOutreach } = await import("./infra/mcp");
+    const { mcpRouter, appData, kitLambdaRole, kitRuntimeLayer } = await import("./infra/mcp");
     const { web } = await import("./infra/web");
 
     const tursoCLI = new sst.x.DevCommand("TursoLocalCLI", {
@@ -32,10 +32,8 @@ export default $config({
       url: web.url,
       mcpUrl: mcpRouter.url,
       appDataUrl: appData.url,
-      kitMeetingArn: kitMeeting.arn,
-      kitCrmArn: kitCrm.arn,
-      kitExpenseArn: kitExpense.arn,
-      kitOutreachArn: kitOutreach.arn,
+      kitLambdaRoleArn: kitLambdaRole.arn,
+      kitRuntimeLayerArn: kitRuntimeLayer.arn,
     };
   },
 });

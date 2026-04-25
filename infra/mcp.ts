@@ -30,15 +30,51 @@ export const oauthStore = new sst.aws.Dynamo("OAuthStore", {
 // --- Kit Lambda shared infra (for SDK deploy pipeline) ---
 // Kit Lambdas are provisioned dynamically via `provisionKitLambda()`.
 // All kits share one IAM role and one runtime layer.
-// Set these secrets after initial AWS setup:
-//   npx sst secret set KitLambdaRoleArn arn:aws:iam::ACCOUNT:role/KitLambdaRole
-//   npx sst secret set KitRuntimeLayerArn arn:aws:lambda:REGION:ACCOUNT:layer:KitRuntime:VERSION
 
-/** IAM role ARN for kit Lambdas (CloudWatch Logs only, no DB/VPC access). */
-export const kitLambdaRoleArn = new sst.Secret("KitLambdaRoleArn", "");
+/**
+ * IAM role for all kit Lambdas.
+ * Only allows CloudWatch Logs — no DB, VPC, or S3 access.
+ * DB credentials are passed per-invocation by the router.
+ */
+export const kitLambdaRole = new aws.iam.Role("KitLambdaRole", {
+  assumeRolePolicy: aws.iam.assumeRolePolicyForPrincipal({
+    Service: "lambda.amazonaws.com",
+  }),
+});
 
-/** Runtime layer ARN (drizzle-orm, @libsql/client, zod, nanoid). */
-export const kitRuntimeLayerArn = new sst.Secret("KitRuntimeLayerArn", "");
+new aws.iam.RolePolicyAttachment("KitLambdaRoleLogs", {
+  role: kitLambdaRole.name,
+  policyArn: "arn:aws:iam::aws:policy/service-role/AWSLambdaBasicExecutionRole",
+});
+
+/**
+ * Runtime layer for kit Lambdas.
+ * Contains shared node_modules: drizzle-orm, @libsql/client, zod, nanoid.
+ *
+ * The layer code lives at packages/sdk/layer/ and is built via:
+ *   cd packages/sdk/layer && npm install && zip -r layer.zip nodejs/
+ *
+ * On first deploy, upload the zip to S3 manually or use:
+ *   aws lambda publish-layer-version --layer-name KitRuntime \
+ *     --compatible-runtimes nodejs22.x --zip-file fileb://layer.zip
+ *
+ * After that, SST manages the layer version via this resource.
+ */
+export const kitRuntimeLayer = new aws.lambda.LayerVersion("KitRuntimeLayer", {
+  layerName: "KitRuntime",
+  compatibleRuntimes: ["nodejs22.x"],
+  compatibleArchitectures: ["arm64"],
+  // S3 bucket/key set after first layer build — or use local zip:
+  // code: new $util.asset.FileArchive("packages/sdk/layer/layer.zip"),
+});
+
+/** Linkable so deploy scripts can read the ARNs via Resource bindings. */
+export const kitLambdaInfra = new sst.Linkable("KitLambdaInfra", {
+  properties: {
+    roleArn: kitLambdaRole.arn,
+    layerArn: kitRuntimeLayer.arn,
+  },
+});
 
 // --- App Data Lambda (JWT → Turso → JSON for iframe apps) ---
 
@@ -70,8 +106,7 @@ export const mcpRouter = new sst.aws.Function("McpRouter", {
   link: [
     kitBucket,
     kitCdn,
-    kitLambdaRoleArn,
-    kitRuntimeLayerArn,
+    kitLambdaInfra,
     userKitDbs,
     oauthStore,
     appData,

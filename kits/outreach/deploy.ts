@@ -34,13 +34,7 @@ async function deploy() {
     shellS3Key: `apps/kits/${KIT_ID}/shell.html`,
   });
 
-  const roleArn = (Resource as any).KitLambdaRoleArn.value;
-  const layerArn = (Resource as any).KitRuntimeLayerArn.value;
-
-  if (!roleArn || !layerArn) {
-    console.log("\n⚠ Skipping Lambda provisioning (KitLambdaRoleArn or KitRuntimeLayerArn not set).");
-    return;
-  }
+  const { roleArn, layerArn } = (Resource as any).KitLambdaInfra;
 
   const result = await provisionKitLambda({
     kitId: KIT_ID,
