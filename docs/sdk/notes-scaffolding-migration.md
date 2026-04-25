@@ -1,6 +1,6 @@
 # Scaffolding, Migration, and Auth Adapters -- Dev Notes
 
-Tickets: T-0022 (kitstack init), T-0029 (outreach tools), T-0030 (outreach views), T-0037 (auth adapters), T-0017 (loader testing), T-0011 (router cleanup)
+Tickets: T-0022 (kitstack init), T-0029 (outreach tools), T-0030 (outreach views), T-0037 (auth adapters), T-0017 (loader testing), T-0011 (router cleanup), T-0074 (migration refactor)
 
 ## What was built
 
@@ -10,12 +10,13 @@ The `init` command at `packages/sdk/src/cli/commands/init.ts` creates a complete
 
 ```
 my-kit/
-  kit.config.ts          # defineKit() wiring everything together
-  package.json           # deps: @kitstack/sdk, zod, drizzle-orm
+  kit.config.ts          # defineKit() with migrationsDir
+  package.json           # deps: @kitstack/sdk, zod, drizzle-orm; devDeps: drizzle-kit
   tsconfig.json          # ESNext + bundler resolution + JSX
   tailwind.config.ts     # KitStack preset for view styling
-  src/schema.ts          # Drizzle table definition (items)
-  src/migrations.ts      # Raw SQL migration string
+  drizzle.config.ts      # drizzle-kit config (schema path + migrations output)
+  migrations/            # drizzle-kit generated SQL (committed to git)
+  src/schema.ts          # Drizzle table definition (items) — source of truth
   src/instructions.ts    # LLM system prompt
   src/tools/example.ts   # defineTool() with load + handler
   src/views/dashboard/   # defineView() with loader + View.tsx
@@ -100,7 +101,7 @@ The `load` function on each tool is a plain async function `(db, args, ctx) => d
 
 **The `load` / `handler` split is the key migration insight.** In the old framework, tools returned formatted text directly. The SDK separates data loading (`load`) from presentation (`handler`). This split was the biggest change during migration -- every tool needed its query extracted into a standalone function. The payoff is that views can reuse those queries through `tool.load(db, args, ctx)`.
 
-**Schema and migrations must stay in sync manually.** The Drizzle schema (`src/schema.ts`) and the raw SQL migration string (`src/migrations.ts`) define the same tables but in different languages. There's no codegen to keep them aligned. During the outreach migration we caught a mismatch where the Drizzle schema had a `DEFAULT 'draft'` but the SQL migration was missing it. Both files must be reviewed together.
+**Schema-driven migrations replace hand-written SQL (T-0074).** Previously, the Drizzle schema (`src/schema.ts`) and a raw SQL string (`src/migrations.ts`) had to stay in sync manually — they defined the same tables in different languages. This was error-prone (we caught a missing `DEFAULT 'draft'` during the outreach migration). Now the schema is the single source of truth: `drizzle-kit generate` reads `src/schema.ts` and outputs numbered `.sql` files in `migrations/`. The old `migrationSql` field is still supported as an escape hatch for non-Drizzle users (Prisma, hand-written SQL).
 
 **Zod `.describe()` on every field matters.** Claude uses these descriptions to understand what each argument does. During outreach migration, we found that generic field names like `id` without a description led to Claude passing the wrong entity's ID (e.g. a prospect ID where a sequence ID was expected). Adding `.describe("The sequence ID to delete")` fixed the issue.
 
@@ -232,3 +233,77 @@ import { listSequences } from "../src/tools/list-sequences";
 const data = await listSequences.load(testKit.db, { limit: 10 }, testKit.ctx);
 expect(data).toEqual([]); // raw row objects
 ```
+
+### Migration workflow (T-0074)
+
+The schema is the single source of truth. Migrations are derived, not hand-written.
+
+**For Drizzle users (recommended):**
+
+```bash
+# 1. Edit src/schema.ts (add a column, table, etc.)
+
+# 2. Run dev — drizzle-kit generate runs automatically
+npx kitstack dev --stdio
+#   → drizzle-kit generate detects schema change
+#   → writes migrations/0001_add_notes_column.sql
+#   → provisions .kitstack/dev.db with all migrations applied
+
+# 3. Or run build — same drizzle-kit step
+npx kitstack build
+```
+
+The `migrations/` directory is committed to git. It's a build *input*, not a build *output*. Drizzle-kit's `meta/_journal.json` tracks which snapshots exist so it can generate incremental diffs.
+
+The kit's `kit.config.ts` references the directory:
+
+```typescript
+export default defineKit({
+  id: "my-kit",
+  // ...
+  migrationsDir: resolve(import.meta.dirname, "migrations"),
+});
+```
+
+The kit's `drizzle.config.ts` (scaffolded by `kitstack init`):
+
+```typescript
+import type { Config } from "drizzle-kit";
+
+export default {
+  schema: "./src/schema.ts",
+  out: "./migrations",
+  dialect: "sqlite",
+  dbCredentials: {
+    url: "file:.kitstack/dev.db",
+  },
+} satisfies Config;
+```
+
+**For non-Drizzle users (Prisma, hand-written SQL):**
+
+```typescript
+export default defineKit({
+  id: "my-kit",
+  // ...
+  migrationSql: `
+    CREATE TABLE IF NOT EXISTS items (
+      id TEXT PRIMARY KEY,
+      name TEXT NOT NULL
+    );
+  `,
+});
+```
+
+`migrationSql` takes precedence if both are provided. No `drizzle.config.ts` needed.
+
+**How it works at runtime:**
+
+| Context | What happens |
+|---------|-------------|
+| `kitstack dev` | Runs `drizzle-kit generate` if `drizzle.config.ts` exists, then `resolveMigrationSql()` reads `.sql` files from `migrations/`, provisions `.kitstack/dev.db` |
+| `kitstack build` | Same generate step, copies `migrations/` to build output |
+| `createTestKit()` | `resolveMigrationSql()` reads from `migrationsDir` or `migrationSql`, runs all statements against in-memory SQLite |
+| Production deploy | Platform applies pending migrations per-user (migration tracking is a platform concern, not SDK) |
+
+**Key design decision:** The SDK does not track which migrations have been applied. In dev/test, the DB is always fresh (in-memory or reset). In production, the platform handles migration state per-user. This keeps the SDK simple — it just runs SQL.
