@@ -1,0 +1,20 @@
+{
+  "name": "@kitstack/crm-kit",
+  "version": "0.0.1",
+  "private": true,
+  "type": "module",
+  "dependencies": {
+    "@kitstack/sdk": "workspace:../../sdk-stub",
+    "drizzle-orm": "^0.38.0",
+    "@libsql/client": "^0.14.0",
+    "zod": "^3.22.0",
+    "nanoid": "^5.0.0"
+  },
+  "devDependencies": {
+    "typescript": "^5.0.0",
+    "react": "^19.0.0",
+    "react-dom": "^19.0.0",
+    "@types/react": "^19.0.0",
+    "@types/react-dom": "^19.0.0"
+  }
+}

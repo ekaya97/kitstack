@@ -44,7 +44,7 @@ export const kitMeeting = new sst.aws.Function("KitMeeting", {
 
 export const kitCrm = new sst.aws.Function("KitCrm", {
   ...kitLambdaDefaults,
-  handler: "packages/mcp-server/src/kits/crm/handler.handler",
+  handler: "packages/kits/crm/handler.handler",
 });
 
 export const kitExpense = new sst.aws.Function("KitExpense", {

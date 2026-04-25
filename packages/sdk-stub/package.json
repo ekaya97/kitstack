@@ -1,0 +1,18 @@
+{
+  "name": "@kitstack/sdk",
+  "version": "0.0.1",
+  "type": "module",
+  "exports": {
+    ".": "./src/index.ts",
+    "./view": "./src/view/index.ts"
+  },
+  "peerDependencies": {
+    "zod": "^3.22.0",
+    "drizzle-orm": "^0.38.0"
+  },
+  "devDependencies": {
+    "typescript": "^5.0.0",
+    "@types/react": "^19.0.0",
+    "react": "^19.0.0"
+  }
+}
