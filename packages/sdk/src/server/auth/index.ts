@@ -16,3 +16,5 @@ export type { AuthAdapter, OAuthServerMetadata } from "./adapter";
 export { none } from "./none";
 export { kitstack } from "./kitstack";
 export type { KitStackAuthConfig } from "./kitstack";
+export { oauth } from "./oauth";
+export type { OAuthConfig } from "./oauth";

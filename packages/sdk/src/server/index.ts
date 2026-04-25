@@ -6,8 +6,8 @@ import type { AuthAdapter } from "./auth/adapter";
 import { none } from "./auth/none";
 
 export type { AuthAdapter, OAuthServerMetadata } from "./auth";
-export { none, kitstack } from "./auth";
-export type { KitStackAuthConfig } from "./auth";
+export { none, kitstack, oauth } from "./auth";
+export type { KitStackAuthConfig, OAuthConfig } from "./auth";
 
 /**
  * Configuration for {@link serve}.
