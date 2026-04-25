@@ -204,3 +204,157 @@ npx kitstack dev --stdio --reset-db
 ```
 
 Deletes `.kitstack/dev.db` and re-runs migrations from scratch.
+
+---
+
+## Build pipeline deep dive
+
+Tickets: T-0042, T-0043, T-0044, T-0045, T-0046
+
+### View bundling with Vite and manualChunks
+
+Views are bundled with Vite (not esbuild) because esbuild's `splitting: true` produces unpredictable `chunk-HASH.js` filenames, and marking React as external leaves bare specifiers that browsers can't resolve.
+
+Vite's `rollupOptions.output.manualChunks` splits view bundles into three tiers:
+
+| Chunk | Contents | Rationale |
+|---|---|---|
+| `vendor.js` | `react`, `react-dom`, `scheduler` | Shared across all views, cached separately |
+| `shared.js` | Anything under `src/shared/` (hooks, components) | Kit-level shared code |
+| `{kitId}/{slug}.js` | Per-view entry module | Only loaded when that view is displayed |
+
+The Vite config is generated at build time and written to `.kitstack/build/_vite.config.ts`. It uses `@shared` as a resolve alias pointing at the SDK's `views/src/shared/` directory. `cssCodeSplit` is disabled so all CSS lands in a single file.
+
+### Per-kit Tailwind CSS processing
+
+If both `src/views/styles.css` and `tailwind.config.ts` exist in the kit root, the build runs:
+
+```bash
+npx tailwindcss -i "src/views/styles.css" -o ".kitstack/build/views/style.css" --config "tailwind.config.ts" --minify
+```
+
+Each kit has its own Tailwind config, so content paths and theme extensions are scoped. The output is a single minified `style.css` placed alongside the view JS modules.
+
+### Generated view entry points
+
+For each view defined in `kit.config.ts`, the build generates a `main.tsx`-style entry at `.kitstack/build/_entries/{slug}.tsx`. The generated code:
+
+1. Imports `createRoot` from `react-dom/client`
+2. Imports `* as ViewModule` from the kit's `src/views/{slug}/View.tsx`
+3. Resolves the component via default export or first exported function
+4. Exports a `mount(container, data)` function that renders the component
+5. Registers itself on `window.__KITSTACK_VIEWS__["{kitId}/{slug}"]`
+
+This pattern lets the shell discover and mount views by convention without the kit author writing any boilerplate.
+
+### Manifest generation with hashes and sizes
+
+The manifest (`manifest.json`) is the source of truth for deployment. It includes:
+
+- `kitId`, `kitName`, `version`, `sdkVersion` (read from `packages/sdk/package.json`)
+- `tools[]` — name and description of each tool
+- `views[]` — slug, name, description of each view
+- `migrationSql` — raw SQL string for database provisioning
+- `serverBundle` — `{ file, hash, sizeBytes }` where hash is `sha256:<first-12-hex-chars>`
+- `viewModules[]` — per-view `{ slug, file, hash, sizeBytes }`
+- `viewCss` — `{ file, sizeBytes }` if Tailwind output exists
+- `shell` — `{ file, sizeBytes }` if shell HTML was generated
+
+Hashes use SHA-256 truncated to 12 hex characters, prefixed with `sha256:`.
+
+### Build summary output
+
+The build prints a step-by-step summary to stdout:
+
+```
+  ✓ Loaded kit.config.ts — "CRM Kit" (12 tools, 5 views)
+  ✓ Migration SQL valid (4 statements)
+  ✓ Validation passed
+  ✓ Server bundle: .kitstack/build/kit.mjs (42.3 KB)
+  ✓ Generated 5 view entries
+  ✓ View bundles: 5 view modules + 2 shared chunks (187.4 KB total)
+  ✓ CSS: .kitstack/build/views/style.css (8.2 KB)
+  ✓ Shell: .kitstack/build/shell.html (3.1 KB)
+  ✓ Manifest: .kitstack/build/manifest.json
+```
+
+Warnings fire at >1 MB for server bundles and >500 KB for individual view modules or shared chunks.
+
+---
+
+## kitstack publish command workflow
+
+Ticket: T-0046
+
+`kitstack publish` (`packages/sdk/src/cli/commands/publish.ts`) submits a built kit to the KitStack marketplace. Steps:
+
+1. **Auth check** — loads credentials from `~/.kitstack/credentials.json` (written by `kitstack login`). Exits if not authenticated.
+2. **Build if needed** — if `.kitstack/build/manifest.json` doesn't exist, runs `buildKit(kitRoot)` automatically. Otherwise uses existing build output (prints a hint to rebuild manually).
+3. **Read manifest** — parses `manifest.json`, logs kit name/id/version and tool/view counts.
+4. **Collect assets** — reads `kit.mjs` (server bundle), recursively collects all files under `views/`, and reads `shell.html` if present.
+5. **Upload** — sends a single JSON POST to `{KITSTACK_API_URL}/kits/publish` with:
+   - `manifest` — the parsed manifest object
+   - `bundle` — server bundle as base64
+   - `shell` — shell HTML as base64 (or null)
+   - `views[]` — array of `{ name, content }` with base64-encoded view assets
+6. **Confirm** — prints the kit ID, version, and review status from the API response.
+
+The API URL defaults to `https://api.kitstack.co` and can be overridden via `KITSTACK_API_URL` env var.
+
+---
+
+## Authorize hook wiring
+
+Ticket: T-0062, T-0012
+
+### defineTool authorize hook
+
+Tools can define an optional `authorize` hook that returns an array of `AuthzRequirement` objects. Each requirement specifies a `relation`, `objectType`, and `objectId` — a tuple that the authz engine checks before allowing the tool call.
+
+```typescript
+defineTool({
+  name: "delete_sequence",
+  description: "Delete an outreach sequence",
+  args: z.object({ sequenceId: z.string() }),
+  authorize: (args, ctx) => [
+    { relation: "owner", objectType: "sequence", objectId: args.sequenceId },
+  ],
+  handler: async (db, args, ctx) => { /* ... */ },
+});
+```
+
+### MCP handler wiring
+
+In `createMcpHandler` (`packages/sdk/src/runtime/mcp-handler.ts`), the `checkAuthz` config option is called for each `AuthzRequirement` returned by the tool's `authorize` hook:
+
+- If `checkAuthz` is provided and any check returns `false`, the tool call is rejected with a "Forbidden" error.
+- If `checkAuthz` is omitted, authorize hooks are skipped entirely (all calls permitted). This is the default for local dev.
+
+```typescript
+createMcpHandler({
+  kit,
+  db,
+  checkAuthz: async (db, requirement, ctx) => {
+    // Query your authz engine (e.g., OpenFGA, custom RBAC table)
+    return true; // or false to deny
+  },
+});
+```
+
+### createTestKit wiring
+
+In `createTestKit` (`packages/sdk/src/testing/index.ts`), the same pattern applies:
+
+- Pass `checkAuthz` in the options to test authorization logic.
+- Omit it to skip authz checks (convenient for unit tests that focus on business logic).
+
+```typescript
+const testKit = await createTestKit(kitDef, {
+  checkAuthz: async (db, req, ctx) => {
+    // Custom test logic — e.g., only allow "test-user"
+    return ctx.userId === "test-user";
+  },
+});
+```
+
+Both `createMcpHandler` and `createTestKit` follow the same contract: `authorize` hook produces requirements, `checkAuthz` evaluates them, absence of `checkAuthz` means "permit all".

@@ -22,6 +22,24 @@ import { buildKit } from "../../build";
 
 const KITSTACK_API_URL = process.env.KITSTACK_API_URL || "https://api.kitstack.co";
 
+/**
+ * Execute the `kitstack publish` command.
+ *
+ * Validates authentication credentials, triggers a build if no build output
+ * exists, reads the manifest and bundle files, then uploads everything
+ * (server bundle, view modules, shell HTML) to the KitStack API as a
+ * base64-encoded JSON payload.
+ *
+ * @param args - CLI positional arguments (currently unused; reserved for
+ *   future flags like `--force` or `--tag`)
+ *
+ * @example
+ * ```typescript
+ * // Programmatic usage (e.g., from a custom script)
+ * import { publish } from "@kitstack/sdk/cli/commands/publish";
+ * await publish([]);
+ * ```
+ */
 export async function publish(args: string[]) {
   const kitRoot = resolve(process.cwd());
   const buildDir = resolve(kitRoot, ".kitstack", "build");
@@ -113,6 +131,16 @@ export async function publish(args: string[]) {
   }
 }
 
+/**
+ * Recursively collect all files under `dir`, recording each file's
+ * path relative to `baseDir` and its raw content buffer.
+ *
+ * Used internally by {@link publish} to gather view assets for upload.
+ *
+ * @param dir - Current directory being scanned
+ * @param baseDir - Root directory for computing relative paths
+ * @param result - Accumulator array; files are pushed in-place
+ */
 function collectFiles(
   dir: string,
   baseDir: string,
