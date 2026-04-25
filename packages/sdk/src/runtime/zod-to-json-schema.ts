@@ -1,8 +1,54 @@
 import { z } from "zod";
 
 /**
- * Converts a Zod schema to a JSON Schema object suitable for MCP tool definitions.
- * Handles the subset of Zod types commonly used in kit tool args.
+ * Converts a Zod schema to a JSON Schema object suitable for MCP tool
+ * definitions. This is used at build time and by the MCP handler at runtime
+ * to serialize tool argument schemas into the JSON Schema format that MCP
+ * clients (Claude, etc.) understand.
+ *
+ * **Supported Zod types:**
+ * - `z.object()` -- emits `{ type: "object", properties, required }`
+ * - `z.string()` -- emits `{ type: "string" }`
+ * - `z.number()` -- emits `{ type: "number" }`
+ * - `z.boolean()` -- emits `{ type: "boolean" }`
+ * - `z.array()` -- emits `{ type: "array", items }`
+ * - `z.enum()` -- emits `{ type: "string", enum: [...] }`
+ * - `z.record()` -- emits `{ type: "object", additionalProperties }`
+ * - `z.optional()` -- unwraps and omits from `required` array
+ * - `z.default()` -- unwraps and adds `default` value to output
+ *
+ * Any unrecognized Zod type falls back to `{ type: "string" }`.
+ *
+ * Descriptions added via `.describe()` are preserved as the `description`
+ * property in the JSON Schema output — this is critical for LLM tool usage
+ * since the description tells the model what to put in each field.
+ *
+ * @param schema - A Zod schema (typically `z.object(...)` for tool args).
+ * @returns A plain JSON Schema object.
+ *
+ * @example
+ * ```typescript
+ * import { z } from "zod";
+ * import { zodToJsonSchema } from "@kitstack/sdk/runtime/zod-to-json-schema";
+ *
+ * // Schema from the CRM kit's add_contact tool
+ * const args = z.object({
+ *   name: z.string().describe("Contact's full name"),
+ *   company: z.string().optional().describe("Company name"),
+ *   email: z.string().optional().describe("Email address"),
+ * });
+ *
+ * const jsonSchema = zodToJsonSchema(args);
+ * // => {
+ * //   type: "object",
+ * //   properties: {
+ * //     name: { type: "string", description: "Contact's full name" },
+ * //     company: { type: "string", description: "Company name" },
+ * //     email: { type: "string", description: "Email address" },
+ * //   },
+ * //   required: ["name"],
+ * // }
+ * ```
  */
 export function zodToJsonSchema(schema: z.ZodType): Record<string, unknown> {
   return processZodType(schema);

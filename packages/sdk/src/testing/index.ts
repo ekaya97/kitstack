@@ -4,39 +4,207 @@ import type { KitDefinition, KitContext, KitToolResult } from "../types";
 import { kit } from "../result";
 import { MigrationError } from "../errors";
 
+/**
+ * An isolated test harness for a kit. Wraps an in-memory SQLite database
+ * with migrations applied and provides direct tool/view invocation without
+ * any MCP transport or network overhead.
+ *
+ * Obtain an instance via {@link createTestKit}. Call {@link cleanup} in
+ * `afterAll()` to release the database connection.
+ *
+ * @example
+ * ```typescript
+ * import { createTestKit, type TestKit } from "@kitstackdev/kit/testing";
+ * import crmKit from "../kit.config";
+ * import { contacts } from "../src/schema";
+ *
+ * describe("CRM tools", () => {
+ *   let testKit: TestKit;
+ *
+ *   beforeAll(async () => { testKit = await createTestKit(crmKit); });
+ *   afterEach(async () => { await testKit.reset(); });
+ *   afterAll(async () => { await testKit.cleanup(); });
+ *
+ *   it("creates a contact", async () => {
+ *     const result = await testKit.call("add_contact", { name: "Alice Smith" });
+ *     expect(result.isError).toBeUndefined();
+ *
+ *     // Direct DB access for assertions
+ *     const rows = await testKit.db.select().from(contacts);
+ *     expect(rows).toHaveLength(1);
+ *     expect(rows[0].name).toBe("Alice Smith");
+ *   });
+ * });
+ * ```
+ */
 export interface TestKit {
-  /** Drizzle client connected to the in-memory test database. Use for assertions. */
+  /**
+   * Drizzle client connected to the in-memory test database.
+   * Use for direct SQL assertions after calling tools.
+   *
+   * @example
+   * ```typescript
+   * const rows = await testKit.db.select().from(contacts);
+   * expect(rows).toHaveLength(1);
+   * ```
+   */
   db: LibSQLDatabase;
 
-  /** Call a tool by name with arguments. Uses default context { userId: "test-user", kitId }. */
+  /**
+   * Call a tool by name with arguments. Uses the default context
+   * `{ userId: "test-user", kitId: "<kit-id>" }`.
+   *
+   * Returns a `KitToolResult` — check `result.isError` and read
+   * `result.content[0].text` for the response body.
+   *
+   * Returns an error result (not a thrown exception) when the tool name
+   * is unknown or argument validation fails.
+   *
+   * @param toolName - The snake_case tool name (e.g. `"add_contact"`)
+   * @param args - Arguments matching the tool's Zod schema
+   *
+   * @example
+   * ```typescript
+   * const result = await testKit.call("add_contact", {
+   *   name: "Bob Jones",
+   *   company: "Acme Corp",
+   *   email: "bob@acme.com",
+   * });
+   * expect(result.isError).toBeUndefined();
+   * expect(result.content[0].text).toContain("Bob Jones");
+   * ```
+   */
   call(toolName: string, args?: Record<string, unknown>): Promise<KitToolResult>;
 
-  /** Call a tool with a custom context (e.g. different userId). */
+  /**
+   * Call a tool with a custom context. Use this to test multi-user
+   * scenarios or to override the default `userId`.
+   *
+   * @param ctx - Partial context overrides (e.g. `{ userId: "alice" }`)
+   * @param toolName - The snake_case tool name
+   * @param args - Arguments matching the tool's Zod schema
+   *
+   * @example
+   * ```typescript
+   * const result = await testKit.callAs(
+   *   { userId: "custom-user-123" },
+   *   "add_contact",
+   *   { name: "Custom User Contact" },
+   * );
+   * expect(result.isError).toBeUndefined();
+   * ```
+   */
   callAs(
     ctx: Partial<KitContext>,
     toolName: string,
     args?: Record<string, unknown>
   ): Promise<KitToolResult>;
 
-  /** Execute a view's loader and return its typed data. Useful for testing loaders without MCP overhead. */
+  /**
+   * Execute a view's loader directly and return its typed data.
+   * Useful for testing loader logic without MCP overhead or view rendering.
+   *
+   * Throws an `Error` if the view slug is not found.
+   *
+   * @param viewSlug - The kebab-case view slug (e.g. `"pipeline"`)
+   * @param ctx - Optional partial context overrides
+   *
+   * @example
+   * ```typescript
+   * const data = await testKit.loadView("pipeline");
+   * expect(data.deals).toHaveLength(3);
+   * ```
+   */
   loadView(viewSlug: string, ctx?: Partial<KitContext>): Promise<unknown>;
 
-  /** Delete all data from tables and re-run migrations. */
+  /**
+   * Delete all rows from every table and reset the database to a clean
+   * post-migration state. Call in `afterEach()` to isolate tests.
+   *
+   * This does NOT re-run migrations — it only clears data.
+   *
+   * @example
+   * ```typescript
+   * afterEach(async () => {
+   *   await testKit.reset();
+   * });
+   * ```
+   */
   reset(): Promise<void>;
 
-  /** Close the database connection. Call in afterAll(). */
+  /**
+   * Close the database connection. Call in `afterAll()` to release resources.
+   *
+   * @example
+   * ```typescript
+   * afterAll(async () => {
+   *   await testKit.cleanup();
+   * });
+   * ```
+   */
   cleanup(): Promise<void>;
 }
 
 /**
- * Creates an isolated in-memory SQLite database, runs migrations, and provides
- * direct tool invocation for testing kits.
+ * Creates an isolated in-memory SQLite database, runs the kit's migration SQL,
+ * and returns a {@link TestKit} harness for direct tool and view invocation.
  *
- * ```ts
- * const testKit = await createTestKit(myKit);
- * const result = await testKit.call("add_contact", { name: "Alice" });
- * expect(result.isError).toBeUndefined();
- * await testKit.cleanup();
+ * This is the primary entry point for testing kits. The in-memory database
+ * is fully isolated — each `createTestKit()` call gets its own database, so
+ * tests can run in parallel without interference.
+ *
+ * Throws {@link MigrationError} if any SQL statement in `kitDef.migrationSql`
+ * fails to execute (e.g. syntax errors, invalid table definitions).
+ *
+ * @param kitDef - A kit definition returned by `defineKit()`
+ * @returns A promise resolving to a {@link TestKit} instance
+ *
+ * @example
+ * ```typescript
+ * import { describe, it, expect, afterEach, afterAll } from "vitest";
+ * import { createTestKit } from "@kitstackdev/kit/testing";
+ * import crmKit from "../kit.config";
+ * import { contacts, deals } from "../src/schema";
+ *
+ * describe("CRM kit", () => {
+ *   let testKit: Awaited<ReturnType<typeof createTestKit>>;
+ *
+ *   beforeAll(async () => { testKit = await createTestKit(crmKit); });
+ *   afterEach(async () => { await testKit.reset(); });
+ *   afterAll(async () => { await testKit.cleanup(); });
+ *
+ *   it("creates a contact and verifies in DB", async () => {
+ *     const result = await testKit.call("add_contact", { name: "Alice Smith" });
+ *     expect(result.isError).toBeUndefined();
+ *
+ *     const rows = await testKit.db.select().from(contacts);
+ *     expect(rows).toHaveLength(1);
+ *     expect(rows[0].name).toBe("Alice Smith");
+ *   });
+ *
+ *   it("handles deal creation and listing", async () => {
+ *     await testKit.call("add_contact", { name: "Alice" });
+ *     const contactRows = await testKit.db.select().from(contacts);
+ *
+ *     const dealResult = await testKit.call("add_deal", {
+ *       name: "Enterprise License",
+ *       contactId: contactRows[0].id,
+ *       value: 50000,
+ *       stage: "proposal",
+ *     });
+ *     expect(dealResult.isError).toBeUndefined();
+ *
+ *     const listResult = await testKit.call("list_deals", {});
+ *     expect(listResult.content[0].text).toContain("Enterprise License");
+ *   });
+ *
+ *   it("validates arguments with Zod", async () => {
+ *     // add_contact requires name (string) — passing empty args fails
+ *     const result = await testKit.call("add_contact", {});
+ *     expect(result.isError).toBe(true);
+ *     expect(result.content[0].text).toContain("Invalid arguments");
+ *   });
+ * });
  * ```
  */
 export async function createTestKit(
