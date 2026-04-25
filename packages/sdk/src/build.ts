@@ -12,6 +12,7 @@ import {
 } from "fs";
 import { resolve, dirname, relative, join } from "path";
 import type { KitDefinition } from "./types";
+import { MigrationError } from "./errors";
 import { generateShell } from "./shell-template";
 
 interface BuildResult {
@@ -104,15 +105,48 @@ export async function buildKit(kitRoot: string) {
 
   // Validate migration SQL against in-memory SQLite
   if (kit.migrationSql) {
+    // Split by ";" while tracking the starting line number of each statement
+    const rawParts = kit.migrationSql.split(";");
+    const statements: { sql: string; line: number }[] = [];
+    let lineOffset = 1;
+    for (const part of rawParts) {
+      const trimmed = part.trim();
+      if (trimmed) {
+        statements.push({ sql: trimmed, line: lineOffset });
+      }
+      // Count newlines in this part (plus the ";" delimiter counts as same line)
+      lineOffset += (part.match(/\n/g) || []).length;
+    }
+
+    // Reject DROP statements
+    for (const stmt of statements) {
+      const normalized = stmt.sql.replace(/--[^\n]*/g, "").trim();
+      if (/^\s*DROP\s+/i.test(normalized)) {
+        throw new MigrationError(
+          "MIGRATION_DROP_FORBIDDEN",
+          `Migration SQL contains a DROP command at line ${stmt.line}, which is forbidden. Remove destructive statements from your migration.\n         Statement: ${stmt.sql.slice(0, 120)}`
+        );
+      }
+    }
+
+    // Run each statement individually for precise error reporting
     try {
       const { createClient } = await import("@libsql/client");
       const client = createClient({ url: ":memory:" });
-      const statements = kit.migrationSql.split(";").filter((s) => s.trim());
-      for (const stmt of statements) {
-        await client.execute(stmt);
+      for (let i = 0; i < statements.length; i++) {
+        const stmt = statements[i];
+        try {
+          await client.execute(stmt.sql);
+        } catch (stmtErr: any) {
+          throw new MigrationError(
+            "MIGRATION_SQL_INVALID",
+            `Migration SQL error at statement ${i + 1} (line ${stmt.line}): ${stmtErr.message}\n         Statement: ${stmt.sql.slice(0, 120)}`
+          );
+        }
       }
       log("\u2713", `Migration SQL valid (${statements.length} statements)`);
     } catch (e: any) {
+      if (e instanceof MigrationError) throw e;
       fail(`Migration SQL error: ${e.message}`);
     }
   }

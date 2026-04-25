@@ -8,6 +8,7 @@
   "exports": {
     ".": "./src/index.ts",
     "./view": "./views/src/shared/use-kit.ts",
+    "./testing": "./src/testing/index.ts",
     "./tailwind-preset": "./src/tailwind-preset.ts"
   },
   "peerDependencies": {
