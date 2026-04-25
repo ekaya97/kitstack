@@ -206,6 +206,30 @@ The stdio transport processes lines without awaiting. This looks wrong but is co
 
 The `AuthAdapter` has five methods that map 1:1 to OAuth 2.0 endpoints. We considered adding `getUserProfile()` or `getRoles()` but decided against it — the only thing the MCP runtime needs is a `userId` string. Kit tools that need richer identity can query their own database.
 
+### Shell's `__KITSTACK_VIEWS__` registry requires kit-namespaced keys
+
+View modules register on `window.__KITSTACK_VIEWS__["{kitId}/{slug}"]`. The shell looks up this key when a tool result contains `{ view: "slug" }`. Without the kit ID namespace, two kits loaded in the same page (unlikely in MCP Apps, possible in DevKit) would collide.
+
+### esbuild externals list is manually maintained
+
+The server bundle externalizes `@libsql/client`, `drizzle-orm`, `drizzle-orm/*`, and `zod`. These are provided at runtime. If a kit imports another heavy library (e.g., `pdf-lib`), it gets bundled into `kit.mjs`. There is no automatic external detection — if the bundle gets large, check for accidentally bundled dependencies.
+
+### Vite manual chunks prevent React duplication
+
+Without `manualChunks`, each per-view module bundles its own React (~140 KB). The split into `vendor.js` (react/react-dom/scheduler) and `shared.js` (shared components) keeps total size linear in shared code, not in view count.
+
+### CLI `bin` uses `.ts` path during monorepo development
+
+`package.json` registers `"kitstack": "./src/cli/index.ts"`, not a compiled output. This works because the monorepo uses `tsx` as a TypeScript loader. For the published npm package, this will need to point to built output (handled when `tsup` is set up).
+
+### `.js` extension in dynamic imports is required for ESM
+
+`import("./commands/init.js")` uses `.js` even though the source is `.ts`. TypeScript's `moduleResolution: "bundler"` resolves `.js` to `.ts` during development, and built output has actual `.js` files.
+
+### `provisionDevDb` splits on ";" naively
+
+Migration SQL is split on `;` boundaries. This works for standard SQL but would break if a semicolon appeared inside a string literal or trigger body. For now, kit migration SQL avoids this. If triggers or stored procedures are ever needed, a proper SQL tokenizer would be required.
+
 ---
 
 ## How to use it
@@ -270,3 +294,55 @@ const notification = await host.buildToolResultNotification("pipeline");
 // Handle messages from an iframe
 const response = await host.handleMessage(incomingMessage);
 ```
+
+### Scaffold a new kit
+
+```bash
+npx kitstack init cold-outreach
+cd cold-outreach
+npm install
+npx kitstack dev --stdio
+```
+
+The generated kit includes a working example tool, a dashboard view, migration SQL, and a vitest test file using `createTestKit()`.
+
+### Claude Desktop MCP config
+
+```json
+{
+  "mcpServers": {
+    "crm": {
+      "command": "npx",
+      "args": ["tsx", "packages/sdk/src/cli/index.ts", "dev", "--stdio"],
+      "cwd": "/path/to/kits/crm"
+    }
+  }
+}
+```
+
+### View development with DevKit
+
+```bash
+cd kits/crm
+npx kitstack dev --views --port 5174
+# Open http://localhost:5174
+```
+
+The DevKit page shows all views and tools, executes loaders in real-time, and simulates the Claude.ai MCP Apps iframe sandboxing.
+
+### Reset the dev database
+
+```bash
+npx kitstack dev --stdio --reset-db
+```
+
+Deletes `.kitstack/dev.db` and re-runs migrations from scratch. Useful when schema changes make the existing database incompatible.
+
+### Inspect build output
+
+```bash
+npx kitstack build
+cat .kitstack/build/manifest.json | python3 -m json.tool
+```
+
+The manifest lists every tool, view, bundle hash, and file size. Use it to verify the build before publishing.
