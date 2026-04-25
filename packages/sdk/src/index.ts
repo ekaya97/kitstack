@@ -22,3 +22,12 @@ export { kit } from "./result";
 
 // Build
 export { buildKit } from "./build";
+
+// Errors
+export {
+  KitStackError,
+  KitValidationError,
+  ToolValidationError,
+  MigrationError,
+  SchemaError,
+} from "./errors";
