@@ -6,6 +6,7 @@ import { resolve } from "path";
 const entry = process.env.APP_ENTRY;
 
 export default defineConfig({
+  base: entry ? undefined : "/app-previews/",
   plugins: [react(), ...(entry ? [viteSingleFile()] : [])],
   resolve: {
     alias: {
