@@ -1,17 +1,14 @@
 import { NextRequest, NextResponse } from "next/server";
 import { requireSession } from "@/lib/auth-session";
+import { db } from "@/lib/db";
+import { session as sessionTable } from "@/db/auth-schema";
 import { nanoid } from "nanoid";
-import { DynamoDBClient, PutItemCommand } from "@aws-sdk/client-dynamodb";
-import { marshall } from "@aws-sdk/util-dynamodb";
-import { Resource } from "sst";
-
-const dynamo = new DynamoDBClient({});
 
 export async function POST(request: NextRequest) {
   // Verify user is authenticated
-  let session;
+  let userSession;
   try {
-    session = await requireSession();
+    userSession = await requireSession();
   } catch {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
@@ -21,7 +18,7 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ error: "Missing callback" }, { status: 400 });
   }
 
-  // Validate callback is localhost (security: don't redirect tokens to arbitrary URLs)
+  // Validate callback is localhost
   try {
     const url = new URL(callback);
     if (url.hostname !== "localhost" && url.hostname !== "127.0.0.1") {
@@ -31,23 +28,21 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ error: "Invalid callback URL" }, { status: 400 });
   }
 
-  // Generate token
-  const token = `kst_${nanoid(32)}`;
+  // Create a long-lived BetterAuth session for the CLI
+  const token = nanoid(32);
+  const now = new Date();
+  const expiresAt = new Date(now.getTime() + 365 * 24 * 60 * 60 * 1000); // 1 year
 
-  // Store in OAuthStore so the relay can validate it
-  const ttl = Math.floor(Date.now() / 1000) + 365 * 86400; // 1 year
-  await dynamo.send(
-    new PutItemCommand({
-      TableName: (Resource as any).OAuthStore.name,
-      Item: marshall({
-        pk: `CLI_TOKEN#${token}`,
-        sk: "META",
-        userId: session.user.id,
-        email: session.user.email,
-        ttl,
-      }),
-    })
-  );
+  await db.insert(sessionTable).values({
+    id: nanoid(),
+    token,
+    userId: userSession.user.id,
+    expiresAt,
+    createdAt: now,
+    updatedAt: now,
+    userAgent: "kitstack-cli",
+    ipAddress: request.headers.get("x-forwarded-for") || "127.0.0.1",
+  });
 
   return NextResponse.json({ token });
 }

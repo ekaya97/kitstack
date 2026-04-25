@@ -132,7 +132,7 @@ const relayConnect = new sst.aws.Function("RelayConnect", {
   memory: "128 MB",
   runtime: "nodejs22.x",
   architecture: "arm64",
-  link: [oauthStore],
+  link: [oauthStore, tursoDbUrl, tursoAuthToken],
 });
 
 const relayDisconnect = new sst.aws.Function("RelayDisconnect", {
