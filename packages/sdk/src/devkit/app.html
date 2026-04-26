@@ -29,7 +29,7 @@
 
   /* Viewport */
   .viewport { background: #e8e8e8; display: flex; align-items: center; justify-content: center; padding: 16px; overflow: auto; }
-  .viewport .frame-container { background: #fff; border: 1px solid #ccc; border-radius: 4px; overflow: hidden; box-shadow: 0 2px 8px rgba(0,0,0,0.1); width: 100%; max-width: 1024px; }
+  .viewport .frame-container { background: #fff; border: 1px solid #ccc; border-radius: 4px; overflow: hidden; box-shadow: 0 2px 8px rgba(0,0,0,0.1); max-width: 1024px; transition: width 0.4s ease, max-width 0.4s ease; }
   .viewport iframe { width: 100%; border: none; min-height: 400px; }
   .viewport .empty { color: #999; font-size: 14px; }
 
@@ -101,7 +101,7 @@
         <button class="size-btn" data-w="375">Mobile</button>
         <button class="size-btn" data-w="768">Tablet</button>
         <button class="size-btn active" data-w="1024">Desktop</button>
-        <button class="size-btn" data-w="100%">Full</button>
+        <button class="size-btn" data-w="full">Full</button>
       </div>
     </div>
   </div>
@@ -161,7 +161,13 @@ document.querySelectorAll(".size-btn").forEach(btn => {
     const container = document.querySelector(".frame-container");
     if (container) {
       const w = btn.dataset.w;
-      container.style.maxWidth = w === "100%" ? "none" : w + "px";
+      if (w === "full") {
+        container.style.width = "calc(100svw - var(--sidebar-w) - 32px)";
+        container.style.maxWidth = "none";
+      } else {
+        container.style.width = w + "px";
+        container.style.maxWidth = w + "px";
+      }
     }
   });
 });
@@ -207,7 +213,13 @@ async function selectView(slug) {
   // (skip the double-iframe proxy — not needed for local dev)
   const viewport = document.getElementById("viewport-content");
   viewport.className = "";
-  viewport.innerHTML = '<div class="frame-container"><iframe id="outer-frame"></iframe></div>';
+  // Get current active size button width for initial container size
+  const activeBtn = document.querySelector(".size-btn.active");
+  const initW = activeBtn?.dataset.w;
+  const initStyle = initW === "full"
+    ? "width:calc(100svw - var(--sidebar-w) - 32px);max-width:none"
+    : `width:${initW || 1024}px;max-width:${initW || 1024}px`;
+  viewport.innerHTML = `<div class="frame-container" style="${initStyle}"><iframe id="outer-frame"></iframe></div>`;
 
   outerIframe = document.getElementById("outer-frame");
   outerIframe.srcdoc = shellHtml;

@@ -93,12 +93,38 @@ export default defineConfig({
 });
 `);
 
-  // PostCSS config in entry dir pointing to the kit's Tailwind config
-  const twConfigPath = resolve(kitRoot, "tailwind.config.ts").replace(/\\/g, "/");
+  // Tailwind config with absolute content paths and inlined preset
+  const viewsGlob = resolve(kitRoot, "src/views/**/*.tsx").replace(/\\/g, "/");
+  writeFileSync(resolve(entryDir, "tailwind.config.cjs"), `
+let typography;
+try { typography = require("@tailwindcss/typography"); } catch {}
+
+module.exports = {
+  content: ["${viewsGlob}"],
+  theme: {
+    extend: {
+      colors: {
+        "ks-paper": "#faf7f1", "ks-paper-warm": "#f4ede0", "ks-paper-deep": "#ece3d1",
+        "ks-ink": "#171512", "ks-ink2": "#2a251f", "ks-muted": "#6b6357",
+        "ks-faint": "#b8ae9b", "ks-line": "#1a1814", "ks-hair": "#d9ceb8",
+        "ks-accent": "#d65a2f", "ks-accent-deep": "#a8411e", "ks-accent-soft": "#f7d9c8",
+        "ks-hi": "#ffe45c",
+      },
+      fontFamily: {
+        serif: ['"Instrument Serif"', "Georgia", "serif"],
+        sans: ['"Inter"', "system-ui", "-apple-system", "sans-serif"],
+        mono: ['"JetBrains Mono"', "ui-monospace", "monospace"],
+      },
+    },
+  },
+  plugins: typography ? [typography] : [],
+};
+`);
+
   writeFileSync(resolve(entryDir, "postcss.config.cjs"), `
 module.exports = {
   plugins: {
-    tailwindcss: { config: "${twConfigPath}" },
+    tailwindcss: { config: "${resolve(entryDir, "tailwind.config.cjs").replace(/\\/g, "/")}" },
     autoprefixer: {},
   },
 };
