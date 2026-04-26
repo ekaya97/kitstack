@@ -19,7 +19,7 @@ export interface DeployLambdaOptions {
   kitId: string;
   /** S3 bucket containing the kit bundle. */
   bucketName: string;
-  /** S3 key for the server bundle (e.g., "bundles/crm/kit.mjs"). */
+  /** S3 key for the server bundle zip (e.g., "bundles/crm/kit.zip"). */
   bundleS3Key: string;
   /** ARN of the KitLambdaRole (only lambda:InvokeFunction on McpRouter). */
   roleArn: string;
@@ -64,7 +64,7 @@ export interface DeployLambdaResult {
  * const result = await provisionKitLambda({
  *   kitId: "crm",
  *   bucketName: Resource.KitAssets.name,
- *   bundleS3Key: "bundles/crm/kit.mjs",
+ *   bundleS3Key: "bundles/crm/kit.zip",
  *   roleArn: Resource.KitLambdaRole.arn,
  *   runtimeLayerArn: Resource.KitRuntimeLayer.arn,
  * });
@@ -144,7 +144,7 @@ export async function provisionKitLambda(
         FunctionName: functionName,
         Runtime: "nodejs22.x",
         Architectures: ["arm64"],
-        Handler: "index.main",
+        Handler: "index.handler",
         MemorySize: memory,
         Timeout: timeout,
         Role: roleArn,

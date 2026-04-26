@@ -47,7 +47,7 @@ async function deploy() {
   const result = await provisionKitLambda({
     kitId: KIT_ID,
     bucketName: (Resource as any).KitAssets.name,
-    bundleS3Key: `bundles/${KIT_ID}/kit.mjs`,
+    bundleS3Key: `bundles/${KIT_ID}/kit.zip`,
     roleArn,
     runtimeLayerArn: layerArn,
   });

@@ -7,7 +7,7 @@
  * Upload paths:
  * - View modules + CSS → `apps/kits/{kitId}/views/`
  * - Shell HTML → `apps/kits/{kitId}/shell.html`
- * - Server bundle → `bundles/{kitId}/kit.mjs`
+ * - Server bundle (zip) → `bundles/{kitId}/kit.zip`
  * - Manifest → `bundles/{kitId}/manifest.json`
  *
  * All files use `Cache-Control: no-cache` during development.
@@ -25,6 +25,7 @@ const CONTENT_TYPES: Record<string, string> = {
   ".mjs": "application/javascript",
   ".css": "text/css",
   ".json": "application/json",
+  ".zip": "application/zip",
 };
 
 /**
@@ -123,10 +124,10 @@ export async function uploadKitBundle(options: UploadOptions): Promise<number> {
     await upload(shellPath, `apps/kits/${kitId}/shell.html`);
   }
 
-  // Server bundle
-  const serverPath = resolve(buildDir, "kit.mjs");
-  if (existsSync(serverPath)) {
-    await upload(serverPath, `bundles/${kitId}/kit.mjs`);
+  // Server bundle (zip for Lambda)
+  const zipPath = resolve(buildDir, "kit.zip");
+  if (existsSync(zipPath)) {
+    await upload(zipPath, `bundles/${kitId}/kit.zip`);
   }
 
   // Manifest
