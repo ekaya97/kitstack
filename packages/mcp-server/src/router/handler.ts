@@ -429,13 +429,15 @@ export async function handler(
 
     // --- Dev Relay ---
 
-    // Dev Relay asset requests (GET /dev/{sessionId}/assets/*)
+    // Dev Relay asset requests (GET /dev/{sessionId}/**)
     // Serves view JS/CSS from the developer's local Vite dev server via WebSocket relay.
+    // Vite generates absolute import paths (/src/views/styles.css, /node_modules/...)
+    // so we also catch requests without the /dev/ prefix that come from Vite imports.
     // No auth required — these are <script> and <link> tags in the iframe.
-    if (path.match(/^\/dev\/[^/]+\/assets\//) && method === "GET") {
+    if (path.match(/^\/dev\/[^/]+\//) && method === "GET" && !path.includes(".well-known") && !path.match(/\/(register|authorize|token|revoke)/)) {
       const parts = path.split("/");
       const sessionId = parts[2];
-      const assetPath = parts.slice(4).join("/"); // "contacts.js", "@vite/client", etc.
+      const assetPath = parts.slice(3).join("/"); // everything after /dev/{sessionId}/
 
       const session = await getOAuthItem(`DEV_SESSION#${sessionId}`, "CONNECTION");
       if (!session) return { statusCode: 404, body: "Dev session not found" };

@@ -174,7 +174,7 @@ export async function dev(args: string[]) {
     const relayUrl = process.env.KITSTACK_RELAY_URL || "wss://relay.kitstack.co";
     const mcpBaseUrl = process.env.KITSTACK_MCP_URL || "https://mcp.kitstack.co";
     const publicUrl = `${mcpBaseUrl}/dev/${sessionId}`;
-    const devAssetBaseUrl = `${mcpBaseUrl}/dev/${sessionId}/assets`;
+    const devAssetBaseUrl = `${mcpBaseUrl}/dev/${sessionId}`;
 
     // Start local Vite dev server for view assets (if kit has views)
     let vitePort = 5175;
@@ -228,6 +228,7 @@ import { defineConfig } from "vite";
 import { resolve } from "path";
 export default defineConfig({
   root: "${kitDir.replace(/\\/g, "/")}",
+  base: "/dev/${sessionId}/",
   server: { port: ${vitePort}, strictPort: true, cors: true },
   esbuild: { jsx: "automatic" },
   css: { postcss: "${entryDir.replace(/\\/g, "/")}" },
