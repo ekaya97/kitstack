@@ -108,10 +108,19 @@ export async function uploadKitBundle(options: UploadOptions): Promise<number> {
 
   console.log(`Uploading kit "${kitId}" to ${bucketName}...\n`);
 
-  // Views directory → apps/kits/{kitId}/
+  // Per-kit view modules → apps/kits/{kitId}/
+  // Skip vendor.js and shared.js — those are platform assets uploaded separately
   const viewsDir = resolve(buildDir, "views");
   if (existsSync(viewsDir)) {
-    await uploadDir(viewsDir, `apps/kits/${kitId}`);
+    const kitViewDir = resolve(viewsDir, kitId);
+    if (existsSync(kitViewDir)) {
+      await uploadDir(kitViewDir, `apps/kits/${kitId}`);
+    }
+    // Upload kit CSS
+    const cssPath = resolve(viewsDir, "style.css");
+    if (existsSync(cssPath)) {
+      await upload(cssPath, `apps/kits/${kitId}/style.css`);
+    }
   }
 
   // Shell HTML
