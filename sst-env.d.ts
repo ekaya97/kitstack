@@ -134,6 +134,10 @@ declare module "sst" {
       "type": "sst.sst.Secret"
       "value": string
     }
+    "UserAssets": {
+      "name": string
+      "type": "sst.aws.Bucket"
+    }
     "UserKitDbs": {
       "name": string
       "type": "sst.aws.Dynamo"

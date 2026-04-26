@@ -1,6 +1,7 @@
 import { Nav } from "@/components/shared/nav";
 import { Footer } from "@/components/shared/footer";
 import { CatMark } from "@/components/ui/cat-mark";
+import { McpUrlCopy } from "@/components/shared/mcp-url-copy";
 import { getAllKitCards } from "@/services/kit.service";
 
 const MCP_URL = "mcp.kitstack.co";
@@ -101,14 +102,7 @@ export default async function OnboardingConnectPage() {
             <div className="font-mono text-[10px] text-ks-muted tracking-wider mb-2.5">
               STEP 1 &middot; COPY
             </div>
-            <div className="flex items-center gap-2 bg-ks-ink rounded-xl px-4 py-3.5">
-              <code className="font-mono text-[14px] text-ks-paper flex-1">
-                {MCP_URL}
-              </code>
-              <button className="font-mono text-[11px] text-ks-accent hover:text-ks-accent-deep font-semibold shrink-0 border border-ks-ink2 rounded-md px-3 py-1.5 hover:border-ks-accent transition-colors">
-                COPY
-              </button>
-            </div>
+            <McpUrlCopy display={MCP_URL} />
           </div>
 
           <div>

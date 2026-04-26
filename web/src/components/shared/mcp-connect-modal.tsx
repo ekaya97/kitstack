@@ -95,9 +95,9 @@ export function McpConnectModal({
             </code>
             <button
               onClick={handleCopy}
-              className="font-mono text-[11px] text-ks-accent hover:text-ks-accent-deep shrink-0 px-2 py-1 rounded bg-ks-ink2"
+              className="font-mono text-[11px] text-ks-accent hover:text-ks-accent-deep shrink-0 px-2 py-1 rounded bg-ks-ink2 transition-colors"
             >
-              {copied ? "COPIED!" : "COPY"}
+              {copied ? "\u2713 COPIED" : "COPY"}
             </button>
           </div>
         </div>
