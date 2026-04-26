@@ -11,10 +11,6 @@ declare module "sst" {
       "type": "sst.aws.Function"
       "url": string
     }
-    "Assets": {
-      "name": string
-      "type": "sst.aws.Bucket"
-    }
     "BetterAuthSecret": {
       "type": "sst.sst.Secret"
       "value": string
@@ -22,6 +18,15 @@ declare module "sst" {
     "BetterAuthUrl": {
       "type": "sst.sst.Secret"
       "value": string
+    }
+    "DevRelay": {
+      "managementEndpoint": string
+      "type": "sst.aws.ApiGatewayWebSocket"
+      "url": string
+    }
+    "DevRelayStore": {
+      "name": string
+      "type": "sst.aws.Dynamo"
     }
     "GithubClientId": {
       "type": "sst.sst.Secret"
@@ -47,21 +52,10 @@ declare module "sst" {
       "type": "sst.aws.Router"
       "url": string
     }
-    "KitCrm": {
-      "name": string
-      "type": "sst.aws.Function"
-    }
-    "KitExpense": {
-      "name": string
-      "type": "sst.aws.Function"
-    }
-    "KitMeeting": {
-      "name": string
-      "type": "sst.aws.Function"
-    }
-    "KitOutreach": {
-      "name": string
-      "type": "sst.aws.Function"
+    "KitLambdaInfra": {
+      "layerArn": string
+      "roleArn": string
+      "type": "sst.sst.Linkable"
     }
     "LemonsqueezyApiKey": {
       "type": "sst.sst.Secret"
@@ -74,6 +68,10 @@ declare module "sst" {
     "LemonsqueezyWebhookSecret": {
       "type": "sst.sst.Secret"
       "value": string
+    }
+    "MCPAuthStore": {
+      "name": string
+      "type": "sst.aws.Dynamo"
     }
     "McpAllowedOrigins": {
       "type": "sst.sst.Secret"
@@ -96,10 +94,6 @@ declare module "sst" {
       "type": "sst.aws.Function"
       "url": string
     }
-    "OAuthStore": {
-      "name": string
-      "type": "sst.aws.Dynamo"
-    }
     "PosthogHost": {
       "type": "sst.sst.Secret"
       "value": string
@@ -107,6 +101,22 @@ declare module "sst" {
     "PosthogKey": {
       "type": "sst.sst.Secret"
       "value": string
+    }
+    "RelayConnect": {
+      "name": string
+      "type": "sst.aws.Function"
+    }
+    "RelayDefault": {
+      "name": string
+      "type": "sst.aws.Function"
+    }
+    "RelayDisconnect": {
+      "name": string
+      "type": "sst.aws.Function"
+    }
+    "SkillAssets": {
+      "name": string
+      "type": "sst.aws.Bucket"
     }
     "TursoAuthToken": {
       "type": "sst.sst.Secret"
@@ -131,6 +141,10 @@ declare module "sst" {
     "Web": {
       "type": "sst.aws.Nextjs"
       "url": string
+    }
+    "WebAssets": {
+      "name": string
+      "type": "sst.aws.Bucket"
     }
   }
 }
