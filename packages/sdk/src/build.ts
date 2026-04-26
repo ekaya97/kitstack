@@ -9,6 +9,7 @@ import {
   readFileSync,
   readdirSync,
   statSync,
+  copyFileSync,
 } from "fs";
 import { resolve, dirname, relative, join } from "path";
 import type { KitDefinition } from "./types";
@@ -230,6 +231,15 @@ export async function buildKit(kitRoot: string) {
     if (serverSize > 1024 * 1024) {
       console.warn(`  \u26A0 Server bundle is ${(serverSize / 1024 / 1024).toFixed(1)} MB. Consider splitting large dependencies.`);
     }
+
+    // Lambda expects a zip archive with index.mjs as the entry point.
+    // Copy kit.mjs → index.mjs, zip it, then clean up.
+    const indexPath = resolve(outputDir, "index.mjs");
+    const zipPath = resolve(outputDir, "kit.zip");
+    copyFileSync(resolve(outputDir, "kit.mjs"), indexPath);
+    execSync(`zip -j "${zipPath}" "${indexPath}"`, { stdio: "pipe" });
+    rmSync(indexPath);
+    log("\u2713", `Lambda zip: .kitstack/build/kit.zip (${fileSizeKB(zipPath)} KB)`);
   } catch (e: any) {
     fail(`Server bundle failed: ${e.message}`);
   }
@@ -272,6 +282,17 @@ export function mount(container, data) {
       input[`${kit.id}/${view.slug}`] = resolve(entriesDir, `${view.slug}.tsx`);
     }
 
+    // Force ALL React exports into vendor.js so dev relay can redirect
+    // any `import { X } from "react"` to CDN vendor.js (T-0085)
+    const vendorReexportCode = [
+      'export { default } from "react";',
+      'export * from "react";',
+      'export { createRoot, hydrateRoot } from "react-dom/client";',
+      'export { jsx, jsxs, Fragment } from "react/jsx-runtime";',
+    ].join("\n");
+    writeFileSync(resolve(entriesDir, "_vendor_reexports.ts"), vendorReexportCode);
+    input["_vendor_reexports"] = resolve(entriesDir, "_vendor_reexports.ts");
+
     const viteConfigContent = `
 import { defineConfig } from "vite";
 import react from "@vitejs/plugin-react";
@@ -295,6 +316,9 @@ export default defineConfig({
         entryFileNames: "[name].js",
         chunkFileNames: "[name].js",
         assetFileNames: "[name][extname]",
+        // Preserve original export names so dev relay can redirect
+        // Vite's react.js imports to CDN vendor.js (T-0085)
+        minifyInternalExports: false,
         manualChunks(id) {
           if (id.includes("node_modules/react-dom") || id.includes("node_modules/react/") || id.includes("node_modules/scheduler")) {
             return "vendor";
@@ -406,6 +430,10 @@ export default defineConfig({
       file: "kit.mjs",
       hash: fileHash(serverBundlePath),
       sizeBytes: fileSize(serverBundlePath),
+    },
+    lambdaZip: {
+      file: "kit.zip",
+      sizeBytes: fileSize(resolve(outputDir, "kit.zip")),
     },
     viewModules: (kit.views ?? [])
       .map((v) => {

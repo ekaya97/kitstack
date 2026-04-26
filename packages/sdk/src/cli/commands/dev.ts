@@ -5,6 +5,8 @@ import { provisionDevDb } from "../../runtime/dev-db";
 import { createMcpHandler, type JsonRpcRequest } from "../../runtime/mcp-handler";
 import type { KitDefinition } from "../../types";
 
+import { createDevLogger } from "../dev-logger.js";
+
 /**
  * Start the local development server for a kit.
  *
@@ -14,8 +16,8 @@ import type { KitDefinition } from "../../types";
  *
  * - **`--stdio`** — reads newline-delimited JSON-RPC from stdin, writes
  *   responses to stdout. Zero-latency, no network. For Claude Desktop/Code.
- * - **`--views`** — starts the View DevKit HTTP server for local view
- *   development with HMR.
+ * - **`--no-views`** — disables the View DevKit (Vite + preview UI).
+ *   Use for kits without views or when you only care about tools.
  *
  * The stdio transport handles the full MCP protocol: `initialize`,
  * `notifications/initialized`, `ping`, `tools/list`, and `tools/call`.
@@ -34,7 +36,7 @@ import type { KitDefinition } from "../../types";
  * before deployment.
  *
  * @param args - CLI arguments after `kitstack dev` (e.g., `["--stdio"]`).
- *   Supported flags: `--stdio`, `--views`, `--port <n>`, `--config <path>`,
+ *   Supported flags: `--stdio`, `--no-views`, `--port <n>`, `--config <path>`,
  *   `--db <path>`, `--reset-db`.
  *
  * @example Connect the CRM kit to Claude Desktop via stdio (real config from kits/crm):
@@ -61,10 +63,10 @@ import type { KitDefinition } from "../../types";
  * npx kitstack dev --stdio --config ./kits/crm/kit.config.ts --db ./tmp/test.db
  * ```
  *
- * @example Start the View DevKit for CRM view development with HMR:
+ * @example Start relay mode without the View DevKit:
  * ```sh
  * cd kits/crm
- * npx kitstack dev --views --port 5174
+ * npx kitstack dev --no-views
  * ```
  *
  * @remarks
@@ -86,7 +88,7 @@ export async function dev(args: string[]) {
   let dbPath = ".kitstack/dev.db";
   let resetDb = false;
   let stdio = false;
-  let views = false;
+  let noViews = false;
   let viewsPort = 5174;
 
   for (let i = 0; i < args.length; i++) {
@@ -94,8 +96,8 @@ export async function dev(args: string[]) {
       case "--stdio":
         stdio = true;
         break;
-      case "--views":
-        views = true;
+      case "--no-views":
+        noViews = true;
         break;
       case "--port":
         viewsPort = parseInt(args[++i], 10);
@@ -116,7 +118,7 @@ export async function dev(args: string[]) {
   }
 
   // Default mode is relay (no flags = relay mode)
-  const relay = !stdio && !views;
+  const relay = !stdio;
 
   // Load kit definition
   const fullConfigPath = resolve(process.cwd(), configPath);
@@ -147,12 +149,25 @@ export async function dev(args: string[]) {
   const fullDbPath = resolve(process.cwd(), dbPath);
   const db = await provisionDevDb(fullDbPath, migrationSql, { reset: resetDb });
 
-  // Views mode — start DevKit HTTP server
-  if (views) {
+  // Start View DevKit (Vite + preview UI) unless --no-views or no views
+  let vitePort = 5175;
+  if (kit.views?.length && !noViews) {
     const { startDevKitServer } = await import("../../devkit/server.js");
-    await startDevKitServer({ kit, db, port: viewsPort, kitRoot: kitDir });
-    return;
+    const result = await startDevKitServer({ kit, db, port: viewsPort, kitRoot: kitDir });
+    vitePort = result.vitePort;
   }
+
+  // Dev logger with channel multiplexing
+  const logger = createDevLogger();
+  const uiUrl = (kit.views?.length && !noViews) ? `http://localhost:${viewsPort}` : undefined;
+  logger.banner({
+    name: kit.name,
+    mode: relay ? "relay" : "stdio",
+    tools: kit.tools.length,
+    views: kit.views?.length ?? 0,
+    db: dbPath,
+    uiUrl,
+  });
 
   // Relay mode — connect to DevRelay WebSocket
   if (relay) {
@@ -175,87 +190,23 @@ export async function dev(args: string[]) {
     const mcpBaseUrl = process.env.KITSTACK_MCP_URL || "https://mcp.kitstack.co";
     const publicUrl = `${mcpBaseUrl}/dev/${sessionId}`;
 
-    // Start local Vite dev server for view assets (if kit has views)
-    let vitePort = 5175;
-    if (kit.views?.length) {
-      const { spawn } = await import("node:child_process");
-      const { writeFileSync, mkdirSync } = await import("node:fs");
-      const { relative } = await import("node:path");
-
-      const entryDir = resolve(kitDir, ".kitstack/devkit-entries");
-      mkdirSync(entryDir, { recursive: true });
-
-      // Generate entry points per view
-      for (const view of kit.views) {
-        const viewFile = resolve(kitDir, "src/views", view.slug, "View.tsx");
-        if (!existsSync(viewFile)) continue;
-        const relPath = relative(entryDir, viewFile).replace(/\\/g, "/");
-        const stylesFile = resolve(kitDir, "src/views/styles.css");
-        const stylesImport = existsSync(stylesFile)
-          ? `import "${relative(entryDir, stylesFile).replace(/\\/g, "/")}";\n` : "";
-        writeFileSync(resolve(entryDir, `${view.slug}.tsx`), `${stylesImport}
-import React from "react";
-import { createRoot } from "react-dom/client";
-import * as ViewModule from "${relPath}";
-const Component = ViewModule.default || Object.values(ViewModule).find(v => typeof v === "function");
-export function mount(container, data) {
-  if (!Component) { container.innerHTML = "<p>No view component found</p>"; return; }
-  createRoot(container).render(React.createElement(Component, { data }));
-}
-((window).__KITSTACK_VIEWS__ ??= {})["${kit.id}/${view.slug}"] = { mount };
-`);
-      }
-
-      // Tailwind config with absolute paths
-      const viewsGlob = resolve(kitDir, "src/views/**/*.tsx").replace(/\\/g, "/");
-      writeFileSync(resolve(entryDir, "tailwind.config.cjs"), `
-let typography; try { typography = require("@tailwindcss/typography"); } catch {}
-module.exports = {
-  content: ["${viewsGlob}"],
-  theme: { extend: {
-    colors: { "ks-paper":"#faf7f1","ks-paper-warm":"#f4ede0","ks-paper-deep":"#ece3d1","ks-ink":"#171512","ks-ink2":"#2a251f","ks-muted":"#6b6357","ks-faint":"#b8ae9b","ks-line":"#1a1814","ks-hair":"#d9ceb8","ks-accent":"#d65a2f","ks-accent-deep":"#a8411e","ks-accent-soft":"#f7d9c8","ks-hi":"#ffe45c" },
-    fontFamily: { serif: ['"Instrument Serif"',"Georgia","serif"], sans: ['"Inter"',"system-ui","-apple-system","sans-serif"], mono: ['"JetBrains Mono"',"ui-monospace","monospace"] },
-  }},
-  plugins: typography ? [typography] : [],
-};`);
-      writeFileSync(resolve(entryDir, "postcss.config.cjs"), `
-module.exports = { plugins: { tailwindcss: { config: "${resolve(entryDir, "tailwind.config.cjs").replace(/\\/g, "/")}" }, autoprefixer: {} } };
-`);
-      const projectRoot = resolve(kitDir, "../..");
-      writeFileSync(resolve(entryDir, "vite.config.ts"), `
-import { defineConfig } from "vite";
-import { resolve } from "path";
-export default defineConfig({
-  root: "${kitDir.replace(/\\/g, "/")}",
-  server: { port: ${vitePort}, strictPort: true, cors: true },
-  esbuild: { jsx: "automatic" },
-  css: { postcss: "${entryDir.replace(/\\/g, "/")}" },
-  resolve: { dedupe: ["react","react-dom"], alias: { "react": resolve("${projectRoot.replace(/\\/g, "/")}", "node_modules/react"), "react-dom": resolve("${projectRoot.replace(/\\/g, "/")}", "node_modules/react-dom") } },
-});`);
-      writeFileSync(resolve(kitDir, "index.html"), `<!DOCTYPE html><html><head></head><body><div id="root"></div>${kit.views.map(v => `<script type="module" src="/.kitstack/devkit-entries/${v.slug}.tsx"></script>`).join("")}</body></html>`);
-
-      // Start Vite
-      const viteProcess = spawn("npx", ["vite", "--config", resolve(entryDir, "vite.config.ts")], {
-        cwd: entryDir, stdio: ["ignore", "pipe", "pipe"],
-        env: { ...process.env, NODE_ENV: "development" },
-      });
-      viteProcess.stdout?.on("data", () => {});
-      viteProcess.stderr?.on("data", () => {});
-      process.on("exit", () => viteProcess.kill());
-      process.on("SIGINT", () => { viteProcess.kill(); process.exit(0); });
-
-      // Wait for Vite
-      await new Promise<void>(r => { setTimeout(r, 3000); });
-      console.error(`  Vite dev server running on port ${vitePort}`);
-    }
-
-    // Create MCP handler — use CDN for view assets (uploaded via kitstack deploy)
+    // Create MCP handler — hybrid CDN + relay for view assets (T-0085):
+    // vendor.js/shared.js load from CDN, per-view modules load through relay
     const platformCdn = process.env.KITSTACK_CDN || "";
     const kitCdnUrl = process.env.KITSTACK_KIT_CDN || "";
-    const handler = createMcpHandler({ kit, db, platformCdn, kitCdn: kitCdnUrl });
+    const devAssetBaseUrl = `${mcpBaseUrl}/dev/${sessionId}`;
+    const handler = createMcpHandler({
+      kit, db, platformCdn, kitCdn: kitCdnUrl,
+      devAssetBaseUrl,
+    });
 
-    console.error(`\n  ${kit.name} dev server`);
-    console.error(`  Connecting to relay...\n`);
+    logger.status("connecting");
+
+    // CDN vendor URL — relay client redirects React imports here (T-0085)
+    const cdnVendorUrl = platformCdn ? `${platformCdn}/vendor.js` : undefined;
+
+    // Enable keyboard filter (m/t/s/a/?) before traffic starts
+    logger.enableKeyFilter();
 
     await connectRelay({
       sessionId,
@@ -263,14 +214,15 @@ export default defineConfig({
       handler,
       relayUrl,
       vitePort,
+      cdnVendorUrl,
+      logger,
       onReady: () => {
-        console.error(`  Connected! Public URL:\n`);
-        console.error(`  ${publicUrl}\n`);
-        console.error(`  Add this URL to your LLM client's MCP server list.`);
-        console.error(`  Press Ctrl+C to stop.\n`);
+        logger.status("connected", publicUrl);
+        logger.info("Add this URL to your LLM client's MCP server list.");
+        logger.info("Press Ctrl+C to stop.\n");
       },
       onDisconnect: () => {
-        console.error("  Disconnected from relay. Reconnecting...");
+        logger.status("disconnected");
       },
     });
 
@@ -291,6 +243,7 @@ export default defineConfig({
     try {
       request = JSON.parse(trimmed);
     } catch {
+      logger.parseError();
       const err = {
         jsonrpc: "2.0",
         id: null,
@@ -300,10 +253,22 @@ export default defineConfig({
       return;
     }
 
+    const t0 = performance.now();
     const response = await handler.handleRequest(request);
+    const ms = Math.round(performance.now() - t0);
 
     // Notifications return null — don't send anything back
     if (response !== null) {
+      const method = request.method;
+      const isError = "error" in response;
+      if (isError) {
+        const errMsg = (response as any).error?.message || "Error";
+        logger.error(method, errMsg, ms);
+      } else if (method === "tools/call" && request.params?.name) {
+        logger.tool(request.params.name as string, request.params.arguments, ms);
+      } else {
+        logger.mcp(method, ms);
+      }
       process.stdout.write(JSON.stringify(response) + "\n");
     }
   });

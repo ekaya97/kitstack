@@ -54,6 +54,69 @@ Three Lambda handlers back the WebSocket API Gateway:
 - **`default.ts`** — `$default` route. Receives responses from the CLI (JSON `{ requestId, result }`) and stores them in **DevRelayStore** (a separate DynamoDB table) with a 5-minute TTL for the McpRouter relay route to poll.
 - **`disconnect.ts`** — `$disconnect` route. No-op — relies on TTL for cleanup (5 minutes for relay data in DevRelayStore, 24 hours for sessions in MCPAuthStore).
 
+### View asset relay with hybrid CDN loading (T-0085)
+
+The relay client also handles **view asset requests**. When the kit has views, `kitstack dev` starts a local Vite dev server alongside the relay connection. The McpRouter has a `GET /dev/{sessionId}/**` route that forwards asset requests to the CLI via WebSocket, and the CLI fetches from the local Vite dev server.
+
+**The problem:** React/ReactDOM is ~192KB when served by Vite. Vite's HMR client (`@vite/client`) is ~136KB. API Gateway WebSocket has a 128KB message limit. Sending either through the relay crashes the connection.
+
+**The solution: hybrid CDN + relay with shim modules.** React loads from CDN vendor.js via tiny shim modules. Kit-specific files (view modules, CSS) load through the relay. Large Vite internals are stubbed out.
+
+| Asset | Source | Size | How |
+|-------|--------|------|-----|
+| `vendor.js` (React+ReactDOM) | CDN | 192KB | Loaded by shim modules; never goes through WebSocket |
+| `shared.js` (SDK hooks) | CDN | 2KB | Never changes during dev |
+| `pipeline.tsx` (view entry) | Relay → Vite | 3-4KB | Changes during dev |
+| `View.tsx` (component) | Relay → Vite | 3-20KB | Changes during dev |
+| CSS (Vite JS module) | Relay → Vite | ~22KB | Vite serves CSS as JS; calls `updateStyle()` |
+| `react.js` (Vite pre-bundled) | Shim (inline) | ~400B | Relay intercepts, returns shim that re-exports from CDN vendor.js |
+| `react-dom_client.js` | Shim (inline) | ~150B | Same shim approach |
+| `react_jsx-runtime.js` | Shim (inline) | ~150B | Same shim approach |
+| `@vite/client` (HMR runtime) | Stub (inline) | ~300B | No-op stub with functional `updateStyle()` for CSS injection |
+
+**Three interception layers in the relay client** (`relay-client.ts`):
+
+1. **`@vite/client` stub:** Vite's HMR runtime is ~136KB and useless through the relay (no push connection). The relay returns a no-op stub that exports functional `updateStyle(id, css)` (injects `<style>` tags) so CSS modules work, but skips all HMR machinery.
+
+2. **React/ReactDOM shim modules:** When the browser requests `react.js`, `react-dom_client.js`, or `react_jsx-runtime.js` from Vite's pre-bundled deps, the relay returns a tiny shim instead of fetching the real 188KB file. The shim imports from CDN vendor.js and re-exports with standard names:
+
+```javascript
+// Shim for react.js (~400 bytes, served inline by relay client):
+import { reactExports as m } from "https://cdn/.../vendor.js";
+export default m;
+export const { useState, useEffect, useCallback, useMemo, useRef,
+  useContext, createContext, createElement, Fragment, forwardRef,
+  memo, lazy, Suspense, Children, ... } = m;
+
+// Shim for react-dom_client.js:
+import { clientExports as m } from "https://cdn/.../vendor.js";
+export default m;
+export const { createRoot, hydrateRoot } = m;
+
+// Shim for react_jsx-runtime.js:
+import { jsxRuntimeExports as m } from "https://cdn/.../vendor.js";
+export default m;
+export const { jsx, jsxs, Fragment } = m;
+```
+
+The shims bridge vendor.js's namespace exports (`reactExports`, `clientExports`, `jsxRuntimeExports`) to the individual named exports that Vite consumers expect (`useState`, `createRoot`, `jsx`, etc.).
+
+3. **Import path rewriting:** All remaining absolute imports in JS files get prefixed with `/dev/{sessionId}/` so they route through the relay (e.g. `/src/views/pipeline/View.tsx` → `/dev/67c99a1f/src/views/pipeline/View.tsx`).
+
+4. **Size guard:** Before sending any asset response, the relay checks the JSON-serialized payload size. If over 120KB (safety margin below the 128KB limit), it returns a 413 error with the file path and size instead of crashing the WebSocket.
+
+**Build requirements:**
+
+- **`minifyInternalExports: false`** in the Rollup output config — preserves vendor.js export names as `reactExports`, `clientExports`, `jsxRuntimeExports` instead of minified single letters. The shim modules depend on these names.
+- **`_vendor_reexports.ts` entry** — forces ALL React exports into vendor.js, not just the ones used by current view components. This ensures any `import { X } from "react"` in a dev View.tsx works even if X wasn't in the last build.
+- **`esbuild: { jsxDev: false }`** in the Vite config — forces production JSX runtime (`jsx`/`jsxs` from `react/jsx-runtime`) instead of dev-only `jsxDEV` from `react/jsx-dev-runtime`, matching what vendor.js provides.
+
+**CSP handling:** The `kit_view` response includes CSP domains for both the relay origin (McpRouter domain) and the CDN domain (`platformCdn`). This is already handled in `handleKitView` in `mcp-handler.ts` — when `devAssetBaseUrl` is set, the CSP includes the relay origin; `platformCdn` and `kitCdn` are always included when set.
+
+**Dev shell:** When `devAssetBaseUrl` is configured, `kit_view` returns the `generateDevRelayShell` HTML instead of the production shell. This shell loads view modules from the relay URL. The view modules import React through shims, which load vendor.js from CDN.
+
+**Live reload workflow (not push-based HMR):** There is no WebSocket push from Vite to the Claude.ai iframe. Instead, each `kit_view` call fetches the latest module from Vite in real-time. The developer edits `View.tsx`, then asks Claude to "show the pipeline view again" — the fresh code appears immediately without rebuild or deploy.
+
 ## What was learned
 
 ### Localhost callback server gotchas
@@ -186,6 +249,27 @@ For stdio mode (the default/primary development mode), the config uses the local
   }
 }
 ```
+
+### Live view development via relay (T-0085)
+
+Requires a prior `kitstack build && kitstack deploy` to put vendor.js (with preserved export names) on CDN.
+
+```bash
+# Start dev server in relay mode with CDN URLs
+KITSTACK_RELAY_URL=wss://mz6owqkcwd.execute-api.eu-central-1.amazonaws.com/\$default \
+KITSTACK_MCP_URL=https://d334d0ihf1hsg4.cloudfront.net \
+KITSTACK_CDN=https://d3m7hzbfloe6y2.cloudfront.net/apps/kits/crm \
+KITSTACK_KIT_CDN=https://d3m7hzbfloe6y2.cloudfront.net/apps/kits/crm/crm \
+npx tsx packages/sdk/src/cli/index.ts dev --config kits/crm/kit.config.ts
+```
+
+Then in Claude.ai:
+1. Add MCP server at `https://d334d0ihf1hsg4.cloudfront.net/dev/{sessionId}`
+2. Ask: "show me the pipeline view" — view renders with data from local DB
+3. Edit `kits/crm/src/views/pipeline/View.tsx` — change visible text
+4. Ask: "show pipeline again" — updated code appears (Vite serves fresh module)
+
+No rebuild/deploy needed between edits. The relay fetches from Vite on every request.
 
 ### Programmatic usage of the relay client
 

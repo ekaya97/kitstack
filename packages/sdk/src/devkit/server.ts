@@ -27,7 +27,7 @@ export interface DevKitServerOptions {
   kitRoot?: string;
 }
 
-export async function startDevKitServer(options: DevKitServerOptions): Promise<void> {
+export async function startDevKitServer(options: DevKitServerOptions): Promise<{ vitePort: number }> {
   const { kit, db, port = 5174 } = options;
   const vitePort = port + 1;
   const kitRoot = options.kitRoot || process.cwd();
@@ -79,7 +79,7 @@ import { resolve } from "path";
 export default defineConfig({
   root: "${kitRoot.replace(/\\/g, "/")}",
   server: { port: ${vitePort}, strictPort: true, cors: true },
-  esbuild: { jsx: "automatic" },
+  esbuild: { jsx: "automatic", jsxDev: false },
   css: {
     postcss: "${entryDir.replace(/\\/g, "/")}",
   },
@@ -267,19 +267,15 @@ module.exports = {
     }
   });
 
-  httpServer.listen(port, () => {
-    process.stderr.write(
-      `\n  KitStack View DevKit\n` +
-      `  Kit:   ${kit.name} (${kit.tools.length} tools, ${kit.views?.length ?? 0} views)\n` +
-      `  UI:    http://localhost:${port}\n` +
-      `  Vite:  http://localhost:${vitePort}\n\n`
-    );
-  });
-
   process.on("exit", () => viteProcess.kill());
   process.on("SIGINT", () => { viteProcess.kill(); process.exit(0); });
 
-  await new Promise(() => {});
+  return new Promise((resolve) => {
+    httpServer.listen(port, () => {
+      // Banner handled by dev.ts — just log readiness
+      resolve({ vitePort });
+    });
+  });
 }
 
 function generateDevShellHtml(kit: KitDefinition, vitePort: number): string {

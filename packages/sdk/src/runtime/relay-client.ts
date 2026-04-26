@@ -25,6 +25,7 @@
  */
 
 import type { McpHandler, JsonRpcRequest } from "./mcp-handler";
+import type { DevLogger } from "../cli/dev-logger";
 
 export interface RelayOptions {
   /** Unique session ID for this dev session. */
@@ -41,6 +42,15 @@ export interface RelayOptions {
   onDisconnect?: () => void;
   /** Local Vite dev server port for asset serving. Default: 5175 */
   vitePort?: number;
+  /**
+   * Full CDN URL for vendor.js (React/ReactDOM bundle).
+   * When set, React-related imports from Vite's pre-bundled deps are
+   * rewritten to this URL instead of going through the relay, avoiding
+   * the 128KB WebSocket message limit. (T-0085)
+   */
+  cdnVendorUrl?: string;
+  /** Dev logger for formatted output. */
+  logger: DevLogger;
 }
 
 /**
@@ -85,20 +95,76 @@ export async function connectRelay(opts: RelayOptions): Promise<never> {
       // Asset request — fetch from local Vite dev server
       if (message.type === "asset") {
         const assetPath = message.path as string;
-        console.error(`  ← asset ${assetPath}`);
+        const t0 = performance.now();
         try {
+          // Stub out @vite/client — it's the HMR runtime (~136KB), useless
+          // through the relay (no push connection to Vite dev server).
+          // Return a no-op module so CSS modules that import it don't break.
+          if (assetPath === "@vite/client" || assetPath === "/@vite/client") {
+            const stub = [
+              "export function createHotContext(){return{accept(){},dispose(){},prune(){},invalidate(){},on(){}}};",
+              "export function updateStyle(id,css){let e=document.getElementById(id);if(!e){e=document.createElement('style');e.id=id;e.setAttribute('type','text/css');document.head.appendChild(e)}e.textContent=css};",
+              "export function removeStyle(id){document.getElementById(id)?.remove()};",
+            ].join("");
+            const ms = Math.round(performance.now() - t0);
+            opts.logger.asset(assetPath + " (stub)", ms, 0);
+            ws.send(JSON.stringify({
+              requestId,
+              result: { status: 200, contentType: "application/javascript", body: stub },
+            }));
+            return;
+          }
+
+          // Shim React/ReactDOM/jsx-runtime (T-0085).
+          // Vite's pre-bundled react.js is ~188KB — too large for the 128KB
+          // WebSocket limit. Instead of relaying the real file, serve a tiny
+          // shim that imports from CDN vendor.js and re-exports with the
+          // standard names (useState, createRoot, jsx, etc.).
+          // vendor.js exports namespace objects (reactExports, clientExports,
+          // jsxRuntimeExports) — the shims destructure them into individual
+          // named exports matching what Vite consumers expect.
+          if (opts.cdnVendorUrl && assetPath.includes("node_modules/.vite/deps/react")) {
+            let shim: string;
+            if (assetPath.includes("react-dom")) {
+              // react-dom/client → createRoot, hydrateRoot
+              shim = `import{clientExports as m}from"${opts.cdnVendorUrl}";export default m;export const{createRoot,hydrateRoot}=m;`;
+            } else if (assetPath.includes("react_jsx")) {
+              // react/jsx-runtime or react/jsx-dev-runtime → jsx, jsxs, Fragment
+              shim = `import{jsxRuntimeExports as m}from"${opts.cdnVendorUrl}";export default m;export const{jsx,jsxs,Fragment}=m;`;
+            } else {
+              // react → default + all named exports
+              shim = [
+                `import{reactExports as m}from"${opts.cdnVendorUrl}";`,
+                `export default m;`,
+                `export const{useState,useEffect,useCallback,useMemo,useRef,useContext,`,
+                `createContext,createElement,Fragment,forwardRef,memo,lazy,Suspense,`,
+                `Children,cloneElement,isValidElement,startTransition,useTransition,`,
+                `useDeferredValue,useId,use,version,act}=m;`,
+              ].join("");
+            }
+            const ms = Math.round(performance.now() - t0);
+            opts.logger.asset(assetPath + " (shim)", ms, 0);
+            ws.send(JSON.stringify({
+              requestId,
+              result: { status: 200, contentType: "application/javascript", body: shim },
+            }));
+            return;
+          }
+
           const vitePort = opts.vitePort || 5175;
           const res = await fetch(`http://localhost:${vitePort}/${assetPath}`);
           let body = await res.text();
           const contentType = res.headers.get("content-type") || "application/javascript";
 
-          // Rewrite absolute import paths to go through the relay
+          // Rewrite absolute import paths in JS responses.
           // Vite transforms imports to absolute paths like /src/views/styles.css
-          // or /node_modules/.vite/deps/react.js — prefix them with the dev base
+          // or /node_modules/.vite/deps/react.js.
           if (contentType.includes("javascript")) {
             const devBase = `/dev/${opts.sessionId}`;
-            // Rewrite absolute import paths: from "/..." → from "/dev/{sessionId}/..."
-            // Also rewrite dynamic import() and updateStyle() paths
+
+            // Prefix absolute imports with the relay base path.
+            // React imports go through the relay too, but get intercepted
+            // above and served as shims (never reaching Vite).
             body = body
               .replace(/from\s+"(\/[^"]+)"/g, `from "${devBase}$1"`)
               .replace(/from\s+'(\/[^']+)'/g, `from '${devBase}$1'`)
@@ -108,13 +174,29 @@ export async function connectRelay(opts: RelayOptions): Promise<never> {
               .replace(/import\s+"(\/[^"]+)"/g, `import "${devBase}$1"`)
               .replace(/import\s+'(\/[^']+)'/g, `import '${devBase}$1'`);
           }
-          console.error(`  → ${res.status} (${contentType.split(";")[0]})`);
-          ws.send(JSON.stringify({
+          const payload = JSON.stringify({
             requestId,
             result: { status: res.status, contentType, body },
-          }));
+          });
+          const ms = Math.round(performance.now() - t0);
+
+          // API Gateway WebSocket limit: 128KB per message.
+          // JSON-serialized body is larger than raw (escaping \n, \", etc).
+          const payloadKB = Math.round(payload.length / 1024);
+          if (payload.length > 120_000) {
+            opts.logger.assetError(assetPath, `TOO LARGE for WebSocket (${payloadKB}KB > 128KB limit)`, ms);
+            ws.send(JSON.stringify({
+              requestId,
+              result: { status: 413, contentType: "text/plain", body: `Asset too large for relay (${payloadKB}KB): ${assetPath}` },
+            }));
+            return;
+          }
+
+          opts.logger.asset(assetPath, ms, payloadKB);
+          ws.send(payload);
         } catch (err: any) {
-          console.error(`  → FAIL (${err.message})`);
+          const ms = Math.round(performance.now() - t0);
+          opts.logger.assetError(assetPath, err.message, ms);
           ws.send(JSON.stringify({
             requestId,
             result: { status: 502, contentType: "text/plain", body: `Vite not reachable: ${err.message}` },
@@ -127,7 +209,7 @@ export async function connectRelay(opts: RelayOptions): Promise<never> {
       const { method, params } = message;
       if (!method) return;
 
-      console.error(`  ← ${method}${params ? ` ${JSON.stringify(params).slice(0, 80)}` : ""}`);
+      const t0 = performance.now();
 
       const request: JsonRpcRequest = {
         jsonrpc: "2.0",
@@ -138,17 +220,34 @@ export async function connectRelay(opts: RelayOptions): Promise<never> {
 
       const response = await handler.handleRequest(request);
 
+      const ms = Math.round(performance.now() - t0);
+
       if (response) {
         const isError = response.error != null;
-        console.error(`  → ${isError ? "ERROR" : "OK"} (${method})`);
-        ws.send(JSON.stringify({ requestId, result: response.result ?? response.error }));
+        if (isError) {
+          const errMsg = typeof response.error === "object" ? (response.error as any).message : "Error";
+          opts.logger.error(method, errMsg, ms);
+        } else if (method === "tools/call" && params?.name) {
+          opts.logger.tool(params.name, params.arguments, ms);
+        } else {
+          opts.logger.mcp(method, ms);
+        }
+        const mcpPayload = JSON.stringify({ requestId, result: response.result ?? response.error });
+        const mcpKB = Math.round(mcpPayload.length / 1024);
+        if (mcpPayload.length > 120_000) {
+          opts.logger.error(method, `Response too large for WebSocket (${mcpKB}KB)`, ms);
+          ws.send(JSON.stringify({ requestId, result: { content: [{ type: "text", text: `Response too large for relay (${mcpKB}KB). Deploy and use production URL.` }], isError: true } }));
+        } else {
+          if (mcpKB > 30) console.error(`  [ws] ${method} payload: ${mcpKB}KB`);
+          ws.send(mcpPayload);
+        }
       } else {
-        console.error(`  → ACK (${method})`);
         ws.send(JSON.stringify({ requestId, result: null }));
       }
     });
 
-    ws.addEventListener("close", () => {
+    ws.addEventListener("close", (ev) => {
+      console.error(`  [ws] close code=${(ev as CloseEvent).code} reason=${(ev as CloseEvent).reason || "(none)"}`);
       onDisconnect?.();
       // Reconnect with exponential backoff
       setTimeout(() => {
