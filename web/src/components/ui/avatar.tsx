@@ -1,12 +1,29 @@
 export function Avatar({
   name,
+  src,
   size = 36,
   tone = "#d65a2f",
 }: {
   name: string;
+  src?: string;
   size?: number;
   tone?: string;
 }) {
+  if (src) {
+    return (
+      <img
+        src={src}
+        alt={name}
+        className="shrink-0 border-[1.5px] border-ks-line object-cover"
+        style={{
+          width: size,
+          height: size,
+          borderRadius: size / 2,
+        }}
+      />
+    );
+  }
+
   const initial = (name || "?")
     .split(" ")
     .map((w) => w[0])
