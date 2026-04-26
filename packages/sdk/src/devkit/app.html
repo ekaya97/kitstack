@@ -1,395 +1,899 @@
 <!DOCTYPE html>
 <html lang="en">
+
 <head>
-<meta charset="utf-8">
-<meta name="viewport" content="width=device-width, initial-scale=1">
-<title>KitStack View DevKit</title>
-<link rel="preconnect" href="https://fonts.googleapis.com">
-<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-<link href="https://fonts.googleapis.com/css2?family=Instrument+Serif&family=Inter:wght@400;500;600&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
-<style>
-  /* === Reset & Tokens === */
-  * { margin: 0; padding: 0; box-sizing: border-box; }
-  :root {
-    --sidebar-w: 220px;
-    --panel-h: 240px;
-    --ks-paper: #faf7f1;
-    --ks-paper-warm: #f4ede0;
-    --ks-paper-deep: #ece3d1;
-    --ks-ink: #171512;
-    --ks-ink2: #2a251f;
-    --ks-muted: #6b6357;
-    --ks-faint: #b8ae9b;
-    --ks-line: #1a1814;
-    --ks-hair: #d9ceb8;
-    --ks-accent: #d65a2f;
-    --ks-accent-deep: #a8411e;
-    --ks-accent-soft: #f7d9c8;
-    --ks-hi: #ffe45c;
-    --font-serif: "Instrument Serif", Georgia, serif;
-    --font-sans: "Inter", system-ui, -apple-system, sans-serif;
-    --font-mono: "JetBrains Mono", ui-monospace, monospace;
-    --ease-out: cubic-bezier(0.16, 1, 0.3, 1);
-  }
-  body {
-    font-family: var(--font-sans);
-    background: var(--ks-paper);
-    color: var(--ks-ink);
-    height: 100vh;
-    overflow: hidden;
-    -webkit-font-smoothing: antialiased;
-    -moz-osx-font-smoothing: grayscale;
-  }
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>KitStack View DevKit</title>
+  <link rel="icon" type="image/svg+xml"
+    href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='32' height='32' viewBox='0 0 28 28' fill='none'%3E%3Crect x='2.5' y='11.5' width='23' height='13' rx='2.5' stroke='%231a1814' stroke-width='1.5' fill='%23faf7f1'/%3E%3Crect x='5.5' y='7.5' width='17' height='4' rx='1.5' stroke='%231a1814' stroke-width='1.3' fill='%23f7d9c8'/%3E%3Crect x='8.5' y='3.5' width='11' height='4' rx='1.5' stroke='%231a1814' stroke-width='1.3' fill='%23d65a2f'/%3E%3C/svg%3E">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link
+    href="https://fonts.googleapis.com/css2?family=Instrument+Serif:ital@0;1&family=Inter:wght@400;500;600&family=JetBrains+Mono:wght@400;500&display=swap"
+    rel="stylesheet">
+  <style>
+    /* ================================================================
+     Tokens & reset
+     ================================================================ */
+    *,
+    *::before,
+    *::after {
+      margin: 0;
+      padding: 0;
+      box-sizing: border-box;
+    }
 
-  /* === Layout === */
-  .layout {
-    display: grid;
-    grid-template-columns: var(--sidebar-w) 1fr;
-    grid-template-rows: 50px 1fr var(--panel-h);
-    height: 100vh;
-  }
+    :root {
+      --sidebar-w: 232px;
+      --panel-h: 230px;
+      --toolbar-h: 44px;
+      --ks-paper: #faf7f1;
+      --ks-paper-warm: #f4ede0;
+      --ks-paper-deep: #ece3d1;
+      --ks-ink: #171512;
+      --ks-ink2: #2a251f;
+      --ks-muted: #6b6357;
+      --ks-faint: #b8ae9b;
+      --ks-line: #1a1814;
+      --ks-hair: #d9ceb8;
+      --ks-accent: #d65a2f;
+      --ks-accent-deep: #a8411e;
+      --ks-accent-soft: #f7d9c8;
+      --ks-hi: #ffe45c;
+      --font-serif: "Instrument Serif", Georgia, serif;
+      --font-sans: "Inter", system-ui, -apple-system, sans-serif;
+      --font-mono: "JetBrains Mono", ui-monospace, monospace;
+      --ease-out: cubic-bezier(0.16, 1, 0.3, 1);
+      --shadow-card:
+        0 1px 2px rgba(23, 21, 18, 0.04),
+        0 4px 16px rgba(23, 21, 18, 0.06),
+        0 12px 40px rgba(23, 21, 18, 0.03);
+    }
 
-  /* === Header === */
-  .header {
-    grid-column: 1 / -1;
-    background: var(--ks-ink);
-    color: var(--ks-paper);
-    display: flex;
-    align-items: center;
-    padding: 0 20px;
-    gap: 14px;
-    font-size: 13px;
-  }
-  .header .logo {
-    font-family: var(--font-serif);
-    font-size: 18px;
-    letter-spacing: -0.01em;
-    line-height: 1;
-  }
-  .header .logo .accent { color: var(--ks-accent); }
-  .header .kit-name {
-    font-size: 11px;
-    font-weight: 500;
-    letter-spacing: 0.04em;
-    text-transform: uppercase;
-    color: var(--ks-faint);
-    background: rgba(255,255,255,0.06);
-    padding: 3px 10px;
-    border-radius: 100px;
-    border: 1px solid rgba(255,255,255,0.08);
-  }
-  .header .spacer { flex: 1; }
-  .header button {
-    font-family: var(--font-sans);
-    background: rgba(255,255,255,0.08);
-    color: var(--ks-paper-warm);
-    border: 1px solid rgba(255,255,255,0.1);
-    border-radius: 100px;
-    padding: 5px 14px;
-    font-size: 11px;
-    font-weight: 500;
-    cursor: pointer;
-    transition: all 0.15s ease;
-    display: flex;
-    align-items: center;
-    gap: 5px;
-    letter-spacing: 0.01em;
-  }
-  .header button:hover {
-    background: rgba(255,255,255,0.14);
-    color: #fff;
-    transform: translateY(-1px);
-  }
+    body {
+      font-family: var(--font-sans);
+      background: var(--ks-paper);
+      color: var(--ks-ink);
+      height: 100vh;
+      overflow: hidden;
+      -webkit-font-smoothing: antialiased;
+      -moz-osx-font-smoothing: grayscale;
+    }
 
-  /* === Sidebar === */
-  .sidebar {
-    background: var(--ks-paper);
-    border-right: 1px solid var(--ks-hair);
-    padding: 16px 0;
-    overflow-y: auto;
-    display: flex;
-    flex-direction: column;
-  }
-  .sidebar h3 {
-    font-family: var(--font-sans);
-    font-size: 10px;
-    font-weight: 600;
-    text-transform: uppercase;
-    letter-spacing: 0.08em;
-    color: var(--ks-faint);
-    padding: 0 16px;
-    margin-bottom: 10px;
-  }
-  .sidebar .view-item {
-    padding: 9px 16px 9px 16px;
-    cursor: pointer;
-    font-size: 13px;
-    font-weight: 400;
-    color: var(--ks-muted);
-    border-left: 2.5px solid transparent;
-    transition: all 0.15s ease;
-    position: relative;
-  }
-  .sidebar .view-item:hover {
-    background: var(--ks-paper-warm);
-    color: var(--ks-ink);
-  }
-  .sidebar .view-item.active {
-    background: var(--ks-accent-soft);
-    border-left-color: var(--ks-accent);
-    color: var(--ks-accent-deep);
-    font-weight: 500;
-  }
-  .sidebar .view-desc {
-    font-size: 11px;
-    color: var(--ks-faint);
-    margin-top: 2px;
-    line-height: 1.4;
-  }
-  .sidebar .view-item.active .view-desc {
-    color: var(--ks-accent);
-    opacity: 0.7;
-  }
+    /* Scrollbars */
+    ::-webkit-scrollbar {
+      width: 5px;
+      height: 5px;
+    }
 
-  /* === Viewport === */
-  .viewport {
-    background: var(--ks-paper-warm);
-    background-image:
-      radial-gradient(circle, var(--ks-hair) 0.8px, transparent 0.8px);
-    background-size: 24px 24px;
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    padding: 24px;
-    overflow: auto;
-  }
-  .viewport .frame-container {
-    background: #fff;
-    border: 1px solid var(--ks-hair);
-    border-radius: 12px;
-    overflow: hidden;
-    box-shadow:
-      0 1px 2px rgba(23, 21, 18, 0.04),
-      0 4px 16px rgba(23, 21, 18, 0.06),
-      0 12px 40px rgba(23, 21, 18, 0.04);
-    max-width: 1024px;
-    transition: width 0.5s var(--ease-out), max-width 0.5s var(--ease-out);
-  }
-  .viewport iframe { width: 100%; border: none; min-height: 400px; display: block; }
-  .viewport .empty {
-    color: var(--ks-faint);
-    font-size: 14px;
-    font-family: var(--font-serif);
-    font-style: italic;
-    letter-spacing: 0.01em;
-  }
+    ::-webkit-scrollbar-track {
+      background: transparent;
+    }
 
-  /* === Panels === */
-  .panels {
-    grid-column: 1 / -1;
-    background: #fff;
-    border-top: 1px solid var(--ks-hair);
-    display: flex;
-  }
-  .panel {
-    flex: 1;
-    border-right: 1px solid var(--ks-paper-warm);
-    padding: 14px 16px;
-    overflow-y: auto;
-    font-size: 12px;
-  }
-  .panel:last-child { border-right: none; }
-  .panel h4 {
-    font-family: var(--font-sans);
-    font-size: 10px;
-    font-weight: 600;
-    text-transform: uppercase;
-    letter-spacing: 0.08em;
-    color: var(--ks-faint);
-    margin-bottom: 10px;
-  }
-  .panel pre {
-    background: var(--ks-paper-warm);
-    border: 1px solid var(--ks-hair);
-    border-radius: 8px;
-    padding: 12px;
-    font-family: var(--font-mono);
-    font-size: 11.5px;
-    line-height: 1.6;
-    overflow-x: auto;
-    white-space: pre-wrap;
-    max-height: 170px;
-    overflow-y: auto;
-    color: var(--ks-ink2);
-    tab-size: 2;
-  }
+    ::-webkit-scrollbar-thumb {
+      background: var(--ks-hair);
+      border-radius: 100px;
+    }
 
-  /* Tool log entries */
-  .panel .log-entry {
-    padding: 7px 10px;
-    margin-bottom: 4px;
-    background: var(--ks-paper);
-    border: 1px solid var(--ks-hair);
-    border-radius: 6px;
-    font-family: var(--font-mono);
-    font-size: 11px;
-    line-height: 1.6;
-    word-break: break-all;
-    animation: logSlideIn 0.2s var(--ease-out);
-  }
-  @keyframes logSlideIn {
-    from { opacity: 0; transform: translateY(-4px); }
-    to { opacity: 1; transform: translateY(0); }
-  }
-  .panel .log-tool {
-    color: var(--ks-accent);
-    font-weight: 500;
-  }
-  .panel .log-time {
-    color: var(--ks-faint);
-    font-size: 10px;
-    margin-right: 6px;
-  }
-  .panel .log-ms {
-    color: var(--ks-faint);
-    font-size: 10px;
-    font-weight: 500;
-    background: var(--ks-paper-warm);
-    padding: 1px 6px;
-    border-radius: 100px;
-    margin-left: 4px;
-  }
+    ::-webkit-scrollbar-thumb:hover {
+      background: var(--ks-faint);
+    }
 
-  /* === Controls === */
-  .controls {
-    display: flex;
-    gap: 10px;
-    align-items: center;
-    margin-bottom: 12px;
-  }
+    /* ================================================================
+     Grid layout (header / sidebar+viewport / resize / panels)
+     ================================================================ */
+    .layout {
+      display: grid;
+      grid-template-columns: var(--sidebar-w) 1fr;
+      grid-template-rows: 50px 1fr 8px var(--panel-h);
+      grid-template-areas:
+        "header  header"
+        "sidebar viewport"
+        "resize  resize"
+        "panels  panels";
+      height: 100vh;
+    }
 
-  /* Toggle switch */
-  .toggle-label {
-    font-size: 11px;
-    font-weight: 500;
-    color: var(--ks-muted);
-    display: flex;
-    align-items: center;
-    gap: 7px;
-    cursor: pointer;
-    user-select: none;
-    transition: color 0.15s ease;
-  }
-  .toggle-label:hover { color: var(--ks-ink); }
-  .toggle-label input[type="checkbox"] {
-    appearance: none;
-    -webkit-appearance: none;
-    width: 30px;
-    height: 17px;
-    background: var(--ks-hair);
-    border-radius: 100px;
-    position: relative;
-    cursor: pointer;
-    transition: background 0.2s ease;
-    flex-shrink: 0;
-  }
-  .toggle-label input[type="checkbox"]::after {
-    content: "";
-    position: absolute;
-    top: 2.5px;
-    left: 2.5px;
-    width: 12px;
-    height: 12px;
-    background: #fff;
-    border-radius: 50%;
-    transition: transform 0.2s var(--ease-out);
-    box-shadow: 0 1px 2px rgba(0,0,0,0.12);
-  }
-  .toggle-label input[type="checkbox"]:checked {
-    background: var(--ks-accent);
-  }
-  .toggle-label input[type="checkbox"]:checked::after {
-    transform: translateX(13px);
-  }
+    /* ================================================================
+     Header
+     ================================================================ */
+    .header {
+      grid-area: header;
+      background: var(--ks-ink);
+      color: var(--ks-paper);
+      display: flex;
+      align-items: center;
+      padding: 0 20px;
+      gap: 12px;
+      font-size: 13px;
+      position: relative;
+      z-index: 10;
+    }
 
-  /* Segmented control */
-  .segmented {
-    display: inline-flex;
-    background: var(--ks-paper-warm);
-    border: 1px solid var(--ks-hair);
-    border-radius: 100px;
-    padding: 2px;
-    gap: 0;
-  }
-  .size-btn {
-    font-family: var(--font-sans);
-    background: transparent;
-    border: none;
-    border-radius: 100px;
-    padding: 4px 12px;
-    font-size: 11px;
-    font-weight: 500;
-    color: var(--ks-muted);
-    cursor: pointer;
-    transition: all 0.2s ease;
-    line-height: 1;
-  }
-  .size-btn:hover {
-    color: var(--ks-ink);
-  }
-  .size-btn.active {
-    background: var(--ks-ink);
-    color: var(--ks-paper);
-    box-shadow: 0 1px 3px rgba(23, 21, 18, 0.15);
-  }
-</style>
+    .header::after {
+      content: "";
+      position: absolute;
+      bottom: 0;
+      left: 0;
+      right: 0;
+      height: 2px;
+      background: linear-gradient(90deg, var(--ks-accent), var(--ks-hi) 60%, transparent);
+      opacity: 0.8;
+    }
+
+    .header .header-logo {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+    }
+
+    .header .logo-text {
+      font-family: var(--font-serif);
+      font-size: 18px;
+      letter-spacing: -0.01em;
+      line-height: 1;
+    }
+
+    .header .logo-text .accent {
+      color: var(--ks-accent);
+    }
+
+    .header .divider {
+      width: 1px;
+      height: 20px;
+      background: rgba(255, 255, 255, 0.12);
+    }
+
+    .header .kit-name {
+      font-size: 11px;
+      font-weight: 500;
+      letter-spacing: 0.04em;
+      text-transform: uppercase;
+      color: var(--ks-faint);
+      background: rgba(255, 255, 255, 0.06);
+      padding: 4px 12px;
+      border-radius: 100px;
+      border: 1px solid rgba(255, 255, 255, 0.08);
+    }
+
+    .header .spacer {
+      flex: 1;
+    }
+
+    .header button {
+      font-family: var(--font-sans);
+      background: rgba(255, 255, 255, 0.07);
+      color: rgba(255, 255, 255, 0.6);
+      border: 1px solid rgba(255, 255, 255, 0.1);
+      border-radius: 100px;
+      padding: 5px 14px;
+      font-size: 11px;
+      font-weight: 500;
+      cursor: pointer;
+      transition: all 0.15s ease;
+      display: flex;
+      align-items: center;
+      gap: 5px;
+      letter-spacing: 0.01em;
+    }
+
+    .header button:hover {
+      background: rgba(255, 255, 255, 0.14);
+      color: #fff;
+      transform: translateY(-1px);
+    }
+
+    .header button:active {
+      transform: translateY(0);
+    }
+
+    /* ================================================================
+     Sidebar
+     ================================================================ */
+    .sidebar {
+      grid-area: sidebar;
+      background: var(--ks-paper);
+      border-right: 1px solid var(--ks-hair);
+      display: flex;
+      flex-direction: column;
+      overflow: hidden;
+      position: relative;
+    }
+
+    .sidebar-header {
+      padding: 16px 16px 12px;
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      flex-shrink: 0;
+    }
+
+    .sidebar-header h3 {
+      font-family: var(--font-sans);
+      font-size: 10px;
+      font-weight: 600;
+      text-transform: uppercase;
+      letter-spacing: 0.08em;
+      color: var(--ks-faint);
+    }
+
+    .sidebar-header .badge {
+      font-size: 10px;
+      font-weight: 600;
+      color: var(--ks-muted);
+      background: var(--ks-paper-warm);
+      border: 1px solid var(--ks-hair);
+      padding: 1px 7px;
+      border-radius: 100px;
+      line-height: 1.5;
+    }
+
+    .sidebar-header .badge:empty {
+      display: none;
+    }
+
+    .sidebar-list {
+      flex: 1;
+      overflow-y: auto;
+      padding-bottom: 32px;
+    }
+
+    .sidebar::after {
+      content: "";
+      position: absolute;
+      bottom: 0;
+      left: 0;
+      right: 1px;
+      height: 32px;
+      background: linear-gradient(transparent, var(--ks-paper));
+      pointer-events: none;
+    }
+
+    .sidebar .view-item {
+      padding: 10px 16px 10px 30px;
+      cursor: pointer;
+      font-size: 13px;
+      font-weight: 400;
+      color: var(--ks-muted);
+      border-left: 2.5px solid transparent;
+      transition: all 0.15s ease;
+      position: relative;
+    }
+
+    .sidebar .view-item:hover {
+      background: var(--ks-paper-warm);
+      color: var(--ks-ink);
+    }
+
+    .sidebar .view-item.active {
+      background: var(--ks-accent-soft);
+      border-left-color: var(--ks-accent);
+      color: var(--ks-accent-deep);
+      font-weight: 500;
+    }
+
+    /* Status dot — absolutely positioned to align with first text line */
+    .sidebar .view-item::before {
+      content: "";
+      position: absolute;
+      left: 14px;
+      top: 17px;
+      width: 5px;
+      height: 5px;
+      border-radius: 50%;
+      background: var(--ks-hair);
+      transition: background 0.15s ease;
+    }
+
+    .sidebar .view-item:hover::before {
+      background: var(--ks-faint);
+    }
+
+    .sidebar .view-item.active::before {
+      background: var(--ks-accent);
+    }
+
+    .sidebar .view-desc {
+      font-size: 11px;
+      color: var(--ks-faint);
+      margin-top: 2px;
+      line-height: 1.4;
+    }
+
+    .sidebar .view-item.active .view-desc {
+      color: var(--ks-accent);
+      opacity: 0.65;
+    }
+
+    /* Staggered entrance */
+    .sidebar .view-item {
+      animation: sidebarSlideIn 0.3s var(--ease-out) both;
+    }
+
+    .sidebar .view-item:nth-child(1) {
+      animation-delay: 0.04s;
+    }
+
+    .sidebar .view-item:nth-child(2) {
+      animation-delay: 0.08s;
+    }
+
+    .sidebar .view-item:nth-child(3) {
+      animation-delay: 0.12s;
+    }
+
+    .sidebar .view-item:nth-child(4) {
+      animation-delay: 0.16s;
+    }
+
+    .sidebar .view-item:nth-child(5) {
+      animation-delay: 0.20s;
+    }
+
+    .sidebar .view-item:nth-child(6) {
+      animation-delay: 0.24s;
+    }
+
+    .sidebar .view-item:nth-child(7) {
+      animation-delay: 0.28s;
+    }
+
+    .sidebar .view-item:nth-child(8) {
+      animation-delay: 0.32s;
+    }
+
+    @keyframes sidebarSlideIn {
+      from {
+        opacity: 0;
+        transform: translateX(-8px);
+      }
+
+      to {
+        opacity: 1;
+        transform: translateX(0);
+      }
+    }
+
+    /* ================================================================
+     Viewport area  (toolbar + canvas)
+     ================================================================ */
+    .viewport {
+      grid-area: viewport;
+      display: flex;
+      flex-direction: column;
+      overflow: hidden;
+      position: relative;
+    }
+
+    .viewport-toolbar {
+      height: var(--toolbar-h);
+      flex-shrink: 0;
+      display: flex;
+      align-items: center;
+      padding: 0 16px;
+      gap: 12px;
+      background: rgba(255, 255, 255, 0.72);
+      backdrop-filter: blur(12px);
+      -webkit-backdrop-filter: blur(12px);
+      border-bottom: 1px solid var(--ks-hair);
+      z-index: 2;
+    }
+
+    .toolbar-group {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+    }
+
+    .toolbar-spacer {
+      flex: 1;
+    }
+
+    .viewport-canvas {
+      flex: 1;
+      background: var(--ks-paper-warm);
+      background-image:
+        radial-gradient(circle, var(--ks-hair) 0.7px, transparent 0.7px);
+      background-size: 20px 20px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      padding: 16px;
+      overflow: auto;
+    }
+
+    /* ================================================================
+     Chat wrapper — holds skeleton + tool call + viewport-content
+     Becomes the visible card when a view is loaded.
+     ================================================================ */
+    .chat-wrapper {
+      background: #fff;
+      border: 1px solid var(--ks-hair);
+      border-radius: 10px;
+      overflow: hidden;
+      box-shadow: var(--shadow-card);
+      max-height: 95%;
+      display: flex;
+      flex-direction: column;
+    }
+
+    /* Skeleton lines + tool call hidden in empty state */
+    .chat-wrapper:has(#viewport-content.empty) {
+      background: none;
+      border: none;
+      box-shadow: none;
+      overflow: visible;
+    }
+
+    .chat-wrapper:has(#viewport-content.empty) .chat-skeleton,
+    .chat-wrapper:has(#viewport-content.empty) .chat-tool-call {
+      display: none;
+    }
+
+    /* Skeleton chat lines (prior LLM response) */
+    .chat-skeleton {
+      padding: 20px 20px 16px;
+      display: flex;
+      flex-direction: column;
+      gap: 6px;
+      flex-shrink: 0;
+    }
+
+    .skel-line {
+      height: 7px;
+      border-radius: 4px;
+      background: var(--ks-paper-warm);
+    }
+
+    /* Tool call block */
+    .chat-tool-call {
+      margin: 0 16px 12px;
+      padding: 8px 12px;
+      background: var(--ks-paper);
+      border: 1px solid var(--ks-hair);
+      border-left: 2.5px solid var(--ks-accent);
+      border-radius: 0 6px 6px 0;
+      font-family: var(--font-mono);
+      font-size: 11px;
+      font-weight: 500;
+      color: var(--ks-muted);
+      letter-spacing: 0.01em;
+      flex-shrink: 0;
+    }
+
+    /* viewport-content: centered empty state or block for frame */
+    #viewport-content {
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      overflow: scroll;
+    }
+
+    #viewport-content:not(.empty) {
+      display: block;
+      margin: 0 16px 16px;
+    }
+
+    /* Frame container — no card styling of its own, card is .chat-wrapper */
+    .viewport .frame-container {
+      max-width: 1024px;
+      transition: width 0.5s var(--ease-out), max-width 0.5s var(--ease-out);
+    }
+
+    .viewport iframe {
+      width: 100%;
+      border: none;
+      min-height: 400px;
+      display: block;
+    }
+
+    /* Empty state */
+    .viewport .empty {
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      gap: 12px;
+      color: var(--ks-faint);
+    }
+
+    .viewport .empty-icon {
+      width: 48px;
+      height: 48px;
+      border-radius: 12px;
+      background: var(--ks-paper-deep);
+      border: 1px solid var(--ks-hair);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 20px;
+      color: var(--ks-faint);
+    }
+
+    .viewport .empty-text {
+      font-family: var(--font-serif);
+      font-style: italic;
+      font-size: 15px;
+      letter-spacing: 0.01em;
+    }
+
+    .viewport .empty-hint {
+      font-size: 11px;
+      color: var(--ks-faint);
+      opacity: 0.7;
+    }
+
+    /* ================================================================
+     Toggle switch (capabilities)
+     ================================================================ */
+    .toggle-label {
+      font-size: 11px;
+      font-weight: 500;
+      color: var(--ks-muted);
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      cursor: pointer;
+      user-select: none;
+      transition: color 0.15s ease;
+      white-space: nowrap;
+    }
+
+    .toggle-label:hover {
+      color: var(--ks-ink);
+    }
+
+    .toggle-label input[type="checkbox"] {
+      appearance: none;
+      -webkit-appearance: none;
+      width: 28px;
+      height: 16px;
+      background: var(--ks-hair);
+      border-radius: 100px;
+      position: relative;
+      cursor: pointer;
+      transition: background 0.2s ease;
+      flex-shrink: 0;
+    }
+
+    .toggle-label input[type="checkbox"]::after {
+      content: "";
+      position: absolute;
+      top: 2px;
+      left: 2px;
+      width: 12px;
+      height: 12px;
+      background: #fff;
+      border-radius: 50%;
+      transition: transform 0.2s var(--ease-out);
+      box-shadow: 0 1px 3px rgba(0, 0, 0, 0.15);
+    }
+
+    .toggle-label input[type="checkbox"]:checked {
+      background: var(--ks-accent);
+    }
+
+    .toggle-label input[type="checkbox"]:checked::after {
+      transform: translateX(12px);
+    }
+
+    /* ================================================================
+     Segmented control (viewport sizes)
+     ================================================================ */
+    .segmented {
+      display: inline-flex;
+      background: var(--ks-paper-warm);
+      border: 1px solid var(--ks-hair);
+      border-radius: 100px;
+      padding: 2px;
+    }
+
+    .size-btn {
+      font-family: var(--font-sans);
+      background: transparent;
+      border: none;
+      border-radius: 100px;
+      padding: 4px 12px;
+      font-size: 11px;
+      font-weight: 500;
+      color: var(--ks-muted);
+      cursor: pointer;
+      transition: all 0.2s ease;
+      line-height: 1;
+    }
+
+    .size-btn:hover {
+      color: var(--ks-ink);
+    }
+
+    .size-btn.active {
+      background: var(--ks-ink);
+      color: var(--ks-paper);
+      box-shadow: 0 1px 3px rgba(23, 21, 18, 0.18);
+    }
+
+    /* ================================================================
+     Resize handle + collapse toggle
+     ================================================================ */
+    .resize-handle {
+      grid-area: resize;
+      background: #fff;
+      cursor: row-resize;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      position: relative;
+      z-index: 5;
+    }
+
+    .resize-handle::after {
+      content: "";
+      width: 36px;
+      height: 3px;
+      border-radius: 100px;
+      background: var(--ks-hair);
+      transition: background 0.15s ease;
+    }
+
+    .resize-handle:hover::after {
+      background: var(--ks-faint);
+    }
+
+    .resize-handle.dragging::after {
+      background: var(--ks-accent);
+    }
+
+    /* Collapsed state — tabs visible, body hidden */
+    .layout.panels-collapsed {
+      grid-template-rows: 50px 1fr 8px auto;
+    }
+
+    .layout.panels-collapsed .panels .panel-body {
+      display: none;
+    }
+
+    .layout.panels-collapsed .resize-handle {
+      cursor: default;
+    }
+
+    .layout.panels-collapsed .resize-handle::after {
+      display: none;
+    }
+
+    .layout.panels-collapsed .collapse-btn svg {
+      transform: rotate(180deg);
+    }
+
+    /* ================================================================
+     Panels (tabbed — CSS-only with :has)
+     ================================================================ */
+    .panels {
+      grid-area: panels;
+      background: #fff;
+      border-top: 1px solid var(--ks-hair);
+      display: flex;
+      flex-direction: column;
+      overflow: hidden;
+    }
+
+    .panel-tabs {
+      display: flex;
+      align-items: stretch;
+      padding: 0 16px;
+      border-bottom: 1px solid var(--ks-paper-warm);
+      flex-shrink: 0;
+    }
+
+    .panel-tab {
+      font-family: var(--font-sans);
+      font-size: 11px;
+      font-weight: 500;
+      letter-spacing: 0.02em;
+      color: var(--ks-faint);
+      padding: 10px 14px 9px;
+      cursor: pointer;
+      position: relative;
+      transition: color 0.15s ease;
+      user-select: none;
+    }
+
+    .panel-tab:hover {
+      color: var(--ks-muted);
+    }
+
+    .tab-spacer {
+      flex: 1;
+    }
+
+    .collapse-btn {
+      width: 22px;
+      height: 22px;
+      border-radius: 50%;
+      border: 1px solid var(--ks-hair);
+      background: #fff;
+      cursor: pointer;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      color: var(--ks-faint);
+      transition: all 0.15s ease;
+      flex-shrink: 0;
+    }
+    .collapse-btn:hover {
+      border-color: var(--ks-faint);
+      color: var(--ks-muted);
+    }
+    .collapse-btn svg {
+      width: 10px;
+      height: 10px;
+      transition: transform 0.25s var(--ease-out);
+    }
+
+    .panel-tab::after {
+      content: "";
+      position: absolute;
+      bottom: -1px;
+      left: 8px;
+      right: 8px;
+      height: 2px;
+      border-radius: 2px 2px 0 0;
+      background: var(--ks-accent);
+      transform: scaleX(0);
+      transition: transform 0.25s var(--ease-out);
+    }
+
+    .panels:has(#ptab-data:checked) label[for="ptab-data"],
+    .panels:has(#ptab-log:checked) label[for="ptab-log"] {
+      color: var(--ks-ink);
+      font-weight: 600;
+    }
+
+    .panels:has(#ptab-data:checked) label[for="ptab-data"]::after,
+    .panels:has(#ptab-log:checked) label[for="ptab-log"]::after {
+      transform: scaleX(1);
+    }
+
+    .panel-body {
+      flex: 1;
+      overflow: hidden;
+      position: relative;
+    }
+
+    .panel {
+      position: absolute;
+      inset: 0;
+      padding: 14px 20px;
+      overflow-y: auto;
+      font-size: 12px;
+      opacity: 0;
+      visibility: hidden;
+      transition: opacity 0.15s ease, visibility 0.15s ease;
+    }
+
+    .panels:has(#ptab-data:checked) .panel-data {
+      opacity: 1;
+      visibility: visible;
+    }
+
+    .panels:has(#ptab-log:checked) .panel-log {
+      opacity: 1;
+      visibility: visible;
+    }
+
+    /* Data inspector */
+    .panel pre {
+      background: var(--ks-paper-warm);
+      border: 1px solid var(--ks-hair);
+      border-radius: 8px;
+      padding: 14px 16px;
+      font-family: var(--font-mono);
+      font-size: 11.5px;
+      line-height: 1.65;
+      overflow-x: auto;
+      white-space: pre-wrap;
+      max-height: 100%;
+      overflow-y: auto;
+      color: var(--ks-ink2);
+      tab-size: 2;
+    }
+
+    /* Tool log entries */
+    .panel .log-entry {
+      padding: 8px 12px;
+      margin-bottom: 5px;
+      background: var(--ks-paper);
+      border: 1px solid var(--ks-hair);
+      border-radius: 8px;
+      font-family: var(--font-mono);
+      font-size: 11px;
+      line-height: 1.6;
+      word-break: break-all;
+      animation: logSlideIn 0.25s var(--ease-out);
+    }
+
+    @keyframes logSlideIn {
+      from {
+        opacity: 0;
+        transform: translateY(-6px);
+      }
+
+      to {
+        opacity: 1;
+        transform: translateY(0);
+      }
+    }
+
+    .panel .log-tool {
+      color: var(--ks-accent);
+      font-weight: 500;
+    }
+
+    .panel .log-time {
+      color: var(--ks-faint);
+      font-size: 10px;
+      margin-right: 6px;
+    }
+
+    .panel .log-ms {
+      color: var(--ks-muted);
+      font-size: 10px;
+      font-weight: 500;
+      background: var(--ks-paper-warm);
+      padding: 1px 7px;
+      border-radius: 100px;
+      border: 1px solid var(--ks-hair);
+      margin-left: 4px;
+    }
+
+    .log-empty {
+      color: var(--ks-faint);
+      font-family: var(--font-serif);
+      font-style: italic;
+      font-size: 12px;
+    }
+  </style>
 </head>
+
 <body>
 
-<div class="layout">
-  <!-- Header -->
-  <div class="header">
-    <span class="logo">kitstack<span class="accent">.devkit</span></span>
-    <span class="kit-name" id="kit-name"></span>
-    <span class="spacer"></span>
-    <button id="btn-reload" title="Re-run loader">&#8635; Reload</button>
-  </div>
-
-  <!-- Sidebar -->
-  <div class="sidebar">
-    <h3>Views</h3>
-    <div id="view-list"></div>
-  </div>
-
-  <!-- Viewport -->
-  <div class="viewport">
-    <div id="viewport-content" class="empty">Select a view from the sidebar</div>
-  </div>
-
-  <!-- Panels -->
-  <div class="panels">
-    <!-- Data Inspector -->
-    <div class="panel">
-      <h4>Data Inspector</h4>
-      <pre id="data-inspector">No data loaded</pre>
-    </div>
-
-    <!-- Tool Call Log -->
-    <div class="panel">
-      <h4>Tool Calls</h4>
-      <div id="tool-log"><span style="color:var(--ks-faint);font-size:12px;font-style:italic;font-family:var(--font-serif)">No tool calls yet</span></div>
-    </div>
-
-    <!-- Capabilities -->
-    <div class="panel">
-      <h4>Capabilities</h4>
-      <div class="controls">
-        <label class="toggle-label"><input type="checkbox" id="cap-clipboard" checked> Clipboard</label>
-        <label class="toggle-label"><input type="checkbox" id="cap-download" checked> Download</label>
-        <label class="toggle-label"><input type="checkbox" id="cap-links" checked> Links</label>
+  <div class="layout">
+    <!-- Header -->
+    <div class="header">
+      <div class="header-logo">
+        <svg width="20" height="20" viewBox="0 0 28 28" fill="none">
+          <rect x="2.5" y="11.5" width="23" height="13" rx="2.5" stroke="rgba(255,255,255,0.25)" stroke-width="1.5"
+            fill="rgba(255,255,255,0.06)" />
+          <rect x="5.5" y="7.5" width="17" height="4" rx="1.5" stroke="rgba(255,255,255,0.2)" stroke-width="1.3"
+            fill="#f7d9c8" />
+          <rect x="8.5" y="3.5" width="11" height="4" rx="1.5" stroke="rgba(255,255,255,0.15)" stroke-width="1.3"
+            fill="#d65a2f" />
+        </svg>
+        <span class="logo-text">kitstack<span class="accent">.co</span></span>
       </div>
-      <h4>Viewport</h4>
-      <div class="controls">
+      <span class="divider"></span>
+      <span class="kit-name" id="kit-name"></span>
+      <span class="spacer"></span>
+      <button id="btn-reload" title="Re-run loader">&#8635; Reload</button>
+    </div>
+
+    <!-- Sidebar -->
+    <div class="sidebar">
+      <div class="sidebar-header">
+        <h3>Views</h3>
+        <span class="badge" id="view-count"></span>
+      </div>
+      <div class="sidebar-list" id="view-list"></div>
+    </div>
+
+    <!-- Viewport -->
+    <div class="viewport">
+      <div class="viewport-toolbar">
+        <div class="toolbar-group">
+          <label class="toggle-label"><input type="checkbox" id="cap-clipboard" checked> Clipboard</label>
+          <label class="toggle-label"><input type="checkbox" id="cap-download" checked> Download</label>
+          <label class="toggle-label"><input type="checkbox" id="cap-links" checked> Links</label>
+        </div>
+        <div class="toolbar-spacer"></div>
         <div class="segmented">
           <button class="size-btn" data-w="375">Mobile</button>
           <button class="size-btn" data-w="768">Tablet</button>
@@ -397,240 +901,341 @@
           <button class="size-btn" data-w="full">Full</button>
         </div>
       </div>
+      <div class="viewport-canvas">
+        <div class="chat-wrapper">
+          <div class="chat-skeleton">
+            <div class="skel-line" style="width:72%"></div>
+            <div class="skel-line" style="width:45%"></div>
+            <div class="skel-line" style="width:58%"></div>
+            <div class="skel-line" style="width:28%"></div>
+          </div>
+          <div class="chat-tool-call">kit_view</div>
+          <div id="viewport-content" class="empty">
+            <div class="empty-icon">&#9671;</div>
+            <div class="empty-text">Select a view from the sidebar</div>
+            <div class="empty-hint">Views are defined in your kit config</div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Resize handle -->
+    <div class="resize-handle"></div>
+
+    <!-- Panels (tabbed) -->
+    <div class="panels">
+      <input type="radio" name="ptab" id="ptab-data" checked hidden>
+      <input type="radio" name="ptab" id="ptab-log" hidden>
+      <div class="panel-tabs">
+        <label for="ptab-data" class="panel-tab">Data Inspector</label>
+        <label for="ptab-log" class="panel-tab">Tool Calls</label>
+        <div class="tab-spacer"></div>
+        <button class="collapse-btn" id="btn-collapse" title="Toggle panels">
+          <svg viewBox="0 0 10 10" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"><polyline points="2,3 5,6 8,3"/></svg>
+        </button>
+      </div>
+      <div class="panel-body">
+        <div class="panel panel-data">
+          <pre id="data-inspector">No data loaded</pre>
+        </div>
+        <div class="panel panel-log">
+          <div id="tool-log"><span class="log-empty">No tool calls yet</span></div>
+        </div>
+      </div>
     </div>
   </div>
-</div>
 
-<script type="module">
-// DevKit host page — talks to backend via fetch, manages iframe protocol
+  <script>
+    // UI-only enhancements (separate from module logic)
+    addEventListener("DOMContentLoaded", () => {
+      // Populate sidebar badge
+      const m = window.__DEVKIT_KIT__;
+      const b = document.getElementById("view-count");
+      if (m?.views && b) b.textContent = m.views.length;
 
-// Kit metadata is injected by the dev server
-const KIT_META = window.__DEVKIT_KIT__ || { id: "unknown", name: "Unknown", views: [], tools: [] };
+      // Panel collapse toggle
+      const layout = document.querySelector(".layout");
+      document.getElementById("btn-collapse").addEventListener("click", (e) => {
+        e.stopPropagation();
+        layout.classList.toggle("panels-collapsed");
+      });
 
-document.getElementById("kit-name").textContent = `${KIT_META.name} (${KIT_META.tools.length} tools, ${KIT_META.views.length} views)`;
+      // Panel resize handle
+      const handle = document.querySelector(".resize-handle");
+      let dragging = false;
+      handle.addEventListener("mousedown", (e) => {
+        if (e.target.closest(".collapse-btn")) return;
+        if (layout.classList.contains("panels-collapsed")) return;
+        dragging = true;
+        handle.classList.add("dragging");
+        document.body.style.cursor = "row-resize";
+        document.body.style.userSelect = "none";
+        e.preventDefault();
+      });
+      document.addEventListener("mousemove", (e) => {
+        if (!dragging) return;
+        const h = window.innerHeight - e.clientY;
+        document.documentElement.style.setProperty(
+          "--panel-h", Math.max(80, Math.min(500, h)) + "px"
+        );
+      });
+      document.addEventListener("mouseup", () => {
+        if (!dragging) return;
+        dragging = false;
+        handle.classList.remove("dragging");
+        document.body.style.cursor = "";
+        document.body.style.userSelect = "";
+      });
+    });
+  </script>
+  <script type="module">
+    // DevKit host page — talks to backend via fetch, manages iframe protocol
 
-// --- View list ---
-const viewList = document.getElementById("view-list");
-let activeView = null;
+    // Kit metadata is injected by the dev server
+    const KIT_META = window.__DEVKIT_KIT__ || { id: "unknown", name: "Unknown", views: [], tools: [] };
 
-KIT_META.views.forEach(v => {
-  const el = document.createElement("div");
-  el.className = "view-item";
-  el.innerHTML = `<div>${v.name || v.slug}</div><div class="view-desc">${v.description || v.slug}</div>`;
-  el.addEventListener("click", () => selectView(v.slug));
-  viewList.appendChild(el);
-});
+    document.getElementById("kit-name").textContent = `${KIT_META.name} (${KIT_META.tools.length} tools, ${KIT_META.views.length} views)`;
 
-// --- Capabilities ---
-function getCapabilities() {
-  return {
-    clipboardWrite: document.getElementById("cap-clipboard").checked,
-    downloadFile: document.getElementById("cap-download").checked,
-    openLinks: document.getElementById("cap-links").checked,
-  };
-}
+    // --- View list ---
+    const viewList = document.getElementById("view-list");
+    let activeView = null;
 
-// --- Tool call log ---
-const toolLogEl = document.getElementById("tool-log");
+    KIT_META.views.forEach(v => {
+      const el = document.createElement("div");
+      el.className = "view-item";
+      el.innerHTML = `<div>${v.name || v.slug}</div><div class="view-desc">${v.description || v.slug}</div>`;
+      el.addEventListener("click", () => selectView(v.slug));
+      viewList.appendChild(el);
+    });
 
-function logToolCall(name, args, result, ms) {
-  if (toolLogEl.querySelector("span")) toolLogEl.innerHTML = "";
-  const entry = document.createElement("div");
-  entry.className = "log-entry";
-  const time = new Date().toLocaleTimeString();
-  entry.innerHTML = `<span class="log-time">${time}</span> <span class="log-tool">${name}</span>(${JSON.stringify(args).slice(0, 60)}) <span class="log-ms">${ms}ms</span>`;
-  toolLogEl.prepend(entry);
-}
+    // --- Capabilities ---
+    function getCapabilities() {
+      return {
+        clipboardWrite: document.getElementById("cap-clipboard").checked,
+        downloadFile: document.getElementById("cap-download").checked,
+        openLinks: document.getElementById("cap-links").checked,
+      };
+    }
 
-// --- Data inspector ---
-function updateDataInspector(data) {
-  document.getElementById("data-inspector").textContent = JSON.stringify(data, null, 2);
-}
+    // --- Tool call log ---
+    const toolLogEl = document.getElementById("tool-log");
 
-// --- Viewport sizing ---
-document.querySelectorAll(".size-btn").forEach(btn => {
-  btn.addEventListener("click", () => {
-    document.querySelectorAll(".size-btn").forEach(b => b.classList.remove("active"));
-    btn.classList.add("active");
-    const container = document.querySelector(".frame-container");
-    if (container) {
-      const w = btn.dataset.w;
-      if (w === "full") {
-        container.style.width = "calc(100svw - var(--sidebar-w) - 32px)";
-        container.style.maxWidth = "none";
-      } else {
-        container.style.width = w + "px";
-        container.style.maxWidth = w + "px";
+    function logToolCall(name, args, result, ms) {
+      if (toolLogEl.querySelector("span")) toolLogEl.innerHTML = "";
+      const entry = document.createElement("div");
+      entry.className = "log-entry";
+      const time = new Date().toLocaleTimeString();
+      entry.innerHTML = `<span class="log-time">${time}</span> <span class="log-tool">${name}</span>(${JSON.stringify(args).slice(0, 60)}) <span class="log-ms">${ms}ms</span>`;
+      toolLogEl.prepend(entry);
+    }
+
+    // --- Data inspector ---
+    function updateDataInspector(data) {
+      document.getElementById("data-inspector").textContent = JSON.stringify(data, null, 2);
+    }
+
+    // --- Viewport sizing ---
+    document.querySelectorAll(".size-btn").forEach(btn => {
+      btn.addEventListener("click", () => {
+        document.querySelectorAll(".size-btn").forEach(b => b.classList.remove("active"));
+        btn.classList.add("active");
+        const container = document.querySelector(".frame-container");
+        if (container) {
+          const w = btn.dataset.w;
+          if (w === "full") {
+            container.style.width = "calc(100svw - var(--sidebar-w) - 32px)";
+            container.style.maxWidth = "none";
+          } else {
+            container.style.width = w + "px";
+            container.style.maxWidth = w + "px";
+          }
+        }
+      });
+    });
+
+    // --- Reload button ---
+    document.getElementById("btn-reload").addEventListener("click", async () => {
+      if (activeView) selectView(activeView);
+    });
+
+    // --- View selection & iframe protocol ---
+    let outerIframe = null;
+    let selectGeneration = 0;
+    let currentMessageHandler = null;
+
+    async function selectView(slug) {
+      const gen = ++selectGeneration;
+      activeView = slug;
+
+      // Update sidebar
+      viewList.querySelectorAll(".view-item").forEach((el, i) => {
+        el.classList.toggle("active", KIT_META.views[i]?.slug === slug);
+      });
+
+      // Fetch loader data from backend
+      let loaderData;
+      try {
+        const res = await fetch(`/__devkit/loader/${slug}`);
+        loaderData = await res.json();
+      } catch (err) {
+        updateDataInspector({ error: err.message });
+        return;
       }
-    }
-  });
-});
 
-// --- Reload button ---
-document.getElementById("btn-reload").addEventListener("click", async () => {
-  if (activeView) selectView(activeView);
-});
+      // Bail if user already clicked another view
+      if (gen !== selectGeneration) return;
 
-// --- View selection & iframe protocol ---
-let outerIframe = null;
+      updateDataInspector(loaderData);
 
-async function selectView(slug) {
-  activeView = slug;
+      // Fetch shell HTML from backend
+      let shellHtml;
+      try {
+        const res = await fetch("/__devkit/shell");
+        shellHtml = await res.text();
+      } catch (err) {
+        return;
+      }
 
-  // Update sidebar
-  viewList.querySelectorAll(".view-item").forEach((el, i) => {
-    el.classList.toggle("active", KIT_META.views[i]?.slug === slug);
-  });
+      // Bail if stale
+      if (gen !== selectGeneration) return;
 
-  // Fetch loader data from backend
-  let loaderData;
-  try {
-    const res = await fetch(`/__devkit/loader/${slug}`);
-    loaderData = await res.json();
-  } catch (err) {
-    updateDataInspector({ error: err.message });
-    return;
-  }
+      // Remove previous message handler before adding a new one
+      if (currentMessageHandler) {
+        window.removeEventListener("message", currentMessageHandler);
+        currentMessageHandler = null;
+      }
 
-  updateDataInspector(loaderData);
+      // Create single iframe with shell HTML directly
+      // (skip the double-iframe proxy — not needed for local dev)
+      const viewport = document.getElementById("viewport-content");
+      viewport.className = "";
+      // Get current active size button width for initial container size
+      const activeBtn = document.querySelector(".size-btn.active");
+      const initW = activeBtn?.dataset.w;
+      const initStyle = initW === "full"
+        ? "width:calc(100svw - var(--sidebar-w) - 32px);max-width:none"
+        : `width:${initW || 1024}px;max-width:${initW || 1024}px`;
+      viewport.innerHTML = `<div class="frame-container" style="${initStyle}"><iframe id="outer-frame"></iframe></div>`;
 
-  // Fetch shell HTML from backend
-  let shellHtml;
-  try {
-    const res = await fetch("/__devkit/shell");
-    shellHtml = await res.text();
-  } catch (err) {
-    return;
-  }
+      outerIframe = document.getElementById("outer-frame");
+      outerIframe.srcdoc = shellHtml;
 
-  // Create single iframe with shell HTML directly
-  // (skip the double-iframe proxy — not needed for local dev)
-  const viewport = document.getElementById("viewport-content");
-  viewport.className = "";
-  // Get current active size button width for initial container size
-  const activeBtn = document.querySelector(".size-btn.active");
-  const initW = activeBtn?.dataset.w;
-  const initStyle = initW === "full"
-    ? "width:calc(100svw - var(--sidebar-w) - 32px);max-width:none"
-    : `width:${initW || 1024}px;max-width:${initW || 1024}px`;
-  viewport.innerHTML = `<div class="frame-container" style="${initStyle}"><iframe id="outer-frame"></iframe></div>`;
+      // Listen for messages from the shell iframe
+      const handler = async function (event) {
+        if (!outerIframe || event.source !== outerIframe.contentWindow) return;
+        const msg = event.data;
+        if (!msg || msg.jsonrpc !== "2.0") return;
 
-  outerIframe = document.getElementById("outer-frame");
-  outerIframe.srcdoc = shellHtml;
+        // Handle JSON-RPC requests from the shell
+        if ("id" in msg && msg.method) {
+          const response = await handleAppRequest(msg.id, msg.method, msg.params || {}, slug);
+          outerIframe.contentWindow.postMessage(response, "*");
+          return;
+        }
 
-  // Listen for messages from the shell iframe
-  window.addEventListener("message", async function handler(event) {
-    if (!outerIframe || event.source !== outerIframe.contentWindow) return;
-    const msg = event.data;
-    if (!msg || msg.jsonrpc !== "2.0") return;
+        // Handle notifications
+        if (msg.method === "ui/notifications/initialized") {
+          // Shell is ready — send tool-result with loader data
+          const toolResult = {
+            jsonrpc: "2.0",
+            method: "ui/notifications/tool-result",
+            params: {
+              result: {
+                content: [{
+                  type: "text",
+                  text: JSON.stringify({ kit: KIT_META.id, view: slug, app: slug, data: loaderData })
+                }]
+              }
+            }
+          };
+          outerIframe.contentWindow.postMessage(toolResult, "*");
+          return;
+        }
 
-    // Handle JSON-RPC requests from the shell
-    if ("id" in msg && msg.method) {
-      const response = await handleAppRequest(msg.id, msg.method, msg.params || {}, slug);
-      outerIframe.contentWindow.postMessage(response, "*");
-      return;
-    }
-
-    // Handle notifications
-    if (msg.method === "ui/notifications/initialized") {
-      // Shell is ready — send tool-result with loader data
-      const toolResult = {
-        jsonrpc: "2.0",
-        method: "ui/notifications/tool-result",
-        params: {
-          result: {
-            content: [{
-              type: "text",
-              text: JSON.stringify({ kit: KIT_META.id, view: slug, app: slug, data: loaderData })
-            }]
+        if (msg.method === "ui/notifications/size-changed") {
+          if (msg.params?.height) {
+            outerIframe.style.height = Math.max(msg.params.height, 200) + "px";
           }
         }
       };
-      outerIframe.contentWindow.postMessage(toolResult, "*");
-      return;
+      currentMessageHandler = handler;
+      window.addEventListener("message", handler);
     }
 
-    if (msg.method === "ui/notifications/size-changed") {
-      if (msg.params?.height) {
-        outerIframe.style.height = Math.max(msg.params.height, 200) + "px";
-      }
-    }
-  });
-}
-
-async function handleAppRequest(id, method, params, viewSlug) {
-  switch (method) {
-    case "ui/initialize":
-      return {
-        jsonrpc: "2.0", id,
-        result: {
-          protocolVersion: "2026-01-26",
-          hostCapabilities: getCapabilities(),
-          hostInfo: { name: "KitStack DevKit", version: "1.0.0" },
-        },
-      };
-
-    case "tools/call": {
-      const { name, arguments: args } = params;
-
-      // Route __load_view to loader endpoint
-      if (name === "kit" && args?.cmd === "__load_view" && args?.params?.view) {
-        const start = Date.now();
-        try {
-          const res = await fetch(`/__devkit/loader/${args.params.view}`);
-          const data = await res.json();
-          const ms = Date.now() - start;
-          logToolCall("__load_view", { view: args.params.view }, data, ms);
-          updateDataInspector(data);
+    async function handleAppRequest(id, method, params, viewSlug) {
+      switch (method) {
+        case "ui/initialize":
           return {
             jsonrpc: "2.0", id,
-            result: { content: [{ type: "text", text: JSON.stringify({ view: args.params.view, data }) }] },
+            result: {
+              protocolVersion: "2026-01-26",
+              hostCapabilities: getCapabilities(),
+              hostInfo: { name: "KitStack DevKit", version: "1.0.0" },
+            },
           };
-        } catch (err) {
-          return { jsonrpc: "2.0", id, result: { content: [{ type: "text", text: err.message }], isError: true } };
-        }
-      }
 
-      // Route regular tool calls to backend
-      if (name === "kit" && args?.cmd) {
-        const start = Date.now();
-        try {
-          const res = await fetch("/__devkit/tool", {
-            method: "POST",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({ toolName: args.cmd, args: args.params || {} }),
-          });
-          const result = await res.json();
-          const ms = Date.now() - start;
-          logToolCall(args.cmd, args.params || {}, result, ms);
-          return { jsonrpc: "2.0", id, result };
-        } catch (err) {
-          return { jsonrpc: "2.0", id, result: { content: [{ type: "text", text: err.message }], isError: true } };
-        }
-      }
+        case "tools/call": {
+          const { name, arguments: args } = params;
 
-      return { jsonrpc: "2.0", id, error: { code: -32602, message: "Invalid tool call" } };
+          // Route __load_view to loader endpoint
+          if (name === "kit" && args?.cmd === "__load_view" && args?.params?.view) {
+            const start = Date.now();
+            try {
+              const res = await fetch(`/__devkit/loader/${args.params.view}`);
+              const data = await res.json();
+              const ms = Date.now() - start;
+              logToolCall("__load_view", { view: args.params.view }, data, ms);
+              updateDataInspector(data);
+              return {
+                jsonrpc: "2.0", id,
+                result: { content: [{ type: "text", text: JSON.stringify({ view: args.params.view, data }) }] },
+              };
+            } catch (err) {
+              return { jsonrpc: "2.0", id, result: { content: [{ type: "text", text: err.message }], isError: true } };
+            }
+          }
+
+          // Route regular tool calls to backend
+          if (name === "kit" && args?.cmd) {
+            const start = Date.now();
+            try {
+              const res = await fetch("/__devkit/tool", {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({ toolName: args.cmd, args: args.params || {} }),
+              });
+              const result = await res.json();
+              const ms = Date.now() - start;
+              logToolCall(args.cmd, args.params || {}, result, ms);
+              return { jsonrpc: "2.0", id, result };
+            } catch (err) {
+              return { jsonrpc: "2.0", id, result: { content: [{ type: "text", text: err.message }], isError: true } };
+            }
+          }
+
+          return { jsonrpc: "2.0", id, error: { code: -32602, message: "Invalid tool call" } };
+        }
+
+        case "ui/download-file":
+          if (params?.contents?.[0]?.resource) {
+            const r = params.contents[0].resource;
+            const blob = new Blob([r.text || ""], { type: r.mimeType || "text/plain" });
+            const a = document.createElement("a");
+            a.href = URL.createObjectURL(blob);
+            a.download = r.uri?.replace("file:///", "") || "download";
+            a.click();
+          }
+          return { jsonrpc: "2.0", id, result: {} };
+
+        case "ui/open-link":
+          if (params?.url) window.open(params.url, "_blank");
+          return { jsonrpc: "2.0", id, result: {} };
+
+        default:
+          return { jsonrpc: "2.0", id, error: { code: -32601, message: `Method not found: ${method}` } };
+      }
     }
-
-    case "ui/download-file":
-      if (params?.contents?.[0]?.resource) {
-        const r = params.contents[0].resource;
-        const blob = new Blob([r.text || ""], { type: r.mimeType || "text/plain" });
-        const a = document.createElement("a");
-        a.href = URL.createObjectURL(blob);
-        a.download = r.uri?.replace("file:///", "") || "download";
-        a.click();
-      }
-      return { jsonrpc: "2.0", id, result: {} };
-
-    case "ui/open-link":
-      if (params?.url) window.open(params.url, "_blank");
-      return { jsonrpc: "2.0", id, result: {} };
-
-    default:
-      return { jsonrpc: "2.0", id, error: { code: -32601, message: `Method not found: ${method}` } };
-  }
-}
-</script>
+  </script>
 </body>
+
 </html>
