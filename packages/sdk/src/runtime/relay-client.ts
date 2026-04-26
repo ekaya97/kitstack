@@ -88,8 +88,9 @@ export async function connectRelay(opts: RelayOptions): Promise<never> {
         console.error(`  ← asset ${assetPath}`);
         try {
           const vitePort = opts.vitePort || 5175;
-          // Vite serves at root — no base prefix needed for local fetch
-          const res = await fetch(`http://localhost:${vitePort}/${assetPath}`);
+          // Vite serves with base: /dev/{sessionId}/ — include it in the fetch
+          const viteBase = opts.sessionId ? `/dev/${opts.sessionId}/` : "/";
+          const res = await fetch(`http://localhost:${vitePort}${viteBase}${assetPath}`);
           const body = await res.text();
           const contentType = res.headers.get("content-type") || "application/javascript";
           console.error(`  → ${res.status} (${contentType.split(";")[0]})`);

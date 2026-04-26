@@ -802,7 +802,6 @@ function generateDevRelayShell(kit: KitDefinition, viewSlug: string, assetBaseUr
   .ks-loading { display: flex; align-items: center; justify-content: center; min-height: 200px; color: #6b6357; }
   .ks-error { padding: 16px; color: #b91c1c; background: #fef2f2; border: 1px solid #fecaca; border-radius: 6px; }
 </style>
-<link rel="stylesheet" href="${assetBaseUrl}/.kitstack/devkit-entries/styles-proxy.css">
 </head>
 <body>
 <div id="root"><div class="ks-loading">Loading view...</div></div>
