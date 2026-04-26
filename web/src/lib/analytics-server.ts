@@ -96,6 +96,34 @@ export function trackReviewSubmitted(
   });
 }
 
+// ── Kit Deletion ───────────────────────────────────────────────
+export function trackKitDeleted(userId: string, kitSlug: string) {
+  capture(userId, "kit_deleted", { kit_slug: kitSlug });
+}
+
+// ── Auth ───────────────────────────────────────────────────────
+export function trackUserSignedUp(
+  userId: string,
+  provider: "email" | "google" | "github"
+) {
+  capture(userId, "user_signed_up", { provider });
+}
+
+export function trackUserSignedIn(
+  userId: string,
+  provider: "email" | "google" | "github"
+) {
+  capture(userId, "user_signed_in", { provider });
+}
+
+// ── MCP ────────────────────────────────────────────────────────
+export function trackMcpConnectionChecked(
+  userId: string,
+  connected: boolean
+) {
+  capture(userId, "mcp_connection_checked", { connected });
+}
+
 // ── Wishlist ────────────────────────────────────────────────────
 export function trackWishlistItemAdded(
   userId: string,

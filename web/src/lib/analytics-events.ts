@@ -49,6 +49,34 @@ export interface ReviewSubmittedProps {
   rating: number;
 }
 
+// ── Kit Deletion ───────────────────────────────────────────────
+export interface KitDeletedProps {
+  kit_slug: string;
+}
+
+// ── Page Views ─────────────────────────────────────────────────
+export interface SkillPageViewedProps {
+  skill_slug: string;
+}
+
+export interface KitPageViewedProps {
+  kit_slug: string;
+}
+
+// ── Auth ───────────────────────────────────────────────────────
+export interface UserSignedUpProps {
+  provider: "email" | "google" | "github";
+}
+
+export interface UserSignedInProps {
+  provider: "email" | "google" | "github";
+}
+
+// ── MCP ────────────────────────────────────────────────────────
+export interface McpConnectionCheckedProps {
+  connected: boolean;
+}
+
 // ── Wishlist ────────────────────────────────────────────────────
 export interface WishlistItemAddedProps {
   target_type: string;
@@ -68,7 +96,13 @@ export interface AnalyticsEventMap {
   kit_activation_failed: KitActivationFailedProps;
   kit_deactivated: KitDeactivatedProps;
   kit_deactivation_failed: KitDeactivationFailedProps;
+  kit_deleted: KitDeletedProps;
   skill_downloaded: SkillDownloadedProps;
+  skill_page_viewed: SkillPageViewedProps;
+  kit_page_viewed: KitPageViewedProps;
+  user_signed_up: UserSignedUpProps;
+  user_signed_in: UserSignedInProps;
+  mcp_connection_checked: McpConnectionCheckedProps;
   review_submitted: ReviewSubmittedProps;
   wishlist_item_added: WishlistItemAddedProps;
   wishlist_item_removed: WishlistItemRemovedProps;
