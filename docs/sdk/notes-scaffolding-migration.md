@@ -61,7 +61,7 @@ export const listSequences = defineTool({
 });
 ```
 
-Views use the standard three-file layout (`index.ts`, `loader.ts`, `View.tsx`) with the loader importing the tool's `load` function to avoid duplicating queries.
+Views use the standard three-file layout (`index.ts`, `loader.ts`, `View.tsx`) with the loader importing the tool's `load` function to avoid duplicating queries. Views that depend on parameters the DevKit can't provide (e.g., `ctx.params.contactId`) can define `placeholder` data in `defineView()` so the DevKit can render them with sample data even when the loader returns null.
 
 ### Auth adapter interface (T-0037)
 

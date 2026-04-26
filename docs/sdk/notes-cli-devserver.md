@@ -83,7 +83,7 @@ Local MCP Apps renderer for view development. Three layers:
 
 2. **proxy.ts** — `generateProxyHtml()`: mock sandbox proxy that replicates Claude.ai's double iframe architecture. Handles sandbox-proxy-ready → sandbox-resource-ready handshake, forwards postMessages between inner iframe and host.
 
-3. **server.ts** + **app.html** — DevKit HTTP server and host page. Sidebar with view list, double iframe viewport, panels for data inspection, tool call logging, capability toggles, and viewport sizing.
+3. **server.ts** + **app.html** — DevKit HTTP server and host page. Sidebar with view list, double iframe viewport, panels for data inspection (editable, with placeholder fallback), tool call logging, capability toggles, and viewport sizing.
 
 Started via `kitstack dev --views` (defaults to port 5174).
 
@@ -181,6 +181,33 @@ npx kitstack dev --views
 ```
 
 Click a view in the sidebar → loader runs against local SQLite → view renders in double iframe with the same postMessage protocol as production.
+
+#### View placeholders
+
+Views can define optional `placeholder` data in `defineView()`. When the loader returns empty/null (e.g., fresh database), the DevKit falls back to the placeholder and displays it in the Data Inspector with a `PLACEHOLDER` tag.
+
+```typescript
+export default defineView({
+  slug: "contact-detail",
+  name: "Contact Detail",
+  description: "to view detailed contact info with deals and activity",
+  loader,
+  component: ContactDetailView,
+  placeholder: {
+    contact: { id: "c1", name: "Jane Doe", company: "Acme Corp", email: "jane@acme.co", ... },
+    deals: [{ id: "d1", name: "Brand Refresh", value: 18000, stage: "proposal", ... }],
+    recentActivities: [{ id: "a1", type: "meeting", description: "Kick-off call", ... }],
+  },
+});
+```
+
+The placeholder is typed against the loader's return type — TypeScript errors if the shape doesn't match.
+
+The Data Inspector is editable: modify the JSON and click **"Send to view"** to re-render the component with the edited data. The source tag shows `LOADER`, `PLACEHOLDER`, or `EDITED` depending on the data origin.
+
+**Production stripping:** `defineKit()` extracts placeholders from view definitions and stores them in `kit._placeholders`. The `placeholder` field is deleted from each view, so it never appears in the production server bundle (`kit.mjs`). The DevKit server reads `_placeholders` and injects them into the host page as `window.__DEVKIT_KIT__.placeholders`.
+
+**Restart required:** Placeholder changes require restarting `kitstack dev` since the kit config is imported once at startup. View component changes (View.tsx) are hot-reloaded by Vite without restart.
 
 ### Self-host a kit
 
