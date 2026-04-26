@@ -217,6 +217,12 @@ export interface ViewDefinition<TLoader extends LoaderFn = LoaderFn> {
   permissions?: {
     clipboardWrite?: boolean;
   };
+  /**
+   * Sample data matching the loader's return type, used by the DevKit
+   * preview when the database is empty. Stripped from production builds
+   * by {@link defineKit} — never shipped to Lambda.
+   */
+  placeholder?: Awaited<ReturnType<TLoader>>;
 }
 
 // --- Kit Definition ---
@@ -272,6 +278,13 @@ export interface KitDefinition {
   instructions: string;
   tools: ToolDefinition[];
   views?: ViewDefinition<any>[];
+  /**
+   * View placeholder data extracted from view definitions by
+   * {@link defineKit}. Keyed by view slug. Used by the DevKit server
+   * only — not included in production builds.
+   * @internal
+   */
+  _placeholders?: Record<string, unknown>;
 }
 
 // --- Protocol types (Router ↔ Kit Lambda) ---

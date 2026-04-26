@@ -198,5 +198,20 @@ export function defineKit(config: {
     }
   }
 
-  return config;
+  // Extract placeholder data from views so it's available to the devkit
+  // server but stripped from the view definitions (keeps prod bundles lean).
+  const placeholders: Record<string, unknown> = {};
+  if (config.views) {
+    for (const view of config.views) {
+      if (view.placeholder !== undefined) {
+        placeholders[view.slug] = view.placeholder;
+        delete view.placeholder;
+      }
+    }
+  }
+
+  return {
+    ...config,
+    _placeholders: Object.keys(placeholders).length > 0 ? placeholders : undefined,
+  };
 }

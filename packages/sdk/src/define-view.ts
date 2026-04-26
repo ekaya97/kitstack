@@ -56,6 +56,12 @@ export function defineView<TLoader extends LoaderFn>(config: {
   permissions?: {
     clipboardWrite?: boolean;
   };
+  /**
+   * Sample data matching the loader's return type. Used by the DevKit
+   * to preview views when the database is empty. Stripped from production
+   * builds — never shipped to Lambda.
+   */
+  placeholder?: Awaited<ReturnType<TLoader>>;
 }): ViewDefinition<TLoader> {
   return config;
 }
