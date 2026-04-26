@@ -41,6 +41,11 @@ export default function DashboardPage() {
 
   const [showCancelModal, setShowCancelModal] = useState(false);
   const [deleteTarget, setDeleteTarget] = useState<string | null>(null);
+  const [isAdmin, setIsAdmin] = useState(false);
+
+  useEffect(() => {
+    fetch("/api/admin/me").then((r) => { if (r.ok) setIsAdmin(true); });
+  }, []);
 
   useEffect(() => {
     if (!isPending && !session?.user) {
@@ -112,6 +117,14 @@ export default function DashboardPage() {
           </div>
         </div>
         <div className="flex gap-2.5">
+          {isAdmin && (
+            <Link
+              href="/admin"
+              className="ks-btn !py-2.5 !px-4 !text-[13px] !border-ks-accent !text-ks-accent"
+            >
+              Admin
+            </Link>
+          )}
           <button
             onClick={() => authClient.signOut().then(() => router.replace("/"))}
             className="ks-btn !py-2.5 !px-4 !text-[13px]"
