@@ -473,7 +473,6 @@ export async function handler(
               statusCode: asset.status || 200,
               headers: {
                 "Content-Type": asset.contentType || "application/javascript",
-                "Access-Control-Allow-Origin": "*",
                 "Cache-Control": "no-cache",
               },
               body: asset.body || "",
