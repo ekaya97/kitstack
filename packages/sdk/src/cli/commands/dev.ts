@@ -250,8 +250,9 @@ export default defineConfig({
     }
 
     // Create MCP handler — use CDN for view assets (uploaded via kitstack deploy)
-    const kitCdn = process.env.KITSTACK_KIT_CDN || "";
-    const handler = createMcpHandler({ kit, db, platformCdn: kitCdn, kitCdn });
+    const platformCdn = process.env.KITSTACK_CDN || "";
+    const kitCdnUrl = process.env.KITSTACK_KIT_CDN || "";
+    const handler = createMcpHandler({ kit, db, platformCdn, kitCdn: kitCdnUrl });
 
     console.error(`\n  ${kit.name} dev server`);
     console.error(`  Connecting to relay...\n`);
