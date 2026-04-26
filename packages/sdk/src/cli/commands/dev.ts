@@ -174,7 +174,6 @@ export async function dev(args: string[]) {
     const relayUrl = process.env.KITSTACK_RELAY_URL || "wss://relay.kitstack.co";
     const mcpBaseUrl = process.env.KITSTACK_MCP_URL || "https://mcp.kitstack.co";
     const publicUrl = `${mcpBaseUrl}/dev/${sessionId}`;
-    const devAssetBaseUrl = `${mcpBaseUrl}/dev/${sessionId}`;
 
     // Start local Vite dev server for view assets (if kit has views)
     let vitePort = 5175;
@@ -250,11 +249,9 @@ export default defineConfig({
       console.error(`  Vite dev server running on port ${vitePort}`);
     }
 
-    // Create MCP handler with dev asset URL
-    const handler = createMcpHandler({
-      kit, db,
-      devAssetBaseUrl: kit.views?.length ? devAssetBaseUrl : undefined,
-    });
+    // Create MCP handler — use CDN for view assets (uploaded via kitstack deploy)
+    const kitCdn = process.env.KITSTACK_KIT_CDN || "";
+    const handler = createMcpHandler({ kit, db, platformCdn: kitCdn, kitCdn });
 
     console.error(`\n  ${kit.name} dev server`);
     console.error(`  Connecting to relay...\n`);
