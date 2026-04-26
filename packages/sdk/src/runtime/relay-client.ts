@@ -39,6 +39,8 @@ export interface RelayOptions {
   onReady?: () => void;
   /** Called when the connection is lost (before reconnect). */
   onDisconnect?: () => void;
+  /** Local Vite dev server port for asset serving. Default: 5175 */
+  vitePort?: number;
 }
 
 /**
@@ -70,19 +72,46 @@ export async function connectRelay(opts: RelayOptions): Promise<never> {
     });
 
     ws.addEventListener("message", async (event) => {
-      let message: { requestId?: string; method?: string; params?: Record<string, unknown> };
+      let message: any;
       try {
         message = JSON.parse(typeof event.data === "string" ? event.data : event.data.toString());
       } catch {
         return;
       }
 
-      const { requestId, method, params } = message;
-      if (!requestId || !method) return;
+      const { requestId } = message;
+      if (!requestId) return;
+
+      // Asset request — fetch from local Vite dev server
+      if (message.type === "asset") {
+        const assetPath = message.path as string;
+        console.error(`  ← asset ${assetPath}`);
+        try {
+          const vitePort = opts.vitePort || 5175;
+          const res = await fetch(`http://localhost:${vitePort}/${assetPath}`);
+          const body = await res.text();
+          const contentType = res.headers.get("content-type") || "application/javascript";
+          console.error(`  → ${res.status} (${contentType.split(";")[0]})`);
+          ws.send(JSON.stringify({
+            requestId,
+            result: { status: res.status, contentType, body },
+          }));
+        } catch (err: any) {
+          console.error(`  → FAIL (${err.message})`);
+          ws.send(JSON.stringify({
+            requestId,
+            result: { status: 502, contentType: "text/plain", body: `Vite not reachable: ${err.message}` },
+          }));
+        }
+        return;
+      }
+
+      // MCP request
+      const { method, params } = message;
+      if (!method) return;
 
       console.error(`  ← ${method}${params ? ` ${JSON.stringify(params).slice(0, 80)}` : ""}`);
 
-      // Build a JSON-RPC request and dispatch to the handler
       const request: JsonRpcRequest = {
         jsonrpc: "2.0",
         id: requestId,
@@ -92,8 +121,6 @@ export async function connectRelay(opts: RelayOptions): Promise<never> {
 
       const response = await handler.handleRequest(request);
 
-      // Always send a response — even for notifications (null response)
-      // so the router's polling loop doesn't block waiting.
       if (response) {
         const isError = response.error != null;
         console.error(`  → ${isError ? "ERROR" : "OK"} (${method})`);

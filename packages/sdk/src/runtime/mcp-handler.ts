@@ -180,6 +180,12 @@ export interface McpHandlerConfig {
   /** Pre-built shell HTML. If omitted, generated from shell-template.ts. */
   shellHtml?: string;
   /**
+   * Base URL for dev relay asset serving (e.g. "https://mcp.kitstack.co/dev/67c99a1f/assets").
+   * When set, the shell HTML loads view modules from this URL and the kit_view
+   * response includes CSP allowing this domain.
+   */
+  devAssetBaseUrl?: string;
+  /**
    * Authorization check function. Called for each {@link AuthzRequirement}
    * returned by a tool's `authorize` hook. If any check returns `false`,
    * the tool call is rejected with a "Forbidden" error.
@@ -574,6 +580,23 @@ export function createMcpHandler(config: McpHandlerConfig): McpHandler {
     // Build the view-specific URI
     const viewUri = `ui://kitstack/${kit.id}/${view.slug}`;
 
+    // If devAssetBaseUrl is set, generate a dev shell that loads from the relay
+    const viewShellHtml = config.devAssetBaseUrl
+      ? generateDevRelayShell(kit, view.slug, config.devAssetBaseUrl)
+      : shellHtml;
+
+    // Build CSP domains — include dev asset URL if in relay dev mode
+    const cspDomains: string[] = [
+      "https://fonts.googleapis.com",
+      "https://fonts.gstatic.com",
+    ];
+    if (config.devAssetBaseUrl) {
+      const assetOrigin = new URL(config.devAssetBaseUrl).origin;
+      cspDomains.push(assetOrigin);
+    }
+    if (config.platformCdn) cspDomains.push(config.platformCdn);
+    if (config.kitCdn) cspDomains.push(config.kitCdn);
+
     // Return two content blocks: JSON data + HTML shell embedded resource
     const content: KitToolContentBlock[] = [
       { type: "text", text: dataPayload },
@@ -582,8 +605,16 @@ export function createMcpHandler(config: McpHandlerConfig): McpHandler {
         resource: {
           uri: viewUri,
           mimeType: "text/html;profile=mcp-app",
-          text: shellHtml,
-        },
+          text: viewShellHtml,
+          _meta: {
+            ui: {
+              csp: {
+                resourceDomains: cspDomains,
+                connectDomains: cspDomains,
+              },
+            },
+          },
+        } as any,
       },
     ];
 
@@ -704,4 +735,124 @@ function errorResult(text: string): KitToolResult {
     content: [{ type: "text", text }],
     isError: true,
   };
+}
+
+/**
+ * Generate a shell HTML for dev relay mode that loads view modules
+ * from the relay asset endpoint instead of CDN.
+ */
+function generateDevRelayShell(kit: KitDefinition, viewSlug: string, assetBaseUrl: string): string {
+  return `<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<style>
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body { font-family: system-ui, -apple-system, sans-serif; font-size: 14px; color: #171512; background: #faf7f1; }
+  .ks-loading { display: flex; align-items: center; justify-content: center; min-height: 200px; color: #6b6357; }
+  .ks-error { padding: 16px; color: #b91c1c; background: #fef2f2; border: 1px solid #fecaca; border-radius: 6px; }
+</style>
+<link rel="stylesheet" href="${assetBaseUrl}/.kitstack/devkit-entries/styles-proxy.css">
+</head>
+<body>
+<div id="root"><div class="ks-loading">Loading view...</div></div>
+<script type="module">
+const KIT_ID = ${JSON.stringify(kit.id)};
+const ASSET_BASE = ${JSON.stringify(assetBaseUrl)};
+
+let requestId = 0;
+const pending = new Map();
+let viewMounted = false;
+
+function send(msg) { window.parent.postMessage(msg, "*"); }
+function sendRequest(method, params) {
+  const id = ++requestId;
+  return new Promise((resolve, reject) => {
+    pending.set(id, { resolve, reject });
+    send({ jsonrpc: "2.0", id, method, params });
+  });
+}
+function sendNotification(method, params) {
+  send({ jsonrpc: "2.0", method, params });
+}
+
+window.addEventListener("message", (event) => {
+  const msg = event.data;
+  if (!msg || msg.jsonrpc !== "2.0") return;
+  if ("id" in msg && pending.has(msg.id)) {
+    const { resolve, reject } = pending.get(msg.id);
+    pending.delete(msg.id);
+    if (msg.error) reject(msg.error); else resolve(msg.result);
+    return;
+  }
+  if (msg.method === "ui/notifications/tool-result" || msg.method === "ui/notifications/tool-input") {
+    if (!viewMounted) handleToolResult(msg.params);
+  }
+});
+
+window.__KITSTACK_MCP__ = {
+  callTool: (cmd, params) =>
+    sendRequest("tools/call", { name: "kit", arguments: { id: KIT_ID, cmd, params } }),
+  kit: KIT_ID,
+  view: "${viewSlug}",
+  capabilities: {},
+};
+
+function handleToolResult(params) {
+  const candidates = [params?.result?.content, params?.content];
+  for (const content of candidates) {
+    if (!Array.isArray(content)) continue;
+    const tb = content.find(c => c.type === "text");
+    if (!tb?.text) continue;
+    try {
+      const data = JSON.parse(tb.text);
+      if (data.view) { loadView(data); return; }
+    } catch {}
+  }
+}
+
+async function loadView(data) {
+  const root = document.getElementById("root");
+  root.innerHTML = '<div class="ks-loading">Loading view...</div>';
+  try {
+    window.__KITSTACK_DATA__ = data.data;
+
+    // Load view module from relay asset endpoint
+    const module = await import(ASSET_BASE + "/.kitstack/devkit-entries/" + data.view + ".tsx");
+    const container = document.createElement("div");
+    root.innerHTML = "";
+    root.appendChild(container);
+
+    if (module.mount) {
+      module.mount(container, data.data);
+      viewMounted = true;
+      requestAnimationFrame(() => {
+        sendNotification("ui/notifications/size-changed", {
+          width: document.body.scrollWidth,
+          height: Math.max(document.body.scrollHeight, 400),
+        });
+      });
+    }
+  } catch (err) {
+    root.innerHTML = '<div class="ks-error">View load failed: ' + err.message + '</div>';
+  }
+}
+
+async function init() {
+  try {
+    await sendRequest("ui/initialize", {
+      protocolVersion: "2026-01-26",
+      appCapabilities: {},
+      appInfo: { name: "KitStack Dev", version: "1.0.0" },
+    });
+    sendNotification("ui/notifications/initialized");
+  } catch (e) {
+    console.error("Init failed:", e);
+  }
+}
+
+init();
+</script>
+</body>
+</html>`;
 }

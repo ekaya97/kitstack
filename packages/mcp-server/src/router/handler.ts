@@ -429,6 +429,64 @@ export async function handler(
 
     // --- Dev Relay ---
 
+    // Dev Relay asset requests (GET /dev/{sessionId}/assets/*)
+    // Serves view JS/CSS from the developer's local Vite dev server via WebSocket relay.
+    // No auth required — these are <script> and <link> tags in the iframe.
+    if (path.match(/^\/dev\/[^/]+\/assets\//) && method === "GET") {
+      const parts = path.split("/");
+      const sessionId = parts[2];
+      const assetPath = parts.slice(4).join("/"); // "contacts.js", "@vite/client", etc.
+
+      const session = await getOAuthItem(`DEV_SESSION#${sessionId}`, "CONNECTION");
+      if (!session) return { statusCode: 404, body: "Dev session not found" };
+
+      const connectionId = (session as any).connectionId as string;
+      if (!connectionId) return { statusCode: 502, body: "Dev session disconnected" };
+
+      const wsEndpoint = devRelayUrl();
+      if (!wsEndpoint) return { statusCode: 500, body: "Relay not configured" };
+
+      const requestId = `${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
+
+      try {
+        const { ApiGatewayManagementApiClient, PostToConnectionCommand } =
+          await import("@aws-sdk/client-apigatewaymanagementapi");
+        const mgmtEndpoint = wsEndpoint.replace("wss://", "https://").replace("ws://", "http://");
+        const mgmt = new ApiGatewayManagementApiClient({ endpoint: mgmtEndpoint });
+        await mgmt.send(new PostToConnectionCommand({
+          ConnectionId: connectionId,
+          Data: Buffer.from(JSON.stringify({ requestId, type: "asset", path: assetPath })),
+        }));
+      } catch {
+        return { statusCode: 502, body: "Dev session disconnected" };
+      }
+
+      // Poll for response
+      const { getRelayResponse, deleteRelayResponse } = await import("../relay/store.js");
+      for (let i = 0; i < 50; i++) { // 50 × 100ms = 5s max
+        const body = await getRelayResponse(requestId);
+        if (body !== null) {
+          deleteRelayResponse(requestId).catch(() => {});
+          try {
+            const asset = JSON.parse(body);
+            return {
+              statusCode: asset.status || 200,
+              headers: {
+                "Content-Type": asset.contentType || "application/javascript",
+                "Access-Control-Allow-Origin": "*",
+                "Cache-Control": "no-cache",
+              },
+              body: asset.body || "",
+            };
+          } catch {
+            return { statusCode: 502, body: "Invalid asset response" };
+          }
+        }
+        await new Promise((r) => setTimeout(r, 100));
+      }
+      return { statusCode: 504, body: "Asset request timed out" };
+    }
+
     // Serve OAuth metadata at /dev/{sessionId}/.well-known/oauth-authorization-server
     // so Claude.ai can complete the OAuth flow when connecting to a dev session URL.
     if (path.match(/^\/dev\/[^/]+\/\.well-known\/oauth-authorization-server$/)) {
