@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { Resource } from "sst";
 import { getSessionOrNull } from "@/lib/auth-session";
+import { trackMcpConnectionChecked } from "@/lib/analytics-server";
 
 export async function GET() {
   const session = await getSessionOrNull();
@@ -21,6 +22,7 @@ export async function GET() {
     }
 
     const data = await res.json();
+    trackMcpConnectionChecked(session.user.id, !!data.connected);
     return NextResponse.json({ connected: data.connected });
   } catch (err: any) {
     return NextResponse.json({

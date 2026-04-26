@@ -4,6 +4,7 @@ import { useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { motion, AnimatePresence } from "framer-motion";
 import { authClient } from "@/lib/auth-client";
+import { trackUserSignedUp, trackUserSignedIn } from "@/lib/analytics";
 
 type Step = "email" | "signin" | "signup";
 
@@ -95,6 +96,7 @@ export default function LoginPage() {
         setError(authError.message || "Could not create account.");
         return;
       }
+      trackUserSignedUp("email");
     } else {
       const { error: authError } = await authClient.signIn.email({
         email,
@@ -105,6 +107,7 @@ export default function LoginPage() {
         setError(authError.message || "Invalid email or password.");
         return;
       }
+      trackUserSignedIn("email");
     }
 
     // If this login was triggered by the MCP OAuth flow, redirect back to the
@@ -128,6 +131,8 @@ export default function LoginPage() {
   };
 
   const handleOAuth = async (provider: "google" | "github") => {
+    trackUserSignedIn(provider);
+
     // For OAuth social login during MCP flow, we need the callback to come
     // back to this login page first, then redirect to MCP callback
     if (oauthCallback && oauthSessionId) {

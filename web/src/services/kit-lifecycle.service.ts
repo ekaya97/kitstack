@@ -25,6 +25,7 @@ import {
   trackKitActivationFailed,
   trackKitDeactivated,
   trackKitDeactivationFailed,
+  trackKitDeleted,
 } from "@/lib/analytics-server";
 import { log } from "@/lib/logger";
 import { grantRelation, revokeRelation } from "../../../packages/authz/src/lifecycle";
@@ -268,6 +269,8 @@ export async function deleteKit(
   }
 
   await revokeRelation(db, userId, "activator", "kit", kitSlug);
+
+  trackKitDeleted(userId, kitSlug);
 
   return { ok: true, data: { status: "deleted", kitSlug } };
 }

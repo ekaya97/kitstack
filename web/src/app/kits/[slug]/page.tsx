@@ -21,6 +21,7 @@ import { HeaderRating } from "@/components/reviews/header-rating";
 import { ReviewSection } from "@/components/reviews/review-section";
 import { AppPreviewTabs } from "@/components/shared/app-preview-tabs";
 import { KitActivateCard } from "@/components/shared/kit-activate-card";
+import { TrackKitPageView } from "@/components/shared/track-page-view";
 
 export async function generateStaticParams() {
   const kits = await getAllKitCards();
@@ -56,6 +57,7 @@ export default async function KitDetailPage({
 
   return (
     <div className="bg-ks-paper min-h-screen flex flex-col">
+      <TrackKitPageView slug={slug} />
       <Nav active="Kits" />
 
       {/* ── HEADER ── */}

@@ -20,6 +20,7 @@ import { DownloadButton } from "@/components/shared/download-button";
 import { SetupGuide } from "@/components/shared/setup-guide";
 import { WishlistButton } from "@/components/shared/wishlist-button";
 import { ShareButton } from "@/components/shared/share-modal";
+import { TrackSkillPageView } from "@/components/shared/track-page-view";
 
 export async function generateStaticParams() {
   const skills = await getAllSkillCards();
@@ -128,6 +129,7 @@ export default async function SkillDetailPage({
 
   return (
     <div className="bg-ks-paper min-h-screen flex flex-col">
+      <TrackSkillPageView slug={slug} />
       <Nav active="Skills" />
 
       {/* ── HEADER ── */}
@@ -244,9 +246,12 @@ export default async function SkillDetailPage({
                   Try {upgradeKit.name} &rarr;
                 </Link>
               ) : (
-                <button className="ks-btn w-full justify-center !py-2.5 !text-[13px] mb-4">
+                <Link
+                  href={`/skills/${slug}/try`}
+                  className="ks-btn w-full justify-center !py-2.5 !text-[13px] mb-4"
+                >
                   Try it first &middot; 1 free/day
-                </button>
+                </Link>
               )}
 
               {/* Action row */}
