@@ -80,6 +80,8 @@ export async function connectRelay(opts: RelayOptions): Promise<never> {
       const { requestId, method, params } = message;
       if (!requestId || !method) return;
 
+      console.error(`  ← ${method}${params ? ` ${JSON.stringify(params).slice(0, 80)}` : ""}`);
+
       // Build a JSON-RPC request and dispatch to the handler
       const request: JsonRpcRequest = {
         jsonrpc: "2.0",
@@ -92,6 +94,8 @@ export async function connectRelay(opts: RelayOptions): Promise<never> {
 
       // Send the result back through the WebSocket
       if (response) {
+        const isError = response.error != null;
+        console.error(`  → ${isError ? "ERROR" : "OK"} (${method})`);
         ws.send(JSON.stringify({ requestId, result: response.result ?? response.error }));
       }
     });

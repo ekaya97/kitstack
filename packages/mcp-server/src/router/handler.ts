@@ -23,6 +23,7 @@ import {
   mcpInternalApiKey,
   betterAuthUrl,
   devRelayUrl,
+  mcpPublicUrl,
 } from "../config";
 import type { JsonRpcRequest } from "./types";
 
@@ -30,6 +31,8 @@ const lambda = new LambdaClient({});
 const dynamo = new DynamoDBClient({});
 
 function serverUrlFromEvent(event: APIGatewayProxyEventV2): string {
+  const publicUrl = mcpPublicUrl();
+  if (publicUrl) return publicUrl;
   return `https://${event.requestContext.domainName}`;
 }
 
@@ -424,8 +427,94 @@ export async function handler(
       return json({ connected: hasActiveToken }, 200, origin);
     }
 
-    // --- Dev Relay (POST /dev/{sessionId}) ---
+    // --- Dev Relay ---
 
+    // Serve OAuth metadata at /dev/{sessionId}/.well-known/oauth-authorization-server
+    // so Claude.ai can complete the OAuth flow when connecting to a dev session URL.
+    if (path.match(/^\/dev\/[^/]+\/\.well-known\/oauth-authorization-server$/)) {
+      const parts = path.split("/");
+      const sessionId = parts[2];
+      const devBaseUrl = `${serverUrlFromEvent(httpEvent)}/dev/${sessionId}`;
+      return json(getOAuthMetadata(devBaseUrl), 200, origin);
+    }
+
+    // Handle OAuth endpoints under /dev/{sessionId}/*
+    if (path.match(/^\/dev\/[^/]+\/(register|authorize|token|revoke)/) ) {
+      // Strip /dev/{sessionId} prefix and re-route to the main OAuth handlers
+      const parts = path.split("/");
+      const sessionId = parts[2];
+      const oauthPath = "/" + parts.slice(3).join("/");
+      const devBaseUrl = `${serverUrlFromEvent(httpEvent)}/dev/${sessionId}`;
+
+      // Rewrite the path and delegate to the same OAuth logic
+      // by creating a modified event with the stripped path
+      const modifiedEvent = {
+        ...httpEvent,
+        rawPath: oauthPath,
+        requestContext: {
+          ...httpEvent.requestContext,
+          http: { ...httpEvent.requestContext.http },
+        },
+      };
+      // Override serverUrlFromEvent for this request
+      (modifiedEvent as any)._devBaseUrl = devBaseUrl;
+
+      // Re-enter the handler with the modified path
+      // For simplicity, handle the key endpoints inline:
+      if (oauthPath === "/register" && method === "POST") {
+        const body = safeParseBody(httpEvent.body, httpEvent.headers["content-type"]);
+        if (!body) return json({ error: "Invalid request body" }, 400, origin);
+        const result = await handleRegister(body, putOAuthItem);
+        return json(result, 201, origin);
+      }
+
+      if (oauthPath === "/authorize" && method === "GET") {
+        const params = httpEvent.queryStringParameters || {};
+        const authorizeParams = {
+          response_type: params.response_type || "",
+          client_id: params.client_id || "",
+          redirect_uri: params.redirect_uri || "",
+          code_challenge: params.code_challenge || "",
+          code_challenge_method: params.code_challenge_method || "",
+          state: params.state || "",
+          scope: params.scope,
+        };
+        const validation = await validateAuthorizeRequest(authorizeParams, getOAuthItem);
+        if (!validation.valid) {
+          return json({ error: validation.error }, 400, origin);
+        }
+        const authSessionId = await storeAuthorizeSession(authorizeParams, putOAuthItem);
+        const loginUrl = new URL(`${betterAuthUrl()}/login`);
+        loginUrl.searchParams.set("callback", `${devBaseUrl}/authorize/callback`);
+        loginUrl.searchParams.set("session_id", authSessionId);
+        return { statusCode: 302, headers: { Location: loginUrl.toString() }, body: "" };
+      }
+
+      if (oauthPath.startsWith("/authorize/callback")) {
+        const params = httpEvent.queryStringParameters || {};
+        const authSessionId = params.session_id;
+        const userId = params.user_id;
+        if (!authSessionId || !userId) {
+          return json({ error: "Missing session_id or user_id" }, 400, origin);
+        }
+        const result = await issueAuthCode(userId, authSessionId, getOAuthItem, putOAuthItem, deleteOAuthItem);
+        const redirect = new URL(result.redirectUri);
+        redirect.searchParams.set("code", result.code);
+        if (result.state) redirect.searchParams.set("state", result.state);
+        return { statusCode: 302, headers: { Location: redirect.toString() }, body: "" };
+      }
+
+      if (oauthPath === "/token" && method === "POST") {
+        const body = safeParseBody(httpEvent.body, httpEvent.headers["content-type"]);
+        if (!body) return json({ error: "Invalid request body" }, 400, origin);
+        const tokenResult = await handleTokenExchange(body, getOAuthItem, putOAuthItem, deleteOAuthItem);
+        return json(tokenResult, 200, origin);
+      }
+
+      return json({ error: "Not found" }, 404, origin);
+    }
+
+    // Dev Relay MCP requests (POST /dev/{sessionId})
     if (path.startsWith("/dev/") && method === "POST") {
       const sessionId = path.slice(5); // "/dev/abc123" → "abc123"
       if (!sessionId) return json({ error: "Missing sessionId" }, 400, origin);

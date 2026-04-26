@@ -33,6 +33,10 @@ export const betterAuthUrl = () => Resource.BetterAuthUrl.value || "http://local
 export const devRelayUrl = (): string => (Resource as any).DevRelay?.url?.replace(/\/$/, "") || "";
 export const devRelayStoreTable = (): string => (Resource as any).DevRelayStore?.name || "";
 
+// --- Public URL ---
+
+export const mcpPublicUrl = (): string => (Resource as any).McpDomain?.url?.replace(/\/$/, "") || "";
+
 // --- CDN & Storage ---
 
 export const kitCdnUrl = (): string => (Resource as any).KitCdn?.url?.replace(/\/$/, "") || "";
