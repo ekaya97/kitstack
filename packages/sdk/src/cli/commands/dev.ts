@@ -150,7 +150,7 @@ export async function dev(args: string[]) {
   // Views mode — start DevKit HTTP server
   if (views) {
     const { startDevKitServer } = await import("../../devkit/server.js");
-    await startDevKitServer({ kit, db, port: viewsPort });
+    await startDevKitServer({ kit, db, port: viewsPort, kitRoot: kitDir });
     return;
   }
 
