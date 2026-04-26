@@ -439,14 +439,16 @@ export async function handler(
       const sessionId = parts[2];
       const assetPath = parts.slice(3).join("/"); // everything after /dev/{sessionId}/
 
+      const corsHeaders = { "Access-Control-Allow-Origin": "*", "Cache-Control": "no-cache" };
+
       const session = await getOAuthItem(`DEV_SESSION#${sessionId}`, "CONNECTION");
-      if (!session) return { statusCode: 404, body: "Dev session not found" };
+      if (!session) return { statusCode: 404, headers: corsHeaders, body: "Dev session not found" };
 
       const connectionId = (session as any).connectionId as string;
-      if (!connectionId) return { statusCode: 502, body: "Dev session disconnected" };
+      if (!connectionId) return { statusCode: 502, headers: corsHeaders, body: "Dev session disconnected" };
 
       const wsEndpoint = devRelayUrl();
-      if (!wsEndpoint) return { statusCode: 500, body: "Relay not configured" };
+      if (!wsEndpoint) return { statusCode: 500, headers: corsHeaders, body: "Relay not configured" };
 
       const requestId = `${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
 
@@ -460,7 +462,7 @@ export async function handler(
           Data: Buffer.from(JSON.stringify({ requestId, type: "asset", path: assetPath })),
         }));
       } catch {
-        return { statusCode: 502, body: "Dev session disconnected" };
+        return { statusCode: 502, headers: corsHeaders, body: "Dev session disconnected" };
       }
 
       // Poll for response
@@ -475,18 +477,17 @@ export async function handler(
               statusCode: asset.status || 200,
               headers: {
                 "Content-Type": asset.contentType || "application/javascript",
-                "Access-Control-Allow-Origin": "*",
-                "Cache-Control": "no-cache",
+                ...corsHeaders,
               },
               body: asset.body || "",
             };
           } catch {
-            return { statusCode: 502, body: "Invalid asset response" };
+            return { statusCode: 502, headers: corsHeaders, body: "Invalid asset response" };
           }
         }
         await new Promise((r) => setTimeout(r, 100));
       }
-      return { statusCode: 504, body: "Asset request timed out" };
+      return { statusCode: 504, headers: corsHeaders, body: "Asset request timed out" };
     }
 
     // Serve OAuth metadata at /dev/{sessionId}/.well-known/oauth-authorization-server
