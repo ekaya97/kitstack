@@ -44,6 +44,13 @@
     @apply bg-ks-ink text-ks-paper rounded-xl;
   }
 
+  /* Inputs */
+  .ks-input {
+    @apply w-full font-sans text-[13px] px-3 py-2 rounded-lg border border-ks-hair
+           bg-white text-ks-ink outline-none
+           focus:border-ks-accent transition-colors;
+  }
+
   /* Typography accents */
   .ks-strike {
     @apply line-through decoration-ks-accent decoration-[1.5px];
