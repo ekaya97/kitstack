@@ -229,7 +229,7 @@ async function loadView(data) {
     root.innerHTML = '<div style="font-size:11px;color:#999;padding:4px;border-bottom:1px solid #eee;margin-bottom:4px">' + debugInfo + '</div><div id="ks-content"><div class="ks-loading">Loading view...</div></div>';
 
     // Load assets
-    loadCSS(KIT_CDN + "/style.css");
+    loadCSS(CDN + "/style.css");
     await loadScript(CDN + "/vendor.js");
     await loadScript(CDN + "/shared.js");
     await loadScript(KIT_CDN + "/" + data.view + ".js");
