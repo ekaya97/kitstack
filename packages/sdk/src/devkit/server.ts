@@ -46,7 +46,12 @@ export async function startDevKitServer(options: DevKitServerOptions): Promise<v
     if (!existsSync(viewFile)) continue;
 
     const relPath = relative(entryDir, viewFile).replace(/\\/g, "/");
-    const entry = `
+    const stylesFile = resolve(kitRoot, "src/views/styles.css");
+    const stylesImport = existsSync(stylesFile)
+      ? `import "${relative(entryDir, stylesFile).replace(/\\/g, "/")}";\n`
+      : "";
+    const entry = `${stylesImport}
+import React from "react";
 import { createRoot } from "react-dom/client";
 import * as ViewModule from "${relPath}";
 
@@ -57,7 +62,7 @@ export function mount(container, data) {
     container.innerHTML = "<p>No view component found</p>";
     return;
   }
-  createRoot(container).render(Component({ data }));
+  createRoot(container).render(React.createElement(Component, { data }));
 }
 
 ((window).__KITSTACK_VIEWS__ ??= {})["${kit.id}/${view.slug}"] = { mount };
@@ -65,22 +70,45 @@ export function mount(container, data) {
     writeFileSync(resolve(entryDir, `${view.slug}.tsx`), entry);
   }
 
-  // Vite config
+  // Vite config — root is kit dir so Tailwind/PostCSS configs are found
+  const projectRoot = resolve(kitRoot, "../..");
   writeFileSync(resolve(entryDir, "vite.config.ts"), `
 import { defineConfig } from "vite";
-import react from "@vitejs/plugin-react";
+import { resolve } from "path";
 
 export default defineConfig({
-  plugins: [react()],
+  root: "${kitRoot.replace(/\\/g, "/")}",
   server: { port: ${vitePort}, strictPort: true, cors: true },
+  esbuild: { jsx: "automatic" },
+  css: {
+    postcss: "${entryDir.replace(/\\/g, "/")}",
+  },
+  resolve: {
+    dedupe: ["react", "react-dom"],
+    alias: {
+      "react": resolve("${projectRoot.replace(/\\/g, "/")}", "node_modules/react"),
+      "react-dom": resolve("${projectRoot.replace(/\\/g, "/")}", "node_modules/react-dom"),
+    },
+  },
 });
 `);
 
-  // Index HTML for Vite
+  // PostCSS config in entry dir pointing to the kit's Tailwind config
+  const twConfigPath = resolve(kitRoot, "tailwind.config.ts").replace(/\\/g, "/");
+  writeFileSync(resolve(entryDir, "postcss.config.cjs"), `
+module.exports = {
+  plugins: {
+    tailwindcss: { config: "${twConfigPath}" },
+    autoprefixer: {},
+  },
+};
+`);
+
+  // Index HTML for Vite (must be in the Vite root = kitRoot)
   const entryImports = (kit.views ?? [])
-    .map((v) => `<script type="module" src="/${v.slug}.tsx"></script>`)
+    .map((v) => `<script type="module" src="/.kitstack/devkit-entries/${v.slug}.tsx"></script>`)
     .join("\n    ");
-  writeFileSync(resolve(entryDir, "index.html"), `<!DOCTYPE html>
+  writeFileSync(resolve(kitRoot, "index.html"), `<!DOCTYPE html>
 <html><head><meta charset="utf-8"></head>
 <body><div id="root"></div>${entryImports}</body></html>`);
 
@@ -200,8 +228,17 @@ export default defineConfig({
       return;
     }
 
-    res.writeHead(404);
-    res.end("Not found");
+    // Proxy everything else to Vite dev server (view modules, HMR, etc.)
+    try {
+      const viteReq = await fetch(`http://localhost:${vitePort}${url.pathname}${url.search}`);
+      const contentType = viteReq.headers.get("content-type") || "application/octet-stream";
+      res.writeHead(viteReq.status, { "Content-Type": contentType });
+      const body = Buffer.from(await viteReq.arrayBuffer());
+      res.end(body);
+    } catch {
+      res.writeHead(502);
+      res.end("Vite dev server not reachable");
+    }
   });
 
   httpServer.listen(port, () => {
@@ -232,7 +269,6 @@ function generateDevShellHtml(kit: KitDefinition, vitePort: number): string {
   .ks-loading { display: flex; align-items: center; justify-content: center; min-height: 200px; color: #6b6357; }
   .ks-error { padding: 16px; color: #b91c1c; background: #fef2f2; border: 1px solid #fecaca; border-radius: 6px; }
 </style>
-<script type="module" src="${viteUrl}/@vite/client"></script>
 </head>
 <body>
 <div id="root"><div class="ks-loading">Loading view...</div></div>
@@ -259,6 +295,7 @@ function sendNotification(method, params) {
 window.addEventListener("message", (event) => {
   const msg = event.data;
   if (!msg || msg.jsonrpc !== "2.0") return;
+  console.log("[shell] received:", msg.method || "response", msg);
   if ("id" in msg && pending.has(msg.id)) {
     const { resolve, reject } = pending.get(msg.id);
     pending.delete(msg.id);
@@ -266,12 +303,14 @@ window.addEventListener("message", (event) => {
     return;
   }
   if (msg.method === "ui/notifications/sandbox-proxy-ready") {
+    console.log("[shell] proxy ready, sending resource-ready");
     sendNotification("ui/notifications/sandbox-resource-ready", {
       html: document.documentElement.outerHTML,
     });
     return;
   }
   if (msg.method === "ui/notifications/tool-result" || msg.method === "ui/notifications/tool-input") {
+    console.log("[shell] tool-result received, viewMounted:", viewMounted);
     if (!viewMounted) handleToolResult(msg.params);
   }
 });
@@ -304,7 +343,7 @@ async function loadView(data) {
     window.__KITSTACK_MCP__.view = data.view;
     window.__KITSTACK_DATA__ = data.data;
 
-    const module = await import(VITE_URL + "/" + data.view + ".tsx");
+    const module = await import("/.kitstack/devkit-entries/" + data.view + ".tsx");
     const container = document.createElement("div");
     root.innerHTML = "";
     root.appendChild(container);
@@ -325,17 +364,23 @@ async function loadView(data) {
 }
 
 async function init() {
+  console.log("[shell] init starting");
   try {
-    await sendRequest("ui/initialize", {
+    const result = await sendRequest("ui/initialize", {
       protocolVersion: "2026-01-26",
       appCapabilities: {},
       appInfo: { name: "KitStack DevKit", version: "1.0.0" },
     });
+    console.log("[shell] init result:", result);
     sendNotification("ui/notifications/initialized");
+    console.log("[shell] sent notifications/initialized");
   } catch (e) {
-    console.error("Init failed:", e);
+    console.error("[shell] Init failed:", e);
   }
 }
+
+console.log("[shell] loaded, calling init");
+
 
 init();
 </script>

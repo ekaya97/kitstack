@@ -25,9 +25,9 @@ const STAGE_COLORS: Record<Stage, string> = {
   lost: "bg-red-50 text-red-800",
 };
 
-function formatCurrency(value: number | null): string {
-  if (value == null) return "—";
-  return new Intl.NumberFormat("de-DE", { style: "currency", currency: "EUR" }).format(value);
+function formatCurrency(value: number | null, currency = "EUR"): string {
+  if (value == null) return "\u2014";
+  return new Intl.NumberFormat("de-DE", { style: "currency", currency }).format(value);
 }
 
 function DealCard({ deal, onDragStart }: { deal: Deal; onDragStart: () => void }) {
@@ -37,13 +37,13 @@ function DealCard({ deal, onDragStart }: { deal: Deal; onDragStart: () => void }
       onDragStart={onDragStart}
       className="bg-white border border-ks-hair rounded-lg p-3 cursor-grab active:cursor-grabbing hover:shadow-sm transition-shadow"
     >
-      <div className="font-medium text-[13px] leading-tight">{deal.name}</div>
+      <div className="font-medium text-ks-ink text-[13px] leading-tight">{deal.name}</div>
       {deal.contactName && (
         <div className="text-ks-muted text-xs mt-0.5">{deal.contactName}</div>
       )}
       <div className="flex items-center justify-between mt-2">
         <span className="font-mono text-xs font-medium text-ks-accent">
-          {formatCurrency(deal.value)}
+          {formatCurrency(deal.value, deal.currency ?? undefined)}
         </span>
         {deal.expectedCloseDate && (
           <span className="text-[10px] text-ks-faint">{deal.expectedCloseDate}</span>
@@ -74,7 +74,10 @@ function StageColumn({
       className={`flex flex-col min-w-[200px] rounded-xl transition-colors ${
         dragOver ? "bg-ks-accent-soft/40" : "bg-ks-paper-warm/60"
       }`}
-      onDragOver={(e) => { e.preventDefault(); setDragOver(true); }}
+      onDragOver={(e) => {
+        e.preventDefault();
+        setDragOver(true);
+      }}
       onDragLeave={() => setDragOver(false)}
       onDrop={(e) => {
         e.preventDefault();
@@ -89,7 +92,9 @@ function StageColumn({
           </span>
           <span className="font-mono text-[10px] text-ks-faint">{deals.length}</span>
         </div>
-        <div className="font-mono text-[11px] text-ks-muted mt-1">{formatCurrency(total)}</div>
+        <div className="font-mono text-[11px] text-ks-muted mt-1">
+          {formatCurrency(total)}
+        </div>
       </div>
       <div className="flex flex-col gap-2 p-2 min-h-[100px]">
         {deals.map((deal) => (
@@ -109,7 +114,7 @@ export function PipelineView({ data: initialData }: { data: Data }) {
   const [draggedDealId, setDraggedDealId] = useState<string | null>(null);
   const [optimistic, setOptimistic] = useState<Data | null>(null);
 
-  // Priority: optimistic (local) → reloaded (server) → initial (snapshot)
+  // Priority: optimistic (local) -> reloaded (server) -> initial (snapshot)
   const deals = optimistic ?? kitData ?? initialData;
 
   const byStage = new Map<Stage, Deal[]>();
@@ -126,7 +131,7 @@ export function PipelineView({ data: initialData }: { data: Data }) {
   const handleDrop = async (dealId: string, newStage: Stage) => {
     setDraggedDealId(null);
 
-    // Optimistic update — move card immediately
+    // Optimistic update -- move card immediately
     setOptimistic(deals.map((d) => (d.id === dealId ? { ...d, stage: newStage } : d)));
 
     // Persist, then reload fresh data from server

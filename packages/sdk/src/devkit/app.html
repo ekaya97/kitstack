@@ -203,30 +203,22 @@ async function selectView(slug) {
     return;
   }
 
-  // Fetch proxy HTML from backend
-  let proxyHtml;
-  try {
-    const res = await fetch("/__devkit/proxy");
-    proxyHtml = await res.text();
-  } catch (err) {
-    return;
-  }
-
-  // Create the double iframe
+  // Create single iframe with shell HTML directly
+  // (skip the double-iframe proxy — not needed for local dev)
   const viewport = document.getElementById("viewport-content");
   viewport.className = "";
   viewport.innerHTML = '<div class="frame-container"><iframe id="outer-frame"></iframe></div>';
 
   outerIframe = document.getElementById("outer-frame");
-  outerIframe.srcdoc = proxyHtml;
+  outerIframe.srcdoc = shellHtml;
 
-  // Listen for messages from the outer iframe (proxy)
+  // Listen for messages from the shell iframe
   window.addEventListener("message", async function handler(event) {
-    if (event.source !== outerIframe.contentWindow) return;
+    if (!outerIframe || event.source !== outerIframe.contentWindow) return;
     const msg = event.data;
     if (!msg || msg.jsonrpc !== "2.0") return;
 
-    // Handle JSON-RPC requests from the app
+    // Handle JSON-RPC requests from the shell
     if ("id" in msg && msg.method) {
       const response = await handleAppRequest(msg.id, msg.method, msg.params || {}, slug);
       outerIframe.contentWindow.postMessage(response, "*");
@@ -235,7 +227,7 @@ async function selectView(slug) {
 
     // Handle notifications
     if (msg.method === "ui/notifications/initialized") {
-      // App is ready — send tool-result with loader data
+      // Shell is ready — send tool-result with loader data
       const toolResult = {
         jsonrpc: "2.0",
         method: "ui/notifications/tool-result",
@@ -243,7 +235,7 @@ async function selectView(slug) {
           result: {
             content: [{
               type: "text",
-              text: JSON.stringify({ kit: KIT_META.id, view: slug, cmd: "__show", data: loaderData })
+              text: JSON.stringify({ kit: KIT_META.id, view: slug, app: slug, data: loaderData })
             }]
           }
         }
