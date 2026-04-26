@@ -97,12 +97,16 @@ export async function connectRelay(opts: RelayOptions): Promise<never> {
           // or /node_modules/.vite/deps/react.js — prefix them with the dev base
           if (contentType.includes("javascript")) {
             const devBase = `/dev/${opts.sessionId}`;
+            // Rewrite absolute import paths: from "/..." → from "/dev/{sessionId}/..."
+            // Also rewrite dynamic import() and updateStyle() paths
             body = body
               .replace(/from\s+"(\/[^"]+)"/g, `from "${devBase}$1"`)
               .replace(/from\s+'(\/[^']+)'/g, `from '${devBase}$1'`)
-              .replace(/import\("(\/[^"]+)"\)/g, `import("${devBase}$1")`)
-              .replace(/import\('(\/[^']+)'\)/g, `import('${devBase}$1')`)
-              .replace(/"(\/[^"]*\.(?:css|js|tsx?)(?:\?[^"]*)?)"/g, `"${devBase}$1"`);
+              .replace(/import\(\s*"(\/[^"]+)"\s*\)/g, `import("${devBase}$1")`)
+              .replace(/import\(\s*'(\/[^']+)'\s*\)/g, `import('${devBase}$1')`)
+              // Side-effect imports: import "/src/views/styles.css"
+              .replace(/import\s+"(\/[^"]+)"/g, `import "${devBase}$1"`)
+              .replace(/import\s+'(\/[^']+)'/g, `import '${devBase}$1'`);
           }
           console.error(`  → ${res.status} (${contentType.split(";")[0]})`);
           ws.send(JSON.stringify({
