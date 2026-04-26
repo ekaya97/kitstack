@@ -4,52 +4,344 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>KitStack View DevKit</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Instrument+Serif&family=Inter:wght@400;500;600&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
 <style>
+  /* === Reset & Tokens === */
   * { margin: 0; padding: 0; box-sizing: border-box; }
-  :root { --sidebar-w: 200px; --panel-h: 220px; }
-  body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; background: #f5f5f5; color: #333; height: 100vh; overflow: hidden; }
+  :root {
+    --sidebar-w: 220px;
+    --panel-h: 240px;
+    --ks-paper: #faf7f1;
+    --ks-paper-warm: #f4ede0;
+    --ks-paper-deep: #ece3d1;
+    --ks-ink: #171512;
+    --ks-ink2: #2a251f;
+    --ks-muted: #6b6357;
+    --ks-faint: #b8ae9b;
+    --ks-line: #1a1814;
+    --ks-hair: #d9ceb8;
+    --ks-accent: #d65a2f;
+    --ks-accent-deep: #a8411e;
+    --ks-accent-soft: #f7d9c8;
+    --ks-hi: #ffe45c;
+    --font-serif: "Instrument Serif", Georgia, serif;
+    --font-sans: "Inter", system-ui, -apple-system, sans-serif;
+    --font-mono: "JetBrains Mono", ui-monospace, monospace;
+    --ease-out: cubic-bezier(0.16, 1, 0.3, 1);
+  }
+  body {
+    font-family: var(--font-sans);
+    background: var(--ks-paper);
+    color: var(--ks-ink);
+    height: 100vh;
+    overflow: hidden;
+    -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
+  }
 
-  .layout { display: grid; grid-template-columns: var(--sidebar-w) 1fr; grid-template-rows: 48px 1fr var(--panel-h); height: 100vh; }
+  /* === Layout === */
+  .layout {
+    display: grid;
+    grid-template-columns: var(--sidebar-w) 1fr;
+    grid-template-rows: 50px 1fr var(--panel-h);
+    height: 100vh;
+  }
 
-  /* Header */
-  .header { grid-column: 1 / -1; background: #1a1a1a; color: #fff; display: flex; align-items: center; padding: 0 16px; gap: 12px; font-size: 13px; }
-  .header .logo { font-weight: 700; font-size: 14px; letter-spacing: 0.5px; }
-  .header .kit-name { opacity: 0.6; }
+  /* === Header === */
+  .header {
+    grid-column: 1 / -1;
+    background: var(--ks-ink);
+    color: var(--ks-paper);
+    display: flex;
+    align-items: center;
+    padding: 0 20px;
+    gap: 14px;
+    font-size: 13px;
+  }
+  .header .logo {
+    font-family: var(--font-serif);
+    font-size: 18px;
+    letter-spacing: -0.01em;
+    line-height: 1;
+  }
+  .header .logo .accent { color: var(--ks-accent); }
+  .header .kit-name {
+    font-size: 11px;
+    font-weight: 500;
+    letter-spacing: 0.04em;
+    text-transform: uppercase;
+    color: var(--ks-faint);
+    background: rgba(255,255,255,0.06);
+    padding: 3px 10px;
+    border-radius: 100px;
+    border: 1px solid rgba(255,255,255,0.08);
+  }
   .header .spacer { flex: 1; }
-  .header button { background: #333; color: #ccc; border: 1px solid #555; border-radius: 4px; padding: 4px 10px; font-size: 11px; cursor: pointer; }
-  .header button:hover { background: #444; color: #fff; }
+  .header button {
+    font-family: var(--font-sans);
+    background: rgba(255,255,255,0.08);
+    color: var(--ks-paper-warm);
+    border: 1px solid rgba(255,255,255,0.1);
+    border-radius: 100px;
+    padding: 5px 14px;
+    font-size: 11px;
+    font-weight: 500;
+    cursor: pointer;
+    transition: all 0.15s ease;
+    display: flex;
+    align-items: center;
+    gap: 5px;
+    letter-spacing: 0.01em;
+  }
+  .header button:hover {
+    background: rgba(255,255,255,0.14);
+    color: #fff;
+    transform: translateY(-1px);
+  }
 
-  /* Sidebar */
-  .sidebar { background: #fff; border-right: 1px solid #ddd; padding: 12px 0; overflow-y: auto; }
-  .sidebar h3 { font-size: 10px; text-transform: uppercase; letter-spacing: 1px; color: #999; padding: 0 12px; margin-bottom: 8px; }
-  .sidebar .view-item { padding: 8px 12px; cursor: pointer; font-size: 13px; border-left: 3px solid transparent; }
-  .sidebar .view-item:hover { background: #f0f0f0; }
-  .sidebar .view-item.active { background: #e8f0fe; border-left-color: #1a73e8; color: #1a73e8; font-weight: 500; }
-  .sidebar .view-desc { font-size: 10px; color: #999; margin-top: 2px; }
+  /* === Sidebar === */
+  .sidebar {
+    background: var(--ks-paper);
+    border-right: 1px solid var(--ks-hair);
+    padding: 16px 0;
+    overflow-y: auto;
+    display: flex;
+    flex-direction: column;
+  }
+  .sidebar h3 {
+    font-family: var(--font-sans);
+    font-size: 10px;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.08em;
+    color: var(--ks-faint);
+    padding: 0 16px;
+    margin-bottom: 10px;
+  }
+  .sidebar .view-item {
+    padding: 9px 16px 9px 16px;
+    cursor: pointer;
+    font-size: 13px;
+    font-weight: 400;
+    color: var(--ks-muted);
+    border-left: 2.5px solid transparent;
+    transition: all 0.15s ease;
+    position: relative;
+  }
+  .sidebar .view-item:hover {
+    background: var(--ks-paper-warm);
+    color: var(--ks-ink);
+  }
+  .sidebar .view-item.active {
+    background: var(--ks-accent-soft);
+    border-left-color: var(--ks-accent);
+    color: var(--ks-accent-deep);
+    font-weight: 500;
+  }
+  .sidebar .view-desc {
+    font-size: 11px;
+    color: var(--ks-faint);
+    margin-top: 2px;
+    line-height: 1.4;
+  }
+  .sidebar .view-item.active .view-desc {
+    color: var(--ks-accent);
+    opacity: 0.7;
+  }
 
-  /* Viewport */
-  .viewport { background: #e8e8e8; display: flex; align-items: center; justify-content: center; padding: 16px; overflow: auto; }
-  .viewport .frame-container { background: #fff; border: 1px solid #ccc; border-radius: 4px; overflow: hidden; box-shadow: 0 2px 8px rgba(0,0,0,0.1); max-width: 1024px; transition: width 0.4s ease, max-width 0.4s ease; }
-  .viewport iframe { width: 100%; border: none; min-height: 400px; }
-  .viewport .empty { color: #999; font-size: 14px; }
+  /* === Viewport === */
+  .viewport {
+    background: var(--ks-paper-warm);
+    background-image:
+      radial-gradient(circle, var(--ks-hair) 0.8px, transparent 0.8px);
+    background-size: 24px 24px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    padding: 24px;
+    overflow: auto;
+  }
+  .viewport .frame-container {
+    background: #fff;
+    border: 1px solid var(--ks-hair);
+    border-radius: 12px;
+    overflow: hidden;
+    box-shadow:
+      0 1px 2px rgba(23, 21, 18, 0.04),
+      0 4px 16px rgba(23, 21, 18, 0.06),
+      0 12px 40px rgba(23, 21, 18, 0.04);
+    max-width: 1024px;
+    transition: width 0.5s var(--ease-out), max-width 0.5s var(--ease-out);
+  }
+  .viewport iframe { width: 100%; border: none; min-height: 400px; display: block; }
+  .viewport .empty {
+    color: var(--ks-faint);
+    font-size: 14px;
+    font-family: var(--font-serif);
+    font-style: italic;
+    letter-spacing: 0.01em;
+  }
 
-  /* Panels */
-  .panels { grid-column: 1 / -1; background: #fff; border-top: 1px solid #ddd; display: flex; }
-  .panel { flex: 1; border-right: 1px solid #eee; padding: 10px; overflow-y: auto; font-size: 12px; }
+  /* === Panels === */
+  .panels {
+    grid-column: 1 / -1;
+    background: #fff;
+    border-top: 1px solid var(--ks-hair);
+    display: flex;
+  }
+  .panel {
+    flex: 1;
+    border-right: 1px solid var(--ks-paper-warm);
+    padding: 14px 16px;
+    overflow-y: auto;
+    font-size: 12px;
+  }
   .panel:last-child { border-right: none; }
-  .panel h4 { font-size: 10px; text-transform: uppercase; letter-spacing: 1px; color: #999; margin-bottom: 8px; }
-  .panel pre { background: #f8f8f8; border: 1px solid #eee; border-radius: 3px; padding: 8px; font-size: 11px; overflow-x: auto; white-space: pre-wrap; max-height: 160px; overflow-y: auto; }
-  .panel .log-entry { padding: 4px 0; border-bottom: 1px solid #f0f0f0; font-family: monospace; font-size: 11px; }
-  .panel .log-tool { color: #1a73e8; font-weight: 500; }
-  .panel .log-time { color: #999; margin-right: 6px; }
-  .panel .log-ms { color: #999; font-size: 10px; }
+  .panel h4 {
+    font-family: var(--font-sans);
+    font-size: 10px;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.08em;
+    color: var(--ks-faint);
+    margin-bottom: 10px;
+  }
+  .panel pre {
+    background: var(--ks-paper-warm);
+    border: 1px solid var(--ks-hair);
+    border-radius: 8px;
+    padding: 12px;
+    font-family: var(--font-mono);
+    font-size: 11.5px;
+    line-height: 1.6;
+    overflow-x: auto;
+    white-space: pre-wrap;
+    max-height: 170px;
+    overflow-y: auto;
+    color: var(--ks-ink2);
+    tab-size: 2;
+  }
 
-  /* Controls */
-  .controls { display: flex; gap: 6px; align-items: center; margin-bottom: 8px; }
-  .controls label { font-size: 11px; color: #666; display: flex; align-items: center; gap: 4px; }
-  .controls input[type="checkbox"] { margin: 0; }
-  .size-btn { background: #eee; border: 1px solid #ddd; border-radius: 3px; padding: 2px 8px; font-size: 11px; cursor: pointer; }
-  .size-btn.active { background: #1a73e8; color: #fff; border-color: #1a73e8; }
+  /* Tool log entries */
+  .panel .log-entry {
+    padding: 7px 10px;
+    margin-bottom: 4px;
+    background: var(--ks-paper);
+    border: 1px solid var(--ks-hair);
+    border-radius: 6px;
+    font-family: var(--font-mono);
+    font-size: 11px;
+    line-height: 1.6;
+    word-break: break-all;
+    animation: logSlideIn 0.2s var(--ease-out);
+  }
+  @keyframes logSlideIn {
+    from { opacity: 0; transform: translateY(-4px); }
+    to { opacity: 1; transform: translateY(0); }
+  }
+  .panel .log-tool {
+    color: var(--ks-accent);
+    font-weight: 500;
+  }
+  .panel .log-time {
+    color: var(--ks-faint);
+    font-size: 10px;
+    margin-right: 6px;
+  }
+  .panel .log-ms {
+    color: var(--ks-faint);
+    font-size: 10px;
+    font-weight: 500;
+    background: var(--ks-paper-warm);
+    padding: 1px 6px;
+    border-radius: 100px;
+    margin-left: 4px;
+  }
+
+  /* === Controls === */
+  .controls {
+    display: flex;
+    gap: 10px;
+    align-items: center;
+    margin-bottom: 12px;
+  }
+
+  /* Toggle switch */
+  .toggle-label {
+    font-size: 11px;
+    font-weight: 500;
+    color: var(--ks-muted);
+    display: flex;
+    align-items: center;
+    gap: 7px;
+    cursor: pointer;
+    user-select: none;
+    transition: color 0.15s ease;
+  }
+  .toggle-label:hover { color: var(--ks-ink); }
+  .toggle-label input[type="checkbox"] {
+    appearance: none;
+    -webkit-appearance: none;
+    width: 30px;
+    height: 17px;
+    background: var(--ks-hair);
+    border-radius: 100px;
+    position: relative;
+    cursor: pointer;
+    transition: background 0.2s ease;
+    flex-shrink: 0;
+  }
+  .toggle-label input[type="checkbox"]::after {
+    content: "";
+    position: absolute;
+    top: 2.5px;
+    left: 2.5px;
+    width: 12px;
+    height: 12px;
+    background: #fff;
+    border-radius: 50%;
+    transition: transform 0.2s var(--ease-out);
+    box-shadow: 0 1px 2px rgba(0,0,0,0.12);
+  }
+  .toggle-label input[type="checkbox"]:checked {
+    background: var(--ks-accent);
+  }
+  .toggle-label input[type="checkbox"]:checked::after {
+    transform: translateX(13px);
+  }
+
+  /* Segmented control */
+  .segmented {
+    display: inline-flex;
+    background: var(--ks-paper-warm);
+    border: 1px solid var(--ks-hair);
+    border-radius: 100px;
+    padding: 2px;
+    gap: 0;
+  }
+  .size-btn {
+    font-family: var(--font-sans);
+    background: transparent;
+    border: none;
+    border-radius: 100px;
+    padding: 4px 12px;
+    font-size: 11px;
+    font-weight: 500;
+    color: var(--ks-muted);
+    cursor: pointer;
+    transition: all 0.2s ease;
+    line-height: 1;
+  }
+  .size-btn:hover {
+    color: var(--ks-ink);
+  }
+  .size-btn.active {
+    background: var(--ks-ink);
+    color: var(--ks-paper);
+    box-shadow: 0 1px 3px rgba(23, 21, 18, 0.15);
+  }
 </style>
 </head>
 <body>
@@ -57,10 +349,10 @@
 <div class="layout">
   <!-- Header -->
   <div class="header">
-    <span class="logo">KitStack DevKit</span>
+    <span class="logo">kitstack<span class="accent">.devkit</span></span>
     <span class="kit-name" id="kit-name"></span>
     <span class="spacer"></span>
-    <button id="btn-reload" title="Re-run loader">↻ Reload</button>
+    <button id="btn-reload" title="Re-run loader">&#8635; Reload</button>
   </div>
 
   <!-- Sidebar -->
@@ -85,23 +377,25 @@
     <!-- Tool Call Log -->
     <div class="panel">
       <h4>Tool Calls</h4>
-      <div id="tool-log"><span style="color:#999">No tool calls yet</span></div>
+      <div id="tool-log"><span style="color:var(--ks-faint);font-size:12px;font-style:italic;font-family:var(--font-serif)">No tool calls yet</span></div>
     </div>
 
     <!-- Capabilities -->
     <div class="panel">
       <h4>Capabilities</h4>
       <div class="controls">
-        <label><input type="checkbox" id="cap-clipboard" checked> Clipboard</label>
-        <label><input type="checkbox" id="cap-download" checked> Download</label>
-        <label><input type="checkbox" id="cap-links" checked> Links</label>
+        <label class="toggle-label"><input type="checkbox" id="cap-clipboard" checked> Clipboard</label>
+        <label class="toggle-label"><input type="checkbox" id="cap-download" checked> Download</label>
+        <label class="toggle-label"><input type="checkbox" id="cap-links" checked> Links</label>
       </div>
       <h4>Viewport</h4>
       <div class="controls">
-        <button class="size-btn" data-w="375">Mobile</button>
-        <button class="size-btn" data-w="768">Tablet</button>
-        <button class="size-btn active" data-w="1024">Desktop</button>
-        <button class="size-btn" data-w="full">Full</button>
+        <div class="segmented">
+          <button class="size-btn" data-w="375">Mobile</button>
+          <button class="size-btn" data-w="768">Tablet</button>
+          <button class="size-btn active" data-w="1024">Desktop</button>
+          <button class="size-btn" data-w="full">Full</button>
+        </div>
       </div>
     </div>
   </div>

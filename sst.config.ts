@@ -17,23 +17,19 @@ export default $config({
     };
   },
   async run() {
-    await import("./infra/secrets");
-    await import("./infra/storage");
-    const { mcpRouter, appData, kitLambdaRole, kitRuntimeLayer } = await import("./infra/mcp");
-    const { web } = await import("./infra/web");
-
     const tursoCLI = new sst.x.DevCommand("TursoLocalCLI", {
       dev: {
         autostart: true,
         command: "npm run dev:db"
       }
     })
+    await import("./infra/secrets");
+    await import("./infra/storage");
+    await import("./infra/mcp");
+    await import("./infra/web");
+
     return {
-      url: web.url,
-      mcpUrl: mcpRouter.url,
-      appDataUrl: appData.url,
-      kitLambdaRoleArn: kitLambdaRole.arn,
-      kitRuntimeLayerArn: kitRuntimeLayer.arn,
+
     };
   },
 });

@@ -59,7 +59,9 @@ export const kitRuntimeLayer = new aws.lambda.LayerVersion("KitRuntimeLayer", {
   layerName: "KitRuntime",
   compatibleRuntimes: ["nodejs22.x"],
   compatibleArchitectures: ["arm64"],
-  code: new $util.asset.FileArchive("packages/sdk/layer/layer.zip"),
+  code: new $util.asset.FileArchive(
+    require("path").resolve(process.cwd(), "packages/sdk/layer/layer.zip")
+  ),
 });
 
 /** Linkable so deploy scripts can read the ARNs via Resource bindings. */
@@ -126,7 +128,7 @@ const relayDefault = new sst.aws.Function("RelayDefault", {
 });
 
 export const devRelay = new sst.aws.ApiGatewayWebSocket("DevRelay", {
-  domain: $dev ? undefined : "relay.kitstack.co",
+  domain: $app.stage != "production" ? undefined : "relay.kitstack.co",
 });
 
 devRelay.route("$connect", relayConnect.arn);
@@ -134,6 +136,11 @@ devRelay.route("$disconnect", relayDisconnect.arn);
 devRelay.route("$default", relayDefault.arn);
 
 // --- Router Lambda (MCP protocol + OAuth + dispatch) ---
+// --- MCP Router Domain ---
+
+export const mcpDomain = new sst.aws.Router("McpDomain", {
+  domain: $app.stage != "production" ? undefined : "mcp.kitstack.co",
+});
 
 export const mcpRouter = new sst.aws.Function("McpRouter", {
   handler: "packages/mcp-server/src/router/handler.handler",
@@ -162,6 +169,7 @@ export const mcpRouter = new sst.aws.Function("McpRouter", {
     mcpInternalApiKey,
     posthogKey,
     posthogHost,
+    mcpDomain
   ],
   permissions: [
     {
@@ -170,16 +178,11 @@ export const mcpRouter = new sst.aws.Function("McpRouter", {
     },
     {
       actions: ["execute-api:ManageConnections"],
-      resources: ["*"],
+      resources: ["arn:aws:execute-api:*:*:*"],
     },
   ],
 });
 
-// --- MCP Router Domain ---
 
-export const mcpDomain = new sst.aws.Router("McpDomain", {
-  domain: $dev ? undefined : "mcp.kitstack.co",
-  routes: {
-    "/*": mcpRouter.url,
-  },
-});
+
+mcpDomain.route("/", mcpRouter.url)

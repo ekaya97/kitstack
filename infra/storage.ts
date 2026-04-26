@@ -5,7 +5,7 @@ export const kitBucket = new sst.aws.Bucket("KitAssets", {
 });
 
 export const kitCdn = new sst.aws.Router("KitCdn", {
-  domain: $dev ? undefined : "cdn.kitstack.co",
+  domain: $app.stage != "production" ? undefined : "cdn.kitstack.co",
 });
 
 kitCdn.routeBucket("/", kitBucket);
