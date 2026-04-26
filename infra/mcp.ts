@@ -148,7 +148,7 @@ export const mcpRouter = new sst.aws.Function("McpRouter", {
   memory: "512 MB",
   runtime: "nodejs22.x",
   architecture: "arm64",
-  url: true,
+  url: { cors: false },
   link: [
     kitBucket,
     kitCdn,
