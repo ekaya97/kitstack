@@ -92,11 +92,15 @@ export async function connectRelay(opts: RelayOptions): Promise<never> {
 
       const response = await handler.handleRequest(request);
 
-      // Send the result back through the WebSocket
+      // Always send a response — even for notifications (null response)
+      // so the router's polling loop doesn't block waiting.
       if (response) {
         const isError = response.error != null;
         console.error(`  → ${isError ? "ERROR" : "OK"} (${method})`);
         ws.send(JSON.stringify({ requestId, result: response.result ?? response.error }));
+      } else {
+        console.error(`  → ACK (${method})`);
+        ws.send(JSON.stringify({ requestId, result: null }));
       }
     });
 

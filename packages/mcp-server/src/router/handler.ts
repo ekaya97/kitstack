@@ -515,6 +515,7 @@ export async function handler(
     }
 
     // Dev Relay MCP requests (POST /dev/{sessionId})
+    log.info("Request", { method, path, hasAuth: !!httpEvent.headers.authorization });
     if (path.startsWith("/dev/") && method === "POST") {
       const sessionId = path.slice(5); // "/dev/abc123" → "abc123"
       if (!sessionId) return json({ error: "Missing sessionId" }, 400, origin);
@@ -578,13 +579,17 @@ export async function handler(
       const maxWait = 25; // 25 iterations × 200ms = 5 seconds max
       for (let i = 0; i < maxWait; i++) {
         const responseBody = await getRelayResponse(requestId);
-        if (responseBody) {
-          const parsed = JSON.parse(responseBody);
+        if (responseBody !== null) {
           deleteRelayResponse(requestId).catch(() => {});
+          // Notifications return "null" — just acknowledge
+          if (responseBody === "null") {
+            return json({}, 200, origin);
+          }
+          const parsed = JSON.parse(responseBody);
           return json({
             jsonrpc: "2.0",
             id: (body as any).id ?? null,
-            ...parsed,
+            result: parsed,
           }, 200, origin);
         }
         await new Promise((r) => setTimeout(r, 200));
