@@ -533,9 +533,15 @@ export async function handler(
         return json({ error: "Invalid or expired token" }, 401, origin);
       }
 
-      // Look up the dev session
+      // Look up the dev session and verify ownership
       const session = await getOAuthItem(`DEV_SESSION#${sessionId}`, "CONNECTION");
       if (!session) return json({ error: "Dev session not found" }, 404, origin);
+
+      const sessionUserId = (session as any).userId as string;
+      if (sessionUserId && sessionUserId !== userId) {
+        log.warn("Dev session auth mismatch", { sessionId, sessionUserId, requestUserId: userId });
+        return json({ error: "Not authorized for this dev session" }, 403, origin);
+      }
 
       const connectionId = (session as any).connectionId as string;
       if (!connectionId) return json({ error: "Dev session has no connection" }, 500, origin);
