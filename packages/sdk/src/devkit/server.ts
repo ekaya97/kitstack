@@ -174,6 +174,7 @@ module.exports = {
     name: kit.name,
     tools: kit.tools.map((t) => ({ name: t.name, description: t.description })),
     views: (kit.views ?? []).map((v) => ({ slug: v.slug, name: v.name, description: v.description })),
+    placeholders: kit._placeholders ?? {},
   };
 
   const appHtml = appHtmlRaw.replace(
@@ -333,7 +334,7 @@ window.addEventListener("message", (event) => {
   }
   if (msg.method === "ui/notifications/tool-result" || msg.method === "ui/notifications/tool-input") {
     console.log("[shell] tool-result received, viewMounted:", viewMounted);
-    if (!viewMounted) handleToolResult(msg.params);
+    handleToolResult(msg.params);
   }
 });
 

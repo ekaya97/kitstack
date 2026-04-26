@@ -797,6 +797,80 @@
       tab-size: 2;
     }
 
+    .data-inspector-wrap {
+      display: flex;
+      flex-direction: column;
+      height: 100%;
+    }
+
+    .data-inspector-wrap textarea {
+      flex: 1;
+      background: var(--ks-paper-warm);
+      border: 1px solid var(--ks-hair);
+      border-radius: 8px;
+      padding: 14px 16px;
+      font-family: var(--font-mono);
+      font-size: 11.5px;
+      line-height: 1.65;
+      color: var(--ks-ink2);
+      tab-size: 2;
+      resize: none;
+      outline: none;
+      white-space: pre;
+      overflow: auto;
+    }
+
+    .data-inspector-wrap textarea:focus {
+      border-color: var(--ks-accent);
+    }
+
+    .data-inspector-toolbar {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      padding-top: 8px;
+      flex-shrink: 0;
+    }
+
+    .data-inspector-toolbar .source-tag {
+      font-family: var(--font-mono);
+      font-size: 10px;
+      font-weight: 500;
+      letter-spacing: 0.03em;
+      padding: 2px 8px;
+      border-radius: 100px;
+      border: 1px solid var(--ks-hair);
+      background: var(--ks-paper-warm);
+      color: var(--ks-muted);
+    }
+
+    .data-inspector-toolbar .source-tag.placeholder {
+      border-color: var(--ks-accent-soft);
+      background: var(--ks-accent-soft);
+      color: var(--ks-accent-deep);
+    }
+
+    .data-inspector-toolbar .spacer { flex: 1; }
+
+    .send-btn {
+      font-family: var(--font-sans);
+      font-size: 11px;
+      font-weight: 500;
+      color: #fff;
+      background: var(--ks-accent);
+      border: none;
+      border-radius: 100px;
+      padding: 5px 14px;
+      cursor: pointer;
+      transition: all 0.15s ease;
+      display: flex;
+      align-items: center;
+      gap: 5px;
+    }
+
+    .send-btn:hover { background: var(--ks-accent-deep); }
+    .send-btn:disabled { opacity: 0.4; cursor: default; background: var(--ks-accent); }
+
     /* Tool log entries */
     .panel .log-entry {
       padding: 8px 12px;
@@ -936,7 +1010,14 @@
       </div>
       <div class="panel-body">
         <div class="panel panel-data">
-          <pre id="data-inspector">No data loaded</pre>
+          <div class="data-inspector-wrap">
+            <textarea id="data-inspector" spellcheck="false">No data loaded</textarea>
+            <div class="data-inspector-toolbar">
+              <span class="source-tag" id="data-source-tag">—</span>
+              <div class="spacer"></div>
+              <button class="send-btn" id="btn-send-data" disabled>&#9654; Send to view</button>
+            </div>
+          </div>
         </div>
         <div class="panel panel-log">
           <div id="tool-log"><span class="log-empty">No tool calls yet</span></div>
@@ -1030,8 +1111,12 @@
     }
 
     // --- Data inspector ---
-    function updateDataInspector(data) {
-      document.getElementById("data-inspector").textContent = JSON.stringify(data, null, 2);
+    function updateDataInspector(data, source = "loader") {
+      document.getElementById("data-inspector").value = JSON.stringify(data, null, 2);
+      const tag = document.getElementById("data-source-tag");
+      tag.textContent = source === "placeholder" ? "PLACEHOLDER" : "LOADER";
+      tag.className = "source-tag" + (source === "placeholder" ? " placeholder" : "");
+      document.getElementById("btn-send-data").disabled = !activeView;
     }
 
     // --- Viewport sizing ---
@@ -1058,6 +1143,33 @@
       if (activeView) selectView(activeView);
     });
 
+    // --- Send edited data to view ---
+    document.getElementById("btn-send-data").addEventListener("click", () => {
+      if (!outerIframe || !activeView) return;
+      let data;
+      try {
+        data = JSON.parse(document.getElementById("data-inspector").value);
+      } catch (err) {
+        alert("Invalid JSON: " + err.message);
+        return;
+      }
+      const tag = document.getElementById("data-source-tag");
+      tag.textContent = "EDITED";
+      tag.className = "source-tag placeholder";
+      outerIframe.contentWindow.postMessage({
+        jsonrpc: "2.0",
+        method: "ui/notifications/tool-result",
+        params: {
+          result: {
+            content: [{
+              type: "text",
+              text: JSON.stringify({ kit: KIT_META.id, view: activeView, app: activeView, data })
+            }]
+          }
+        }
+      }, "*");
+    });
+
     // --- View selection & iframe protocol ---
     let outerIframe = null;
     let selectGeneration = 0;
@@ -1074,6 +1186,7 @@
 
       // Fetch loader data from backend
       let loaderData;
+      let dataSource = "loader";
       try {
         const res = await fetch(`/__devkit/loader/${slug}`);
         loaderData = await res.json();
@@ -1082,10 +1195,19 @@
         return;
       }
 
+      // Fall back to placeholder when loader returns empty/null
+      const isEmpty = loaderData == null
+        || (Array.isArray(loaderData) && loaderData.length === 0)
+        || (typeof loaderData === "object" && !Array.isArray(loaderData) && Object.keys(loaderData).length === 0);
+      if (isEmpty && KIT_META.placeholders?.[slug]) {
+        loaderData = KIT_META.placeholders[slug];
+        dataSource = "placeholder";
+      }
+
       // Bail if user already clicked another view
       if (gen !== selectGeneration) return;
 
-      updateDataInspector(loaderData);
+      updateDataInspector(loaderData, dataSource);
 
       // Fetch shell HTML from backend
       let shellHtml;
