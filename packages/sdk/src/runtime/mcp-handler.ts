@@ -643,6 +643,7 @@ export function createMcpHandler(config: McpHandlerConfig): McpHandler {
             },
             capabilities: {
               tools: {},
+              resources: {},
               extensions: {
                 "io.modelcontextprotocol/ui": {},
               },
@@ -684,6 +685,55 @@ export function createMcpHandler(config: McpHandlerConfig): McpHandler {
           }
 
           return rpcResult(id, result);
+        }
+
+        // ── List resources ──
+        case "resources/list":
+          return rpcResult(id, {
+            resources: kit.views?.length ? [{
+              uri: `ui://kitstack/${kit.id}/app`,
+              name: `${kit.name} App`,
+              mimeType: "text/html;profile=mcp-app",
+            }] : [],
+          });
+
+        // ── Read resource (app shell) ──
+        case "resources/read": {
+          const uri = (params as any)?.uri as string;
+          if (uri === `ui://kitstack/${kit.id}/app`) {
+            // Determine which shell to serve
+            const activeShell = config.devAssetBaseUrl
+              ? generateDevRelayShell(kit, "", config.devAssetBaseUrl)
+              : shellHtml;
+
+            // Build CSP domains
+            const resCspDomains: string[] = [
+              "https://fonts.googleapis.com",
+              "https://fonts.gstatic.com",
+            ];
+            if (config.devAssetBaseUrl) {
+              resCspDomains.push(new URL(config.devAssetBaseUrl).origin);
+            }
+            if (config.platformCdn) resCspDomains.push(config.platformCdn);
+            if (config.kitCdn) resCspDomains.push(config.kitCdn);
+
+            return rpcResult(id, {
+              contents: [{
+                uri,
+                mimeType: "text/html;profile=mcp-app",
+                text: activeShell,
+                _meta: {
+                  ui: {
+                    csp: {
+                      resourceDomains: resCspDomains,
+                      connectDomains: resCspDomains,
+                    },
+                  },
+                },
+              }],
+            });
+          }
+          return rpcError(id, ERR_INVALID_PARAMS, `Unknown resource: ${uri}`);
         }
 
         // ── Unknown method ──
