@@ -228,7 +228,6 @@ import { defineConfig } from "vite";
 import { resolve } from "path";
 export default defineConfig({
   root: "${kitDir.replace(/\\/g, "/")}",
-  base: "/dev/${sessionId}/",
   server: { port: ${vitePort}, strictPort: true, cors: true },
   esbuild: { jsx: "automatic" },
   css: { postcss: "${entryDir.replace(/\\/g, "/")}" },

@@ -88,11 +88,22 @@ export async function connectRelay(opts: RelayOptions): Promise<never> {
         console.error(`  ← asset ${assetPath}`);
         try {
           const vitePort = opts.vitePort || 5175;
-          // Vite serves with base: /dev/{sessionId}/ — include it in the fetch
-          const viteBase = opts.sessionId ? `/dev/${opts.sessionId}/` : "/";
-          const res = await fetch(`http://localhost:${vitePort}${viteBase}${assetPath}`);
-          const body = await res.text();
+          const res = await fetch(`http://localhost:${vitePort}/${assetPath}`);
+          let body = await res.text();
           const contentType = res.headers.get("content-type") || "application/javascript";
+
+          // Rewrite absolute import paths to go through the relay
+          // Vite transforms imports to absolute paths like /src/views/styles.css
+          // or /node_modules/.vite/deps/react.js — prefix them with the dev base
+          if (contentType.includes("javascript")) {
+            const devBase = `/dev/${opts.sessionId}`;
+            body = body
+              .replace(/from\s+"(\/[^"]+)"/g, `from "${devBase}$1"`)
+              .replace(/from\s+'(\/[^']+)'/g, `from '${devBase}$1'`)
+              .replace(/import\("(\/[^"]+)"\)/g, `import("${devBase}$1")`)
+              .replace(/import\('(\/[^']+)'\)/g, `import('${devBase}$1')`)
+              .replace(/"(\/[^"]*\.(?:css|js|tsx?)(?:\?[^"]*)?)"/g, `"${devBase}$1"`);
+          }
           console.error(`  → ${res.status} (${contentType.split(";")[0]})`);
           ws.send(JSON.stringify({
             requestId,
