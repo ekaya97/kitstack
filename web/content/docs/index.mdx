@@ -11,6 +11,14 @@ KitStack abstracts all of that away. You write business logic and UI. The SDK ha
 
 The current limitations of this approach (discovery overhead, permission granularity, client-dependent behavior) are subject to change as both KitStack and MCP standard adoption evolve. The framework insulates you from those changes — your kit code stays the same even as the underlying protocol and client landscape shifts.
 
+## The kit philosophy
+
+Every wave of computing shifts how users interact with software. The browser replaced desktop installers. Mobile put apps in pockets. Social media collapsed millions of websites into a single feed. Each time, developers who built for the new interface early had an outsized advantage.
+
+We think AI is the next interface shift. Users increasingly don't want to learn 20 different tools — they want to describe what they need and have it happen. A single conversation that reaches into a CRM, logs an expense, drafts an outreach sequence, and tracks the follow-up. The MCP standard makes this possible, but building on it today still requires deep protocol knowledge and infrastructure work.
+
+Kits are our answer to that. A kit is a small, focused app that lives behind an AI conversation — built by developers, for users who interact through natural language. KitStack handles the protocol, the infrastructure, and the deployment so you can focus on what you do best: writing the business logic and building the UI. The faster we can get MCP apps into users' hands, the faster this ecosystem grows.
+
 ## What is a kit?
 
 A kit is a lightweight MCP app that bridges the gap between LLM conversations and long-term persistence. Not "memory" as a hack — a real database the LLM talks to.
