@@ -78,7 +78,7 @@ const RATE_LIMIT_MAX_REQUESTS = 120; // 120 requests per minute per user (sessio
 
 async function checkRateLimit(userId: string): Promise<boolean> {
   const oauthTable = mcpAuthStoreTable();
-  if (!oauthTable) return true; // fail-open if table not configured
+  if (!oauthTable) return false; // fail-closed if table not configured
 
   const windowKey = Math.floor(Date.now() / 1000 / RATE_LIMIT_WINDOW_SEC);
   const pk = `RATE#${userId}#${windowKey}`;
@@ -104,8 +104,9 @@ async function checkRateLimit(userId: string): Promise<boolean> {
 
     const count = parseInt(result.Attributes?.cnt?.N || "0", 10);
     return count <= RATE_LIMIT_MAX_REQUESTS;
-  } catch {
-    return true; // fail-open on DynamoDB errors
+  } catch (err) {
+    console.error("[RateLimit] DynamoDB error — failing closed:", err);
+    return false; // fail-closed: reject request if rate limiter is unavailable
   }
 }
 
