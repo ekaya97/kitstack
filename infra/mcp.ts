@@ -109,6 +109,7 @@ export const appData = new sst.aws.Function("AppData", {
   memory: "256 MB",
   runtime: "nodejs22.x",
   architecture: "arm64",
+  logging: { retention: "1 week" },
   url: { cors: false },
   link: [
     userKitDbs,
@@ -135,6 +136,7 @@ const relayConnect = new sst.aws.Function("RelayConnect", {
   memory: "128 MB",
   runtime: "nodejs22.x",
   architecture: "arm64",
+  logging: { retention: "1 week" },
   link: [mcpAuthStore, tursoDbUrl, tursoAuthToken],
 });
 
@@ -144,6 +146,7 @@ const relayDisconnect = new sst.aws.Function("RelayDisconnect", {
   memory: "128 MB",
   runtime: "nodejs22.x",
   architecture: "arm64",
+  logging: { retention: "1 week" },
   link: [devRelayStore],
 });
 
@@ -153,6 +156,7 @@ const relayDefault = new sst.aws.Function("RelayDefault", {
   memory: "128 MB",
   runtime: "nodejs22.x",
   architecture: "arm64",
+  logging: { retention: "1 week" },
   link: [devRelayStore],
 });
 
@@ -177,6 +181,7 @@ export const mcpRouter = new sst.aws.Function("McpRouter", {
   memory: "512 MB",
   runtime: "nodejs22.x",
   architecture: "arm64",
+  logging: { retention: "1 week" },
   url: { cors: false },
   link: [
     kitBucket,
@@ -232,6 +237,7 @@ const killSwitchFn = new sst.aws.Function("KillSwitch", {
   timeout: "30 seconds",
   memory: "128 MB",
   runtime: "nodejs22.x",
+  logging: { retention: "1 week" },
   architecture: "arm64",
   environment: {
     ROUTER_FUNCTION_NAME: mcpRouter.nodes.function.name,

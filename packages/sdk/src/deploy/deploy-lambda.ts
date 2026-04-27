@@ -207,5 +207,19 @@ export async function provisionKitLambda(
   );
   console.log(`  ✓ Reserved concurrency set to ${reservedConcurrency}`);
 
+  // Set log retention to 3 days for kit Lambdas (untrusted third-party code)
+  try {
+    const { CloudWatchLogsClient, PutRetentionPolicyCommand } = await import("@aws-sdk/client-cloudwatch-logs");
+    const logs = new CloudWatchLogsClient({ region: options.region });
+    await logs.send(new PutRetentionPolicyCommand({
+      logGroupName: `/aws/lambda/${functionName}`,
+      retentionInDays: 3,
+    }));
+    console.log(`  ✓ Log retention set to 3 days`);
+  } catch {
+    // Log group may not exist yet (created on first invocation)
+    console.log(`  ⓘ Log retention will be set on first invocation`);
+  }
+
   return { functionName, functionArn, created };
 }
