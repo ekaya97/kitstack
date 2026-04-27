@@ -1,0 +1,132 @@
+---
+title: KitStack SDK
+description: The framework for building MCP apps. Tools, views, database, and deployment — handled.
+---
+
+# KitStack SDK
+
+MCP is a powerful standard, but building with it today is rough. You need to spin up a server, implement the protocol, handle auth, manage databases, and figure out deployment — before you even write your first tool.
+
+KitStack is to MCP what Next.js is to React. The SDK gives you the framework; the platform gives you the infrastructure. If you can script business logic and build simple UI, you can build and deploy a kit.
+
+## What is a kit?
+
+A kit is a lightweight MCP app that bridges the gap between LLM conversations and long-term persistence. Not "memory" as a hack — a real database the LLM talks to.
+
+Kits are utility tools. A CRM to track contacts and deals. An expense tracker. An outreach sequence builder. They handle the small stuff that doesn't warrant a full SaaS product but is too important to forget between conversations.
+
+```ts filename="kit.config.ts"
+import { defineKit, defineTool, kit } from "@kitstack/sdk";
+import { z } from "zod";
+
+const addItem = defineTool({
+  name: "add_item",
+  description: "Add a new item to the list",
+  args: z.object({
+    name: z.string().describe("Name of the item"),
+  }),
+  handler: async (db, args, ctx) => {
+    return kit.text(`Item "${args.name}" added.`);
+  },
+});
+
+export default defineKit({
+  id: "my-kit",
+  version: "1.0.0",
+  name: "My Kit",
+  description: "A simple item tracker",
+  schema: {},
+  migrationsDir: resolve(import.meta.dirname, "migrations"),
+  instructions: "Use this kit to manage items for the user.",
+  tools: [addItem],
+});
+```
+
+Define your tools, define your kit, deploy. Start using it in any MCP-compatible LLM client.
+
+## What KitStack handles for you
+
+<Cards>
+  <Card title="MCP protocol" href="/docs/concepts/kits">
+    JSON-RPC, tool discovery, view rendering, the MCP Apps handshake — you never touch any of it.
+  </Card>
+  <Card title="Database per user" href="/docs/concepts/migrations">
+    Every user gets an isolated SQLite database. Migrations run automatically. Data is never shared between users.
+  </Card>
+  <Card title="Auth and routing" href="/docs/concepts/kits">
+    A single MCP router handles authentication, authorization, and request dispatch for all kits. No server to manage.
+  </Card>
+  <Card title="Build and deploy" href="/docs/guides/deploying">
+    One command to build, validate, and publish. Your kit runs in a sandboxed Lambda with minimal permissions.
+  </Card>
+</Cards>
+
+## What makes KitStack different
+
+### Two-tool progressive discovery
+
+The MCP protocol has a scaling problem. Connect a few servers and you have dozens of tool definitions competing for the LLM's attention. Most clients now **defer** tool loading — hiding tools behind a search index until the LLM explicitly looks for them. This means your tool's description needs to win a keyword search before the LLM even knows it exists. And when different servers provide similar functionality (CRM tools from two providers, for example), the LLM starts mixing them in a single workflow — calling tool A to fetch data, then tool B to update it — leading to errors and confused outputs.
+
+KitStack takes an entirely different approach. Instead of registering every action as a separate tool, all your kits are composed behind exactly **two MCP tools**: `kit` and `kit_view`. Users activate and deactivate kits whenever they want — the tool description is recomposed dynamically to reflect what's installed:
+
+```
+KitStack — 2 apps, 19 tools in one surface.
+crm (contacts, deals, pipeline), expense (VAT, tax, receipts).
+Call kit() to see all capabilities.
+```
+
+This front-loaded description lists every kit with its trigger keywords and every available action — giving the LLM enough signal to match your tools against user intent in a single search hit. Instead of matching individual actions, the LLM matches **workflows**. "Add a contact and create a deal" immediately routes to the CRM kit because the description contains both `add_contact` and `add_deal`. We believe LLMs are best at multi-step workflows, not single actions — and the description is optimized for that.
+
+Once the LLM enters a kit, it works through actions progressively, like a CLI:
+
+```
+kit(id: "crm")                                        → show actions
+kit(id: "crm", cmd: "add_contact")                    → describe parameters
+kit(id: "crm", cmd: "add_contact", params: { ... })   → run it
+```
+
+The LLM can still switch between kits whenever it needs to — the escape hatch is always there. But the default behavior is focused, sequential work within one kit at a time, which matches how these tools are actually used.
+
+### WYSIWYG development via relay
+
+Run `kitstack dev` and get a public URL. No port forwarding, no tunnels, no local stdio setup. The relay serves your kit to any MCP client over the internet, and your view changes are served in real-time from your local Vite dev server — what you see is what's deployed.
+
+```bash filename="Terminal"
+npx kitstack dev
+#   Relay connected. Session URL:
+#   https://mcp.kitstack.co/dev/a3f2b1c8
+```
+
+Edit `View.tsx`, refresh the page, and your update appears immediately on the previous tool call. No need to ask the LLM again — the modules get hot-replaced on refresh. The dev experience is identical to the deployed experience.
+
+### Isolated databases, zero complexity
+
+Each user gets their own SQLite database for each kit. Completely separate — not row-level isolation, not shared tables, **different databases**. Regularly backed up. This eliminates the entire class of problems around LLM data access and permissions.
+
+### One-click activation
+
+Users activate kits with a single click. No server configuration, no API keys, no OAuth setup. The platform handles provisioning the database, deploying the runtime, and routing MCP requests.
+
+## Kit vs MCP server vs SaaS
+
+| | Kit | MCP server | SaaS |
+|---|---|---|---|
+| **Complexity** | Utility tool — small, focused | Full application infrastructure | Complex business logic |
+| **Data** | Per-user SQLite, managed by platform | Self-managed | Multi-tenant, self-managed |
+| **Auth** | Handled by KitStack | You implement it | You implement it |
+| **Deployment** | `kitstack publish` | Self-hosted or custom | Custom infrastructure |
+| **Best for** | Personal tools, SME/enterprise utilities, bridging LLM and persistence | Custom integrations, complex workflows | Products with multi-user requirements, long-running tasks |
+
+## Getting started
+
+<Cards>
+  <Card title="Quickstart" href="/docs/getting-started">
+    Scaffold your first kit and connect it to an LLM client in 5 minutes.
+  </Card>
+  <Card title="How kits work" href="/docs/concepts/kits">
+    Understand the architecture — tools, views, database, and the MCP protocol.
+  </Card>
+  <Card title="API Reference" href="/docs/api/define-kit">
+    Full reference for every SDK function.
+  </Card>
+</Cards>
