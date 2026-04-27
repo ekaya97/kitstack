@@ -44,6 +44,10 @@ declare module "sst" {
       "type": "sst.sst.Secret"
       "value": string
     }
+    "KillSwitch": {
+      "name": string
+      "type": "sst.aws.Function"
+    }
     "KitAssets": {
       "name": string
       "type": "sst.aws.Bucket"
@@ -55,7 +59,12 @@ declare module "sst" {
     "KitLambdaInfra": {
       "layerArn": string
       "roleArn": string
+      "securityGroupIds": any
+      "subnetIds": any
       "type": "sst.sst.Linkable"
+    }
+    "KitVpc": {
+      "type": "sst.aws.Vpc"
     }
     "LemonsqueezyApiKey": {
       "type": "sst.sst.Secret"
