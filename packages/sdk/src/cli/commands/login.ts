@@ -27,6 +27,7 @@
 
 import { createServer } from "node:http";
 import { URL } from "node:url";
+import { randomBytes } from "node:crypto";
 import { saveCredentials, loadCredentials } from "../credentials";
 
 const KITSTACK_AUTH_URL = process.env.KITSTACK_AUTH_URL || "https://kitstack.co/cli/authorize";
@@ -41,10 +42,13 @@ export async function login(args: string[]) {
     return;
   }
 
-  const port = await startCallbackServer();
+  // Generate CSRF state — verified on callback to prevent cross-site token injection
+  const state = randomBytes(16).toString("hex");
+
+  const port = await startCallbackServer(state);
 
   const callbackUrl = `http://localhost:${port}`;
-  const authUrl = `${KITSTACK_AUTH_URL}?callback=${encodeURIComponent(callbackUrl)}`;
+  const authUrl = `${KITSTACK_AUTH_URL}?callback=${encodeURIComponent(callbackUrl)}&state=${state}`;
 
   console.log(`\n  Opening browser to authenticate with KitStack...`);
   console.log(`  If the browser doesn't open, visit:\n  ${authUrl}\n`);
@@ -61,45 +65,78 @@ export async function login(args: string[]) {
   }, 120_000);
 }
 
-function startCallbackServer(): Promise<number> {
+function startCallbackServer(expectedState: string): Promise<number> {
   return new Promise((resolve, reject) => {
     const server = createServer((req, res) => {
-      const url = new URL(req.url!, `http://localhost`);
+      // CORS headers for browser POST from kitstack.co
+      res.setHeader("Access-Control-Allow-Origin", "*");
+      res.setHeader("Access-Control-Allow-Methods", "POST, OPTIONS");
+      res.setHeader("Access-Control-Allow-Headers", "Content-Type");
 
-      // Handle the callback from KitStack
-      const token = url.searchParams.get("token");
-      const email = url.searchParams.get("email");
-      const error = url.searchParams.get("error");
-
-      if (error) {
-        res.writeHead(200, { "Content-Type": "text/html" });
-        res.end(htmlPage("Authorization Failed", `<p>Error: ${escapeHtml(error)}</p><p>You can close this tab.</p>`));
-        console.error(`\n  Authorization failed: ${error}\n`);
-        server.close();
-        process.exit(1);
-      }
-
-      if (!token || !email) {
-        res.writeHead(400, { "Content-Type": "text/html" });
-        res.end(htmlPage("Missing Parameters", "<p>Missing token or email. Try again.</p>"));
+      if (req.method === "OPTIONS") {
+        res.writeHead(204);
+        res.end();
         return;
       }
 
-      // Save credentials
-      saveCredentials({
-        token,
-        email,
-        authenticatedAt: new Date().toISOString(),
+      if (req.method !== "POST") {
+        res.writeHead(405, { "Content-Type": "application/json" });
+        res.end(JSON.stringify({ error: "Method not allowed" }));
+        return;
+      }
+
+      // Read POST body
+      let body = "";
+      req.on("data", (chunk) => { body += chunk; });
+      req.on("end", () => {
+        let data: { token?: string; email?: string; state?: string; error?: string };
+        try {
+          data = JSON.parse(body);
+        } catch {
+          res.writeHead(400, { "Content-Type": "application/json" });
+          res.end(JSON.stringify({ error: "Invalid JSON" }));
+          return;
+        }
+
+        if (data.error) {
+          res.writeHead(200, { "Content-Type": "application/json" });
+          res.end(JSON.stringify({ ok: false }));
+          console.error(`\n  Authorization failed: ${data.error}\n`);
+          server.close();
+          process.exit(1);
+        }
+
+        if (!data.token || !data.email) {
+          res.writeHead(400, { "Content-Type": "application/json" });
+          res.end(JSON.stringify({ error: "Missing token or email" }));
+          return;
+        }
+
+        // Verify CSRF state
+        if (data.state !== expectedState) {
+          res.writeHead(403, { "Content-Type": "application/json" });
+          res.end(JSON.stringify({ error: "State mismatch" }));
+          console.error("\n  Authorization rejected: state parameter mismatch.\n");
+          server.close();
+          process.exit(1);
+        }
+
+        // Save credentials
+        saveCredentials({
+          token: data.token,
+          email: data.email,
+          authenticatedAt: new Date().toISOString(),
+        });
+
+        res.writeHead(200, { "Content-Type": "application/json" });
+        res.end(JSON.stringify({ ok: true }));
+
+        console.log(`\n  Authenticated as ${data.email}.`);
+        console.log(`  Token saved to ~/.kitstack/credentials.json\n`);
+
+        server.close();
+        process.exit(0);
       });
-
-      res.writeHead(200, { "Content-Type": "text/html" });
-      res.end(htmlPage("Authenticated!", `<p>Authenticated as <strong>${escapeHtml(email)}</strong>.</p><p>You can close this tab and return to the terminal.</p>`));
-
-      console.log(`\n  Authenticated as ${email}.`);
-      console.log(`  Token saved to ~/.kitstack/credentials.json\n`);
-
-      server.close();
-      process.exit(0);
     });
 
     server.on("error", (err: NodeJS.ErrnoException) => {

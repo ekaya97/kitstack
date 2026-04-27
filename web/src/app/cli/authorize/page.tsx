@@ -7,6 +7,7 @@ import { authClient } from "@/lib/auth-client";
 export default function CliAuthorizePage() {
   const searchParams = useSearchParams();
   const callback = searchParams.get("callback");
+  const state = searchParams.get("state");
   const [status, setStatus] = useState<"loading" | "confirm" | "error">("loading");
   const [session, setSession] = useState<any>(null);
 
@@ -32,7 +33,7 @@ export default function CliAuthorizePage() {
       const res = await fetch("/api/cli/token", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ callback }),
+        body: JSON.stringify({ callback, state }),
       });
 
       if (!res.ok) {
@@ -41,18 +42,33 @@ export default function CliAuthorizePage() {
       }
 
       const { token } = await res.json();
-      const redirectUrl = `${callback}?token=${encodeURIComponent(token)}&email=${encodeURIComponent(session.user.email)}`;
-      window.location.href = redirectUrl;
+
+      // POST token to CLI's local server (avoids token in URL/browser history)
+      const postRes = await fetch(callback, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          token,
+          email: session.user.email,
+          state: state || "",
+        }),
+      });
+
+      if (postRes.ok) {
+        setStatus("done" as any);
+      } else {
+        setStatus("error");
+      }
     } catch {
       setStatus("error");
     }
   }
 
-  if (!callback) {
+  if (!callback || !state) {
     return (
       <div style={styles.container}>
         <div style={styles.card}>
-          <h1 style={styles.title}>Missing callback URL</h1>
+          <h1 style={styles.title}>Missing parameters</h1>
           <p style={styles.text}>This page should be opened by <code>kitstack login</code>.</p>
         </div>
       </div>
@@ -75,6 +91,17 @@ export default function CliAuthorizePage() {
         <div style={styles.card}>
           <h1 style={styles.title}>Authorization Failed</h1>
           <p style={styles.text}>Something went wrong. Please try <code>kitstack login</code> again.</p>
+        </div>
+      </div>
+    );
+  }
+
+  if (status === ("done" as any)) {
+    return (
+      <div style={styles.container}>
+        <div style={styles.card}>
+          <h1 style={styles.title}>Authorized</h1>
+          <p style={styles.text}>You can close this tab and return to the terminal.</p>
         </div>
       </div>
     );
