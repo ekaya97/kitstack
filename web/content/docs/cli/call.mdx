@@ -1,0 +1,94 @@
+---
+title: kitstack call
+description: CLI reference for kitstack call — execute kit tools from the command line.
+---
+
+# kitstack call
+
+Execute kit tools directly from the command line without an MCP client. Useful for testing, scripting, and agent-driven development.
+
+## Usage
+
+```bash filename="Terminal"
+npx kitstack call <tool> [id] [cmd] [params_json]
+```
+
+## Examples
+
+```bash filename="Terminal"
+# List available kits
+kitstack call kit
+
+# List actions in a kit
+kitstack call kit crm
+
+# Describe an action's parameters
+kitstack call kit crm add_contact
+
+# Run an action
+kitstack call kit crm add_contact '{"name":"Sarah Chen","company":"Acme Corp"}'
+
+# List views
+kitstack call kit_view crm
+```
+
+## Flags
+
+| Flag | Description |
+|------|-------------|
+| `--config <path>` | Path to kit root directory. Default: current directory. |
+| `--db <url>` | Override database URL. Default: `file:.kitstack/dev.db`. |
+| `--help` | Show help. |
+
+## How it works
+
+`kitstack call` checks for a running [`kitstack dev --local`](/docs/cli/dev#local-mode) server first. If `.kitstack/dev.json` exists and the server is reachable, it routes the request through HTTP. Otherwise, it creates an **in-process runtime** — loading your kit, provisioning the database, and executing the tool directly.
+
+The database persists at `.kitstack/dev.db` by default, so state accumulates across calls. This lets you chain workflows:
+
+```bash filename="Terminal"
+# Create a contact — returns an ID
+kitstack call kit crm add_contact '{"name":"Sarah Chen","company":"Acme"}'
+# ✓ created contact V2ksnwkQCVpPEj7x2pTCe
+# Contact "Sarah Chen" added. Company: Acme.
+
+# Use the returned ID to create a deal
+kitstack call kit crm add_deal '{"name":"Enterprise Plan","contactId":"V2ksnwkQCVpPEj7x2pTCe","value":25000}'
+# ✓ created deal GTOUdAbtK5jL0-4ZZiY9H
+# Deal "Enterprise Plan" created in prospect — €25,000.
+
+# Verify the data
+kitstack call kit crm list_contacts '{}'
+```
+
+## Output format
+
+Write tools return structured output with entity IDs:
+
+```
+✓ created <entityType> <id>
+<human-readable message>
+```
+
+Read tools return markdown (tables, lists, formatted text).
+
+## Fresh start
+
+Delete the database to start with a clean slate:
+
+```bash filename="Terminal"
+rm -f .kitstack/dev.db
+kitstack call kit crm add_contact '{"name":"Test"}'
+```
+
+## Use with kitstack dev --local
+
+When `dev --local` is running, `kitstack call` routes through the live server. Both share the same database, so you can use `call` to test while `dev --local` serves an MCP client:
+
+```bash filename="Terminal"
+# Terminal 1: start local server
+kitstack dev --local
+
+# Terminal 2: test tools against the live server
+kitstack call kit crm add_contact '{"name":"Test"}'
+```

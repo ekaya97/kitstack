@@ -1,0 +1,105 @@
+---
+title: kitstack serve
+description: CLI reference for kitstack serve — start a self-hosted MCP server.
+---
+
+# kitstack serve
+
+Start a self-hosted MCP server for your kit. Zero-config entry point — reads `kit.config.ts`, creates a database, runs migrations, and starts serving.
+
+## Usage
+
+```bash filename="Terminal"
+npx kitstack serve [flags]
+```
+
+## Flags
+
+| Flag | Env var | Default | Description |
+|------|---------|---------|-------------|
+| `--transport` | `KITSTACK_TRANSPORT` | `stdio` | Transport mode: `stdio` or `http` |
+| `--port` | `KITSTACK_PORT` | `3001` | HTTP port (only for `http` transport) |
+| `--db` | `KITSTACK_DB_URL` | `file:.kitstack/dev.db` | Database URL |
+| `--db-token` | `KITSTACK_DB_TOKEN` | — | Database auth token (for Turso) |
+| `--config` | — | `.` | Path to kit root directory |
+
+## stdio transport
+
+```bash filename="Terminal"
+kitstack serve
+```
+
+Default mode. Reads JSON-RPC from stdin, writes to stdout. Configure your MCP client to launch the process:
+
+```json filename="claude_desktop_config.json"
+{
+  "mcpServers": {
+    "my-kit": {
+      "command": "npx",
+      "args": ["kitstack", "serve"],
+      "cwd": "/path/to/my-kit"
+    }
+  }
+}
+```
+
+## HTTP transport
+
+```bash filename="Terminal"
+kitstack serve --transport http --port 3001
+```
+
+Starts an HTTP server on the specified port. Point any MCP client at `http://localhost:3001`.
+
+## Environment variables
+
+All flags can be set via environment variables. Flags take precedence over env vars.
+
+```bash filename="Terminal"
+KITSTACK_TRANSPORT=http \
+KITSTACK_PORT=3001 \
+KITSTACK_DB_URL=file:./data/kit.db \
+kitstack serve
+```
+
+## Remote databases
+
+For production self-hosting, point at a Turso database:
+
+```bash filename="Terminal"
+KITSTACK_DB_URL=libsql://my-kit-db.turso.io \
+KITSTACK_DB_TOKEN=your-token \
+kitstack serve --transport http
+```
+
+## Docker
+
+```dockerfile filename="Dockerfile"
+FROM node:22-alpine
+WORKDIR /app
+COPY . .
+RUN npm ci && npx kitstack build
+
+ENV KITSTACK_TRANSPORT=http
+ENV KITSTACK_PORT=3001
+ENV KITSTACK_DB_URL=file:/data/kit.db
+VOLUME /data
+EXPOSE 3001
+
+CMD ["npx", "kitstack", "serve"]
+```
+
+```bash filename="Terminal"
+docker build -t my-kit .
+docker run -p 3001:3001 -v ./data:/data my-kit
+```
+
+## serve vs dev
+
+| | `kitstack serve` | `kitstack dev` |
+|---|---|---|
+| **Purpose** | Production / self-hosting | Development |
+| **Views** | No Vite dev server | Vite with HMR |
+| **Logging** | Minimal | Rich dev logger |
+| **Database** | Configurable (local or remote) | Always local SQLite |
+| **Auth** | Configurable via `serve()` API | None (dev) or KitStack (relay) |
