@@ -21,7 +21,7 @@ export { defineView } from "./define-view";
 export { defineLoader } from "./define-loader";
 
 // Result helpers
-export { kit } from "./result";
+export { kit, type KitResultFragment } from "./result";
 
 // Build
 export { buildKit } from "./build";
