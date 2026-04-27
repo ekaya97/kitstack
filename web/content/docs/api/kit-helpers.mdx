@@ -13,20 +13,24 @@ import { kit } from "@kitstack/sdk";
 
 ## kit.text()
 
-Returns a text result. The most common response type.
+Returns a text result. Best suited for read operations and informational responses.
 
 ```ts
 function text(text: string): KitToolResult
 ```
 
 ```ts filename="src/tools/example.ts"
-return kit.text(`Contact "${args.name}" added (ID: ${id}).`);
+return kit.text(`Found ${rows.length} contacts matching "${args.query}".`);
 ```
 
 **Result:**
 ```json
-{ "content": [{ "type": "text", "text": "Contact \"Alice\" added (ID: abc123)." }] }
+{ "content": [{ "type": "text", "text": "Found 3 contacts matching \"Alice\"." }] }
 ```
+
+<Note>
+`kit.text()` is intended for **read operations only**. For write operations (create, update, delete), use the [mutation result helpers](#kitcreated--kitupdated--kitdeleted) below so that entity IDs are returned in a structured format for workflow chaining.
+</Note>
 
 ## kit.json()
 
@@ -105,6 +109,56 @@ function conflict(message: string): KitToolResult
 
 ```ts filename="src/tools/example.ts"
 return kit.conflict("A sequence with that name already exists.");
+```
+
+## kit.created() / kit.updated() / kit.deleted()
+
+Composable mutation result helpers for write tools. Each returns a `KitResultFragment` describing what changed.
+
+```ts
+function created(id: string, entityType: string, message: string): KitResultFragment
+function updated(id: string, entityType: string, message: string): KitResultFragment
+function deleted(id: string, entityType: string, message: string): KitResultFragment
+```
+
+```ts filename="src/tools/example.ts"
+const fragment = kit.created(id, "contact", `Contact "${args.name}" created.`);
+```
+
+## kit.result()
+
+Composes one or more `KitResultFragment` values into a `KitToolResult`. Accepts a single fragment or an array.
+
+```ts
+function result(fragment: KitResultFragment): KitToolResult
+function result(fragments: KitResultFragment[]): KitToolResult
+```
+
+```ts filename="src/tools/add-contact.ts"
+const id = nanoid();
+await db.insert(contacts).values({ id, name: args.name });
+return kit.result(kit.created(id, "contact", `Contact "${args.name}" added.`));
+```
+
+For batch operations, pass an array:
+
+```ts filename="src/tools/import-contacts.ts"
+const fragments = inserted.map((c) =>
+  kit.created(c.id, "contact", `Imported "${c.name}".`)
+);
+return kit.result(fragments);
+```
+
+<Warning>
+Write tools **must** use `kit.result(kit.created(...))` (or `updated`/`deleted`) instead of `kit.text()`. This returns entity IDs in a structured format that enables workflow chaining — the LLM can pass the returned ID to subsequent tool calls.
+</Warning>
+
+### KitResultFragment type
+
+`KitResultFragment` is exported from `@kitstack/sdk` for custom operations beyond create/update/delete:
+
+```ts
+import { KitResultFragment } from "@kitstack/sdk";
 ```
 
 ## KitToolResult type

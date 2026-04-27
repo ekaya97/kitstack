@@ -50,7 +50,10 @@ export const addContact = defineTool({
 
 A `KitToolResult` — created via the [`kit` helpers](/docs/api/kit-helpers):
 
-- `kit.text("message")` — plain text response
+- `kit.text("message")` — plain text response (reads only)
+- `kit.result(kit.created(id, type, msg))` — structured write result with entity ID
+- `kit.result(kit.updated(id, type, msg))` — structured update result
+- `kit.result(kit.deleted(id, type, msg))` — structured delete result
 - `kit.json(data)` — pretty-printed JSON
 - `kit.error("message")` — error visible to the LLM (not a thrown exception)
 - `kit.notFound("contact", id)` — standardized "not found" message
@@ -114,15 +117,16 @@ export const countItems = defineTool({
 
 ## Progressive discovery
 
-The LLM doesn't see your individual tools directly. Instead, it sees a single `kit` MCP tool — like a CLI entry point. Your action names are listed in the tool's description, and the LLM drills down through three levels:
+The LLM doesn't see your individual tools directly. Instead, it sees a single `kit` MCP tool — like a CLI entry point. Your action names are listed in the tool's description, and the LLM drills down through four levels:
 
 | Call | Response |
 |------|----------|
-| `kit()` | Markdown table of all actions with descriptions |
-| `kit(cmd: "add_contact")` | JSON Schema for `add_contact`'s arguments |
-| `kit(cmd: "add_contact", params: { name: "Alice" })` | Runs the tool, returns the result |
+| `kit()` | List available kits |
+| `kit(id: "crm")` | Markdown table of actions in the CRM kit |
+| `kit(id: "crm", cmd: "add_contact")` | JSON Schema for `add_contact`'s arguments |
+| `kit(id: "crm", cmd: "add_contact", params: { name: "Alice" })` | Runs the tool, returns the result |
 
-This keeps one tool description in the system prompt instead of twelve, and once the LLM enters your kit, it stays focused there — no risk of mixing your tools with another server's. See [How kits work](/docs/concepts/kits) for the full rationale behind this design.
+The `id` parameter selects which kit to target. This keeps one tool description in the system prompt instead of twelve, and once the LLM enters your kit, it stays focused there — no risk of mixing your tools with another server's. See [How kits work](/docs/concepts/kits) for the full rationale behind this design.
 
 ## Naming conventions
 

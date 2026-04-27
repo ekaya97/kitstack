@@ -42,8 +42,8 @@ export const addExpense = defineTool({
       date: args.date ?? new Date().toISOString().slice(0, 10),
       createdAt: new Date(),
     });
-    return kit.text(
-      `Expense recorded: ${args.description} — €${args.amount.toFixed(2)} (${args.category})`
+    return kit.result(
+      kit.created(id, "expense", `Expense recorded: ${args.description} — €${args.amount.toFixed(2)} (${args.category})`)
     );
   },
 });
@@ -97,8 +97,16 @@ Now any view loader can call `listExpenses.load(db, args, ctx)` to reuse the que
 Use the [`kit` helpers](/docs/api/kit-helpers) for consistent responses:
 
 ```ts filename="src/tools/examples.ts"
-// Plain text — most common for confirmations
-return kit.text(`Contact "${args.name}" added (ID: ${id}).`);
+// Reads — plain text for informational responses
+return kit.text(`Found ${rows.length} contacts.`);
+
+// Writes — structured results with entity IDs for workflow chaining
+return kit.result(kit.created(id, "contact", `Contact "${args.name}" added.`));
+return kit.result(kit.updated(id, "deal", `Deal stage changed to "${args.stage}".`));
+return kit.result(kit.deleted(id, "expense", `Expense "${expense.description}" deleted.`));
+
+// Batch writes — pass an array of fragments
+return kit.result(ids.map((id) => kit.created(id, "contact", `Imported contact.`)));
 
 // JSON — for data-heavy responses (auto pretty-printed)
 return kit.json({ contacts: rows, total: rows.length });
@@ -115,6 +123,10 @@ return kit.validationError("Start date must be before end date.");
 // Conflict — resource state prevents the operation
 return kit.conflict("A sequence with that name already exists.");
 ```
+
+<Warning>
+Write tools **must** use `kit.result(kit.created(...))` (or `updated`/`deleted`) instead of `kit.text()`. This returns entity IDs in a structured format that enables workflow chaining — the LLM can pass returned IDs to subsequent tool calls. Reserve `kit.text()` for read operations only.
+</Warning>
 
 <Note>
 These helpers return `KitToolResult` objects — they don't throw. The LLM sees error results and can respond accordingly (e.g., asking the user for a different ID).
@@ -160,7 +172,9 @@ export const deleteExpense = defineTool({
     if (!expense) return kit.notFound("expense", args.expenseId);
 
     await db.delete(expenses).where(eq(expenses.id, args.expenseId));
-    return kit.text(`Expense "${expense.description}" deleted.`);
+    return kit.result(
+      kit.deleted(args.expenseId, "expense", `Expense "${expense.description}" deleted.`)
+    );
   },
 });
 ```
@@ -200,7 +214,7 @@ handler: async (db, args, ctx) => {
       target: settings.key,
       set: { value: args.value },
     });
-  return kit.text(`Setting "${args.key}" updated.`);
+  return kit.result(kit.updated(args.key, "setting", `Setting "${args.key}" updated.`));
 },
 ```
 

@@ -129,6 +129,47 @@ Published kits default to **private** visibility — only you can see and use th
 
 ## Self-hosted deployment
 
+For running your own MCP server outside the KitStack marketplace, use the `kitstack serve` CLI command.
+
+### kitstack serve
+
+A zero-config entry point that starts a self-hosted MCP server for your kit. Configuration is handled entirely through environment variables:
+
+```bash filename="Terminal"
+npx kitstack serve
+```
+
+| Environment variable | Description | Default |
+|---------------------|-------------|---------|
+| `KITSTACK_TRANSPORT` | MCP transport type (`stdio` or `sse`) | `stdio` |
+| `KITSTACK_PORT` | Port number for SSE transport | `3001` |
+| `KITSTACK_DB_URL` | LibSQL database URL | — |
+| `KITSTACK_DB_TOKEN` | LibSQL auth token (for remote databases) | — |
+
+```bash filename="Example: SSE transport with remote Turso database"
+KITSTACK_TRANSPORT=sse \
+KITSTACK_PORT=4000 \
+KITSTACK_DB_URL=libsql://my-db.turso.io \
+KITSTACK_DB_TOKEN=eyJ... \
+npx kitstack serve
+```
+
+Under the hood, `kitstack serve` uses `createProtocolHandler` paired with a `localAdapter`. For advanced setups (custom transports, embedding in existing servers), you can import `createProtocolHandler` directly from `@kitstack/sdk` and pair it with your own adapter.
+
+### Security defaults for kit Lambdas
+
+When deployed to the KitStack platform, kit Lambdas run with these security defaults:
+
+| Setting | Value |
+|---------|-------|
+| Timeout | 10 seconds |
+| Memory | 128 MB |
+| Reserved concurrency | 5 |
+| Network | VPC lockdown (no outbound internet) |
+| Log retention | 3 days |
+
+These defaults ensure sandboxed execution with minimal blast radius. Kit handlers cannot make outbound HTTP requests or access external services.
+
 ## Gotchas
 
 <Warning>

@@ -42,12 +42,13 @@ The MCP protocol loads all available tools into the system prompt. Connect three
 
 ### How KitStack solves this
 
-KitStack exposes exactly **two MCP tools**: `kit` (for actions) and `kit_view` (for UI). Your action names are embedded in the tool description, and the LLM drills down through three levels:
+KitStack exposes exactly **two MCP tools**: `kit` (for actions) and `kit_view` (for UI). The LLM drills down through four levels using an `id` parameter to target a specific kit:
 
 ```
-kit()                    → list available actions (markdown table)
-kit(cmd)                 → describe an action's parameters (JSON Schema)
-kit(cmd, params)         → run an action
+kit()                    → list available kits
+kit(id)                  → list actions in a kit (markdown table)
+kit(id, cmd)             → describe an action's parameters (JSON Schema)
+kit(id, cmd, params)     → run an action
 ```
 
 This doubles down on a CLI metaphor. Calling `kit` is like calling `bash` — the LLM enters a context and works within it. The interaction follows a tree structure:
@@ -73,6 +74,7 @@ export default defineKit({
   version: "1.0.0",                     // Semver
   name: "CRM Kit",                      // Human-readable name
   description: "Contacts, deals, pipeline",
+  triggers: ["contact", "deal", "pipeline", "sales"],
   schema,                               // Drizzle table definitions
   migrationsDir: resolve(import.meta.dirname, "migrations"),
   instructions: crmInstructions,        // System prompt for the LLM
@@ -105,6 +107,10 @@ In development, the database is a local file at `.kitstack/dev.db`. In productio
 
 See [Migrations](/docs/concepts/migrations) for details.
 
+### Triggers
+
+The optional `triggers` field is an array of lowercase keywords that help LLMs route user requests to the right kit. When a user says "add a contact", the router uses triggers to match that intent to your CRM kit without the LLM needing to list all kits first. Keep triggers short and specific — they're for intent matching, not descriptions.
+
 ### Instructions
 
 The `instructions` field is a system prompt injected into the LLM's context when your kit is active. Use it to teach the LLM *when* to use each tool and *how* to interpret results. Good instructions are the difference between a kit that works and a kit that delights.
@@ -119,6 +125,10 @@ The `instructions` field is a system prompt injected into the LLM's context when
 | **Build** | `kitstack build` bundles server + views, validates migrations |
 | **Publish** | `kitstack publish` uploads to the KitStack marketplace |
 | **Activate** | Users enable your kit with a single click — no setup required |
+
+## Server adapter architecture
+
+Under the hood, `serve()` uses `createProtocolHandler` paired with a `localAdapter` to handle MCP transport. For most kits, `serve()` is all you need. For advanced setups (custom transports, embedding in existing servers), you can use `createProtocolHandler` directly with a custom adapter.
 
 ## The MCP protocol layer
 

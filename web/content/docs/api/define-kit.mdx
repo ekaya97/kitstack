@@ -27,6 +27,7 @@ function defineKit(config: KitConfig): KitDefinition
 | `instructions` | `string` | Yes | System prompt injected into the LLM's context. |
 | `tools` | `ToolDefinition[]` | Yes | Array of tools created with [`defineTool()`](/docs/api/define-tool). |
 | `views` | `ViewDefinition[]` | No | Array of views created with [`defineView()`](/docs/api/define-view). |
+| `triggers` | `string[]` | No | Lowercase keywords for LLM intent routing. Helps LLMs match user requests to the right kit (e.g., `["contact", "deal", "pipeline"]`). |
 
 ## Returns
 
@@ -76,6 +77,7 @@ export default defineKit({
   instructions,
   tools: [addItem, listItems],
   views: [dashboardView],
+  triggers: ["inventory", "stock", "quantity"],
 });
 ```
 
