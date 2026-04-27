@@ -186,3 +186,76 @@ export const mcpRouter = new sst.aws.Function("McpRouter", {
 
 
 mcpDomain.route("/", mcpRouter.url)
+
+// --- Kill Switch (cost protection) ---
+
+const killSwitchTopic = new aws.sns.Topic("KillSwitchTopic");
+
+// Email alert (set your email via `sst secret set KillSwitchEmail you@example.com`)
+new aws.sns.TopicSubscription("KillSwitchEmail", {
+  topic: killSwitchTopic.arn,
+  protocol: "email",
+  endpoint: "enes@kitstack.co",
+});
+
+const killSwitchFn = new sst.aws.Function("KillSwitch", {
+  handler: "packages/mcp-server/src/kill-switch/handler.handler",
+  timeout: "30 seconds",
+  memory: "128 MB",
+  runtime: "nodejs22.x",
+  architecture: "arm64",
+  environment: {
+    ROUTER_FUNCTION_NAME: mcpRouter.nodes.function.name,
+  },
+  permissions: [
+    {
+      actions: [
+        "lambda:ListFunctions",
+        "lambda:PutFunctionConcurrency",
+      ],
+      resources: ["*"],
+    },
+  ],
+});
+
+// Allow SNS to invoke the kill switch Lambda
+new aws.lambda.Permission("KillSwitchSnsPermission", {
+  action: "lambda:InvokeFunction",
+  function: killSwitchFn.nodes.function.name,
+  principal: "sns.amazonaws.com",
+  sourceArn: killSwitchTopic.arn,
+});
+
+new aws.sns.TopicSubscription("KillSwitchLambda", {
+  topic: killSwitchTopic.arn,
+  protocol: "lambda",
+  endpoint: killSwitchFn.nodes.function.arn,
+});
+
+// Alarm: Kit-* invocations > 500/min
+new aws.cloudwatch.MetricAlarm("KitInvocationAlarm", {
+  alarmDescription: "Kit Lambda invocations exceeded 500/min — kill switch triggered",
+  namespace: "AWS/Lambda",
+  metricName: "Invocations",
+  statistic: "Sum",
+  period: 60,
+  evaluationPeriods: 1,
+  threshold: 500,
+  comparisonOperator: "GreaterThanThreshold",
+  alarmActions: [killSwitchTopic.arn],
+  treatMissingData: "notBreaching",
+});
+
+// Alarm: Kit-* concurrent executions > 20
+new aws.cloudwatch.MetricAlarm("KitConcurrencyAlarm", {
+  alarmDescription: "Kit Lambda concurrent executions exceeded 20 — kill switch triggered",
+  namespace: "AWS/Lambda",
+  metricName: "ConcurrentExecutions",
+  statistic: "Maximum",
+  period: 60,
+  evaluationPeriods: 1,
+  threshold: 20,
+  comparisonOperator: "GreaterThanThreshold",
+  alarmActions: [killSwitchTopic.arn],
+  treatMissingData: "notBreaching",
+})
