@@ -25,10 +25,12 @@ export interface DeployLambdaOptions {
   roleArn: string;
   /** ARN of the runtime layer (SDK + drizzle + libsql + aws-sdk). */
   runtimeLayerArn: string;
-  /** Memory in MB. Default: 256. */
+  /** Memory in MB. Default: 128. */
   memory?: number;
-  /** Timeout in seconds. Default: 30. */
+  /** Timeout in seconds. Default: 10. */
   timeout?: number;
+  /** Reserved concurrent executions. Default: 5. */
+  reservedConcurrency?: number;
   /** AWS region. Default: from environment. */
   region?: string;
 }
@@ -80,8 +82,9 @@ export async function provisionKitLambda(
     bundleS3Key,
     roleArn,
     runtimeLayerArn,
-    memory = 256,
-    timeout = 30,
+    memory = 128,
+    timeout = 10,
+    reservedConcurrency = 5,
   } = options;
 
   const {
@@ -90,6 +93,7 @@ export async function provisionKitLambda(
     CreateFunctionCommand,
     UpdateFunctionCodeCommand,
     UpdateFunctionConfigurationCommand,
+    PutFunctionConcurrencyCommand,
     waitUntilFunctionActiveV2,
   } = await import("@aws-sdk/client-lambda");
 
@@ -168,6 +172,15 @@ export async function provisionKitLambda(
 
     console.log(`  ✓ Created Lambda ${functionName}`);
   }
+
+  // Set reserved concurrency to cap parallel executions
+  await lambda.send(
+    new PutFunctionConcurrencyCommand({
+      FunctionName: functionName,
+      ReservedConcurrentExecutions: reservedConcurrency,
+    })
+  );
+  console.log(`  ✓ Reserved concurrency set to ${reservedConcurrency}`);
 
   return { functionName, functionArn, created };
 }
