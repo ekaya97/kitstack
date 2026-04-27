@@ -92,6 +92,7 @@ Commands:
   dev             Start local dev server
   build           Validate and bundle kit for deployment
   serve           Start self-hosted MCP server
+  call            Execute kit tools from the command line
   login           Authenticate with KitStack
   publish         Submit kit to KitStack marketplace
 
@@ -155,6 +156,11 @@ async function main() {
     case "serve": {
       const { serve } = await import("./commands/serve.js");
       await serve(commandArgs);
+      break;
+    }
+    case "call": {
+      const { call } = await import("./commands/call.js");
+      await call(commandArgs);
       break;
     }
     case "login": {

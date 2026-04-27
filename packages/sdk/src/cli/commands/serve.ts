@@ -14,16 +14,11 @@
  * | --db-token / KITSTACK_DB_TOKEN | (none)          | Database auth token   |
  * | --config                  | .                    | Path to kit root dir  |
  *
- * @example
- * ```bash
- * kitstack serve                          # stdio, local SQLite
- * kitstack serve --transport http         # HTTP on port 3001
- * KITSTACK_DB_URL=libsql://... kitstack serve --transport http
- * ```
+ * @module
  */
 
 import { resolve } from "path";
-import { existsSync } from "node:fs";
+import { createLocalRuntime } from "../kit-runtime";
 
 const SERVE_HELP = `
 kitstack serve — start a self-hosted MCP server
@@ -46,11 +41,10 @@ export async function serve(args: string[]) {
     process.exit(0);
   }
 
-  // Parse flags
   let kitRoot = process.cwd();
   let transport = process.env.KITSTACK_TRANSPORT || "stdio";
   let port = parseInt(process.env.KITSTACK_PORT || "3001", 10);
-  let dbUrl = process.env.KITSTACK_DB_URL || "file:.kitstack/dev.db";
+  let dbUrl = process.env.KITSTACK_DB_URL;
   let dbToken = process.env.KITSTACK_DB_TOKEN;
 
   for (let i = 0; i < args.length; i++) {
@@ -65,39 +59,12 @@ export async function serve(args: string[]) {
     }
   }
 
-  // Load kit config
-  const configPath = resolve(kitRoot, "kit.config.ts");
-  if (!existsSync(configPath)) {
-    console.error(`\n  No kit.config.ts found at ${kitRoot}\n`);
-    process.exit(1);
-  }
+  const { kit, protocol } = await createLocalRuntime({ kitRoot, dbUrl, dbToken });
 
-  const kitModule = await import(configPath);
-  const kit = kitModule.default;
-
-  if (!kit?.id || !kit?.tools) {
-    console.error(`\n  Invalid kit.config.ts — must export a defineKit() result as default.\n`);
-    process.exit(1);
-  }
-
-  // Run migrations if local SQLite
-  if (dbUrl.startsWith("file:")) {
-    const { createClient } = await import("@libsql/client");
-    const client = createClient({ url: dbUrl });
-    if (kit.migrationSql) {
-      const statements = kit.migrationSql.split(";").filter((s: string) => s.trim());
-      for (const sql of statements) {
-        await client.execute(sql);
-      }
-    }
-    client.close();
-  }
-
-  // Start server
   const { serve: startServer } = await import("../../server/index.js");
   await startServer({
     kit,
-    db: { url: dbUrl, authToken: dbToken },
+    db: { url: dbUrl ?? "file:.kitstack/dev.db", authToken: dbToken },
     transport: transport as "stdio" | "http",
     port,
   });

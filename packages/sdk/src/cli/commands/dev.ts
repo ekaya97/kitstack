@@ -88,19 +88,28 @@ export async function dev(args: string[]) {
   let dbPath = ".kitstack/dev.db";
   let resetDb = false;
   let stdio = false;
+  let local = false;
   let noViews = false;
   let viewsPort = 5174;
+  let localPort = 4567;
 
   for (let i = 0; i < args.length; i++) {
     switch (args[i]) {
       case "--stdio":
         stdio = true;
         break;
+      case "--local":
+        local = true;
+        break;
       case "--no-views":
         noViews = true;
         break;
       case "--port":
-        viewsPort = parseInt(args[++i], 10);
+        if (local) {
+          localPort = parseInt(args[++i], 10);
+        } else {
+          viewsPort = parseInt(args[++i], 10);
+        }
         break;
       case "--config":
         configPath = args[++i];
@@ -118,7 +127,7 @@ export async function dev(args: string[]) {
   }
 
   // Default mode is relay (no flags = relay mode)
-  const relay = !stdio;
+  const relay = !stdio && !local;
 
   // Load kit definition
   const fullConfigPath = resolve(process.cwd(), configPath);
@@ -162,12 +171,79 @@ export async function dev(args: string[]) {
   const uiUrl = (kit.views?.length && !noViews) ? `http://localhost:${viewsPort}` : undefined;
   logger.banner({
     name: kit.name,
-    mode: relay ? "relay" : "stdio",
+    mode: local ? "local" : relay ? "relay" : "stdio",
     tools: kit.tools.length,
     views: kit.views?.length ?? 0,
     db: dbPath,
     uiUrl,
   });
+
+  // Local HTTP mode — no relay, no stdio, just localhost
+  if (local) {
+    const { localAdapter } = await import("../../server/adapters/local.js");
+    const { createProtocolHandler } = await import("../../server/protocol.js");
+
+    const adapter = localAdapter({ kit, db });
+    const protocol = createProtocolHandler({
+      adapter,
+      serverInfo: { name: kit.name, version: kit.version ?? "dev" },
+    });
+
+    // Write lock file so `kitstack call` can discover the running server
+    const lockPath = resolve(process.cwd(), ".kitstack/dev.json");
+    const { writeFileSync, mkdirSync, unlinkSync } = await import("node:fs");
+    mkdirSync(resolve(process.cwd(), ".kitstack"), { recursive: true });
+    writeFileSync(lockPath, JSON.stringify({ port: localPort, pid: process.pid }));
+
+    const cleanup = () => {
+      try { unlinkSync(lockPath); } catch {}
+    };
+    process.on("SIGINT", () => { cleanup(); process.exit(0); });
+    process.on("SIGTERM", () => { cleanup(); process.exit(0); });
+    process.on("exit", cleanup);
+
+    // Start HTTP server
+    const { createServer } = await import("node:http");
+    const server = createServer(async (req, res) => {
+      if (req.method !== "POST") {
+        res.writeHead(405);
+        res.end();
+        return;
+      }
+
+      const chunks: Buffer[] = [];
+      for await (const chunk of req) chunks.push(chunk);
+      const body = Buffer.concat(chunks).toString();
+
+      try {
+        const request = JSON.parse(body);
+        const start = Date.now();
+        const response = await protocol.handleRequest(request, "dev-user");
+        const ms = Date.now() - start;
+
+        const method = request.method;
+        if (method === "tools/call" && (request.params as any)?.name) {
+          logger.tool((request.params as any).name, (request.params as any).arguments, ms);
+        } else if (response) {
+          logger.mcp(method, ms);
+        }
+
+        res.writeHead(200, { "Content-Type": "application/json" });
+        res.end(response ? JSON.stringify(response) : "");
+      } catch {
+        res.writeHead(400, { "Content-Type": "application/json" });
+        res.end(JSON.stringify({ jsonrpc: "2.0", id: null, error: { code: -32700, message: "Parse error" } }));
+      }
+    });
+
+    server.listen(localPort, "127.0.0.1", () => {
+      logger.status("connected", `http://localhost:${localPort}`);
+      logger.info("Use `kitstack call` or point your MCP client here.");
+      logger.info("Press Ctrl+C to stop.\n");
+    });
+
+    return;
+  }
 
   // Relay mode — connect to DevRelay WebSocket
   if (relay) {
