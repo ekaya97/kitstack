@@ -264,8 +264,8 @@ export async function dev(args: string[]) {
       if (isError) {
         const errMsg = (response as any).error?.message || "Error";
         logger.error(method, errMsg, ms);
-      } else if (method === "tools/call" && request.params?.name) {
-        logger.tool(request.params.name as string, request.params.arguments, ms);
+      } else if (method === "tools/call" && (request.params as any)?.name) {
+        logger.tool((request.params as any).name as string, (request.params as any).arguments, ms);
       } else {
         logger.mcp(method, ms);
       }
