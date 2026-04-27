@@ -360,22 +360,27 @@ export function createMcpHandler(config: McpHandlerConfig): McpHandler {
   // Build the two-tool MCP definitions
   // -----------------------------------------------------------------------
 
-  const toolNames = kit.tools.map((t) => t.name).join(", ");
+  const toolNames = kit.tools.map((t) => t.name);
+  const triggerSummary = kit.triggers?.length
+    ? ` (${kit.triggers.join(", ")})`
+    : "";
+
+  const actionList = toolNames.join(", ");
 
   const kitTool: McpToolDefinition = {
     name: "kit",
     description: [
-      `${kit.name} — ${kit.description}`,
-      "",
-      "  kit()              → list available actions",
-      "  kit(cmd)           → describe an action's parameters",
-      "  kit(cmd, params)   → run an action",
-      "",
-      `Actions: ${toolNames}`,
+      `KitStack \u2014 1 app, ${kit.tools.length} tools in one surface. ${kit.id}${triggerSummary}. Call kit() to see all capabilities.`,
+      "kit() \u2192 list kits, kit(id) \u2192 actions, kit(id, cmd) \u2192 params, kit(id, cmd, params) \u2192 run.",
+      `${kit.id}: ${actionList}`,
     ].join("\n"),
     inputSchema: {
       type: "object",
       properties: {
+        id: {
+          type: "string",
+          description: `Kit ID, e.g. '${kit.id}'`,
+        },
         cmd: {
           type: "string",
           description: "Action name, e.g. 'add_contact'",
@@ -397,18 +402,24 @@ export function createMcpHandler(config: McpHandlerConfig): McpHandler {
     mcpTools.push({
       name: "kit_view",
       description: [
-        `Show interactive UI for ${kit.name}.`,
-        `Call kit_view() to list views, or kit_view(view) to display one.`,
-        `Views: ${viewList}`,
-      ].join(" "),
+        "Rendering companion to kit. Displays kit state as an interactive widget.",
+        "Call kit_view(id) to discover available views for a kit.",
+        "Use after state-changing kit operations when the user would benefit from seeing the result visually.",
+        "For text results (CRUD operations, listings, exports), use kit directly.",
+      ].join("\n"),
       inputSchema: {
         type: "object",
         properties: {
+          id: {
+            type: "string",
+            description: `Kit ID, e.g. '${kit.id}'`,
+          },
           view: {
             type: "string",
             description: "View slug to display",
           },
         },
+        required: ["id"],
       },
       _meta: {
         ui: { resourceUri: `ui://kitstack/${kit.id}/app` },
@@ -464,12 +475,23 @@ export function createMcpHandler(config: McpHandlerConfig): McpHandler {
   async function handleKit(
     args: Record<string, unknown>
   ): Promise<KitToolResult> {
+    const id = args.id as string | undefined;
     const cmd = args.cmd as string | undefined;
     const params = args.params as Record<string, unknown> | undefined;
 
-    // kit() → list available actions
-    if (!cmd) {
+    // kit() → list available kits
+    if (!id) {
       return handleKitList();
+    }
+
+    // Validate kit ID
+    if (id !== kit.id) {
+      return errorResult(`Unknown kit: "${id}". Available: ${kit.id}`);
+    }
+
+    // kit(id) → show actions in a kit
+    if (!cmd) {
+      return handleKitDiscover();
     }
 
     // __load_view: reload a view's data (called by useKit().reload())
@@ -487,30 +509,47 @@ export function createMcpHandler(config: McpHandlerConfig): McpHandler {
       };
     }
 
-    // kit(cmd) → describe parameters
+    // kit(id, cmd) → describe parameters
     if (!params) {
       return handleKitDescribe(cmd);
     }
 
-    // kit(cmd, params) → run
+    // kit(id, cmd, params) → run
     return callTool(cmd, params);
   }
 
   function handleKitList(): KitToolResult {
-    let text = `## ${kit.name}\n\n${kit.description}\n\n`;
-    text += `### Actions\n\n`;
-    text += `| Action | Description |\n|--------|-------------|\n`;
+    let text = `## Your Kits\n\n`;
+    text += "| ID | Name | Description | Actions |\n";
+    text += "|-----|------|-------------|--------:|\n";
+    text += `| \`${kit.id}\` | ${kit.name} | ${kit.description} | ${kit.tools.length} |\n`;
+    text += `\n**Next:** \`kit(id="${kit.id}")\` to see a kit's actions.`;
+
+    return { content: [{ type: "text", text }] };
+  }
+
+  function handleKitDiscover(): KitToolResult {
+    let text = `## ${kit.name}\n\n`;
+    if (kit.description) {
+      text += `${kit.description}\n\n`;
+    }
+
+    text += "### Actions\n\n";
+    text += "| Action | Description |\n";
+    text += "|--------|-------------|\n";
     for (const t of kit.tools) {
       text += `| \`${t.name}\` | ${t.description} |\n`;
     }
-    text += `\n**Usage:** \`kit(cmd="action_name", params={...})\``;
 
     if (kit.views?.length) {
-      text += `\n\n**Interactive UI:** \`kit_view(view="...")\` — `;
-      text += kit.views
-        .map((v) => `${v.slug} — ${v.description}`)
+      const viewList = kit.views
+        .map((v) => `\`${v.slug}\` \u2014 ${v.description}`)
         .join("; ");
+      text += `\n**Interactive UI:** \`kit_view(id="${kit.id}", view="...")\` \u2014 ${viewList}\n`;
     }
+
+    text += `\n**Run directly:** \`kit(id="${kit.id}", cmd="<action>", params={...})\`\n`;
+    text += `**Describe first:** \`kit(id="${kit.id}", cmd="<action>")\` to see parameter schema`;
 
     return { content: [{ type: "text", text }] };
   }
@@ -519,14 +558,14 @@ export function createMcpHandler(config: McpHandlerConfig): McpHandler {
     const tool = toolMap.get(cmd);
     if (!tool) {
       return errorResult(
-        `Unknown action: "${cmd}". Run kit() to see available actions.`
+        `Unknown action: "${cmd}". Run kit(id="${kit.id}") to see available actions.`
       );
     }
 
     const schema = zodToJsonSchema(tool.args);
     let text = `## ${cmd}\n\n${tool.description}\n\n`;
     text += `### Parameters\n\n\`\`\`json\n${JSON.stringify(schema, null, 2)}\n\`\`\`\n\n`;
-    text += `**Run:** \`kit(cmd="${cmd}", params={...})\``;
+    text += `**Run:** \`kit(id="${kit.id}", cmd="${cmd}", params={...})\``;
 
     return { content: [{ type: "text", text }] };
   }
@@ -538,18 +577,24 @@ export function createMcpHandler(config: McpHandlerConfig): McpHandler {
   async function handleKitView(
     args: Record<string, unknown>
   ): Promise<KitToolResult> {
+    const id = args.id as string | undefined;
     const viewSlug = args.view as string | undefined;
 
-    // kit_view() → list available views
+    // Validate kit ID
+    if (id && id !== kit.id) {
+      return errorResult(`Unknown kit: "${id}". Available: ${kit.id}`);
+    }
+
+    // kit_view(id) → list available views
     if (!viewSlug) {
       if (!kit.views?.length) {
         return { content: [{ type: "text", text: "This kit has no views." }] };
       }
       const list = kit.views
-        .map((v) => `- \`${v.slug}\`: ${v.name} — ${v.description}`)
+        .map((v) => `- \`${v.slug}\`: ${v.name} \u2014 ${v.description}`)
         .join("\n");
       let text = `## Available Views\n\n${list}\n\n`;
-      text += `**Usage:** \`kit_view(view="${kit.views[0].slug}")\``;
+      text += `**Usage:** \`kit_view(id="${kit.id}", view="${kit.views[0].slug}")\``;
       return { content: [{ type: "text", text }] };
     }
 
@@ -648,6 +693,7 @@ export function createMcpHandler(config: McpHandlerConfig): McpHandler {
                 "io.modelcontextprotocol/ui": {},
               },
             },
+            ...(kit.instructions ? { instructions: kit.instructions } : {}),
           });
 
         // ── Notifications (no response) ──
