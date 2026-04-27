@@ -103,9 +103,13 @@ Edit `View.tsx`, refresh the page, and your update appears immediately on the pr
 
 Each user gets their own SQLite database for each kit. Completely separate — not row-level isolation, not shared tables, **different databases**. Regularly backed up. This eliminates the entire class of problems around LLM data access and permissions.
 
-### One-click activation
+### One connection, dynamic kits
 
-Users activate kits with a single click. No server configuration, no API keys, no OAuth setup. The platform handles provisioning the database, deploying the runtime, and routing MCP requests.
+Traditional MCP marketplaces require a separate server connection per integration — each with its own OAuth flow, subscription, and reconnect cycle when things change. Activate a new connector and your client needs to reconnect to pick up the new tools.
+
+KitStack is a single MCP connection. Users activate and deactivate kits from the dashboard without reconnecting their LLM client. The two-tool surface is static — `kit` and `kit_view` never change. What changes is the *description*, which is recomposed dynamically to reflect installed kits. The LLM sees your current kit catalog on every session with zero client-side configuration.
+
+One auth, one connection, and the user manages what's available from a single dashboard — like an app store that doesn't require restarting the app after each install.
 
 ## Kit vs MCP server vs SaaS
 
@@ -116,6 +120,14 @@ Users activate kits with a single click. No server configuration, no API keys, n
 | **Auth** | Handled by KitStack | You implement it | You implement it |
 | **Deployment** | `kitstack publish` | Self-hosted or custom | Custom infrastructure |
 | **Best for** | Personal tools, SME/enterprise utilities, bridging LLM and persistence | Custom integrations, complex workflows | Products with multi-user requirements, long-running tasks |
+
+## Current limitations
+
+**Discovery overhead.** Progressive discovery adds round trips compared to direct MCP tools. The LLM may need to call `kit(id)` to inspect available actions before running one. This is a deliberate trade-off — KitStack optimizes for multi-step workflows where one discovery call maps the full surface, not for single one-shot actions.
+
+**Permission granularity.** Kit actions are not individual MCP tools, so MCP clients cannot enforce per-action permissions natively. KitStack enforces permissions server-side (allow or block per action category). A human-in-the-loop "ask before allow" pattern for sensitive actions is planned but not yet available — it requires an out-of-band confirmation channel that bypasses the LLM.
+
+**Client behavior varies.** Some LLM clients defer tool loading behind a search index. KitStack's tool description is designed for this (trigger keywords and action names are front-loaded for search matching), but discoverability depends on how each client handles deferred tools. First-time discovery may require a search step; subsequent conversations benefit from the LLM caching kit information in memory.
 
 ## Getting started
 
