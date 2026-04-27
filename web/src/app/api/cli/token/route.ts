@@ -7,6 +7,39 @@ import { eq, and, asc } from "drizzle-orm";
 
 const MAX_CLI_SESSIONS = 5;
 
+/**
+ * Validate that a callback URL is a safe localhost URL.
+ * Returns null if valid, or an error string if invalid.
+ */
+export function validateCallbackUrl(callback: string): string | null {
+  let callbackUrl: URL;
+  try {
+    callbackUrl = new URL(callback);
+  } catch {
+    return "Invalid callback URL";
+  }
+
+  if (callbackUrl.protocol !== "http:") {
+    return "Callback must use http:";
+  }
+
+  const allowedHosts = ["localhost", "127.0.0.1", "[::1]"];
+  if (!allowedHosts.includes(callbackUrl.hostname)) {
+    return "Callback must be localhost";
+  }
+
+  if (callbackUrl.username || callbackUrl.password) {
+    return "Callback must not contain credentials";
+  }
+
+  const port = parseInt(callbackUrl.port || "80", 10);
+  if (port < 1024 || port > 65535) {
+    return "Callback port must be 1024-65535";
+  }
+
+  return null;
+}
+
 export async function POST(request: NextRequest) {
   // Verify user is authenticated
   let userSession;
@@ -21,34 +54,9 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ error: "Missing callback" }, { status: 400 });
   }
 
-  // Validate callback is a safe localhost URL
-  let callbackUrl: URL;
-  try {
-    callbackUrl = new URL(callback);
-  } catch {
-    return NextResponse.json({ error: "Invalid callback URL" }, { status: 400 });
-  }
-
-  // Must be http (not https, javascript, file, data, etc.)
-  if (callbackUrl.protocol !== "http:") {
-    return NextResponse.json({ error: "Callback must use http:" }, { status: 400 });
-  }
-
-  // Must be localhost (IPv4, IPv6, or hostname)
-  const allowedHosts = ["localhost", "127.0.0.1", "[::1]"];
-  if (!allowedHosts.includes(callbackUrl.hostname)) {
-    return NextResponse.json({ error: "Callback must be localhost" }, { status: 400 });
-  }
-
-  // Reject URLs with embedded credentials (http://user:pass@localhost)
-  if (callbackUrl.username || callbackUrl.password) {
-    return NextResponse.json({ error: "Callback must not contain credentials" }, { status: 400 });
-  }
-
-  // Port must be a number in valid range
-  const port = parseInt(callbackUrl.port || "80", 10);
-  if (port < 1024 || port > 65535) {
-    return NextResponse.json({ error: "Callback port must be 1024-65535" }, { status: 400 });
+  const validationError = validateCallbackUrl(callback);
+  if (validationError) {
+    return NextResponse.json({ error: validationError }, { status: 400 });
   }
 
   // Enforce CLI session cap — delete oldest if at limit
