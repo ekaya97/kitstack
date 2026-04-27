@@ -36,6 +36,8 @@ export const updateDeal = defineTool({
 
     await db.update(deals).set(updates).where(eq(deals.id, args.dealId));
     const changes = Object.entries(updates).map(([k, v]) => `${k}: ${v}`).join(", ");
-    return kit.text(`Deal "${existing.name}" updated — ${changes}.`);
+    return kit.result(
+      kit.updated(args.dealId, "deal", `Deal "${existing.name}" updated — ${changes}.`)
+    );
   },
 });

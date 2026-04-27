@@ -34,6 +34,8 @@ export const generateProposal = defineTool({
       status: "draft",
     });
 
-    return kit.text(`Proposal v${version} saved for deal "${deal.name}" (status: draft).`);
+    return kit.result(
+      kit.created(id, "proposal", `Proposal v${version} saved for deal "${deal.name}" (status: draft).`)
+    );
   },
 });

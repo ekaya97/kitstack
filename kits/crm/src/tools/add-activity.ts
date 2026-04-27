@@ -30,6 +30,8 @@ export const addActivity = defineTool({
         .where(eq(contacts.id, args.contactId));
     }
 
-    return kit.text(`${args.type} logged: "${args.description}"`);
+    return kit.result(
+      kit.created(id, "activity", `${args.type} logged: "${args.description}"`)
+    );
   },
 });

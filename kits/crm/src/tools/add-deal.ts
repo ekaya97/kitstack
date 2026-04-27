@@ -26,6 +26,8 @@ export const addDeal = defineTool({
       expectedCloseDate: args.expectedCloseDate ?? null,
     });
     const valueStr = args.value ? ` — €${args.value.toLocaleString()}` : "";
-    return kit.text(`Deal "${args.name}" created in ${args.stage}${valueStr}.`);
+    return kit.result(
+      kit.created(id, "deal", `Deal "${args.name}" created in ${args.stage}${valueStr}.`)
+    );
   },
 });

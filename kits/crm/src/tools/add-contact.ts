@@ -25,8 +25,8 @@ export const addContact = defineTool({
       source: args.source ?? null,
       notes: args.notes ?? null,
     });
-    return kit.text(
-      `Contact "${args.name}" added (ID: ${id}).${args.company ? ` Company: ${args.company}.` : ""}`
+    return kit.result(
+      kit.created(id, "contact", `Contact "${args.name}" added.${args.company ? ` Company: ${args.company}.` : ""}`)
     );
   },
 });
