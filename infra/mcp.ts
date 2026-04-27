@@ -173,6 +173,9 @@ devRelay.route("$default", relayDefault.arn);
 
 export const mcpDomain = new sst.aws.Router("McpDomain", {
   domain: $app.stage != "production" ? undefined : "mcp.kitstack.co",
+  waf: {
+    rateLimitPerIp: 1000,  // 1000 requests per IP per 5-minute window
+  },
 });
 
 export const mcpRouter = new sst.aws.Function("McpRouter", {
