@@ -195,7 +195,7 @@ const killSwitchTopic = new aws.sns.Topic("KillSwitchTopic");
 new aws.sns.TopicSubscription("KillSwitchEmail", {
   topic: killSwitchTopic.arn,
   protocol: "email",
-  endpoint: "enes@kitstack.co",
+  endpoint: "eneskaya2912@gmail.com",
 });
 
 const killSwitchFn = new sst.aws.Function("KillSwitch", {
