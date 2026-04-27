@@ -139,7 +139,7 @@ describe("MCP handler: two-tool split", () => {
     it("kit_view tool has _meta.ui.resourceUri", async () => {
       const res = await rpc("tools/list");
       const viewTool = (res!.result as any).tools[1];
-      expect(viewTool._meta?.ui?.resourceUri).toBe("ui://kitstack/test-inv/app");
+      expect(viewTool._meta?.ui?.resourceUri).toBe("ui://kitstack/app");
     });
 
     it("kit tool description lists actions", async () => {
@@ -151,10 +151,20 @@ describe("MCP handler: two-tool split", () => {
   });
 
   describe("kit() — progressive discovery", () => {
-    it("kit() lists available actions", async () => {
+    it("kit() lists available kits", async () => {
       const res = await rpc("tools/call", {
         name: "kit",
         arguments: {},
+      });
+      const text = textOf((res!.result as any));
+      expect(text).toContain("test-inv");
+      expect(text).toContain("Your Kits");
+    });
+
+    it("kit(id) lists available actions", async () => {
+      const res = await rpc("tools/call", {
+        name: "kit",
+        arguments: { id: "test-inv" },
       });
       const text = textOf((res!.result as any));
       expect(text).toContain("add_item");
@@ -162,10 +172,10 @@ describe("MCP handler: two-tool split", () => {
       expect(text).toContain("Actions");
     });
 
-    it("kit(cmd) describes parameters", async () => {
+    it("kit(id, cmd) describes parameters", async () => {
       const res = await rpc("tools/call", {
         name: "kit",
-        arguments: { cmd: "add_item" },
+        arguments: { id: "test-inv", cmd: "add_item" },
       });
       const text = textOf((res!.result as any));
       expect(text).toContain("add_item");
@@ -173,43 +183,53 @@ describe("MCP handler: two-tool split", () => {
       expect(text).toContain("name");
     });
 
-    it("kit(cmd) returns error for unknown command", async () => {
+    it("kit(id, cmd) returns error for unknown command", async () => {
       const res = await rpc("tools/call", {
         name: "kit",
-        arguments: { cmd: "nonexistent" },
+        arguments: { id: "test-inv", cmd: "nonexistent" },
       });
       const result = (res!.result as any);
       expect(result.isError).toBe(true);
       expect(textOf(result)).toContain("nonexistent");
     });
 
-    it("kit(cmd, params) executes the tool", async () => {
+    it("kit(id, cmd, params) executes the tool", async () => {
       const res = await rpc("tools/call", {
         name: "kit",
-        arguments: { cmd: "add_item", params: { name: "TestWidget" } },
+        arguments: { id: "test-inv", cmd: "add_item", params: { name: "TestWidget" } },
       });
       const text = textOf((res!.result as any));
       expect(text).toContain("TestWidget");
     });
 
-    it("kit(cmd, params) validates arguments", async () => {
+    it("kit(id, cmd, params) validates arguments", async () => {
       const res = await rpc("tools/call", {
         name: "kit",
-        arguments: { cmd: "add_item", params: {} },
+        arguments: { id: "test-inv", cmd: "add_item", params: {} },
       });
       const result = (res!.result as any);
       expect(result.isError).toBe(true);
       expect(textOf(result)).toContain("Invalid arguments");
     });
 
-    it("kit() discover includes view guidance", async () => {
+    it("kit(id) discover includes view guidance", async () => {
       const res = await rpc("tools/call", {
         name: "kit",
-        arguments: {},
+        arguments: { id: "test-inv" },
       });
       const text = textOf((res!.result as any));
       expect(text).toContain("kit_view");
       expect(text).toContain("items");
+    });
+
+    it("kit(unknown_id) returns error", async () => {
+      const res = await rpc("tools/call", {
+        name: "kit",
+        arguments: { id: "nonexistent" },
+      });
+      const result = (res!.result as any);
+      expect(result.isError).toBe(true);
+      expect(textOf(result)).toContain("nonexistent");
     });
   });
 
@@ -217,7 +237,7 @@ describe("MCP handler: two-tool split", () => {
     it("re-runs the loader and returns data", async () => {
       const res = await rpc("tools/call", {
         name: "kit",
-        arguments: { cmd: "__load_view", params: { view: "items" } },
+        arguments: { id: "test-inv", cmd: "__load_view", params: { view: "items" } },
       });
       const text = textOf((res!.result as any));
       const parsed = JSON.parse(text);
@@ -228,37 +248,47 @@ describe("MCP handler: two-tool split", () => {
     it("returns error for unknown view slug", async () => {
       const res = await rpc("tools/call", {
         name: "kit",
-        arguments: { cmd: "__load_view", params: { view: "nope" } },
+        arguments: { id: "test-inv", cmd: "__load_view", params: { view: "nope" } },
       });
-      const result = (res!.result as any);
-      expect(result.isError).toBe(true);
+      const text = textOf((res!.result as any));
+      expect(text).toContain("error");
     });
   });
 
   describe("kit_view() — embedded resource", () => {
-    it("kit_view() lists available views", async () => {
+    it("kit_view(id) lists available views", async () => {
       const res = await rpc("tools/call", {
         name: "kit_view",
-        arguments: {},
+        arguments: { id: "test-inv" },
       });
       const text = textOf((res!.result as any));
       expect(text).toContain("items");
       expect(text).toContain("Available Views");
     });
 
-    it("kit_view(view) returns two content blocks", async () => {
+    it("kit_view() without id returns error", async () => {
       const res = await rpc("tools/call", {
         name: "kit_view",
-        arguments: { view: "items" },
+        arguments: {},
+      });
+      const result = (res!.result as any);
+      expect(result.isError).toBe(true);
+      expect(textOf(result)).toContain("kit ID");
+    });
+
+    it("kit_view(id, view) returns two content blocks", async () => {
+      const res = await rpc("tools/call", {
+        name: "kit_view",
+        arguments: { id: "test-inv", view: "items" },
       });
       const result = (res!.result as any);
       expect(result.content).toHaveLength(2);
     });
 
-    it("kit_view(view) first block is JSON data payload", async () => {
+    it("kit_view(id, view) first block is JSON data payload", async () => {
       const res = await rpc("tools/call", {
         name: "kit_view",
-        arguments: { view: "items" },
+        arguments: { id: "test-inv", view: "items" },
       });
       const result = (res!.result as any);
       const textBlock = result.content[0];
@@ -270,10 +300,10 @@ describe("MCP handler: two-tool split", () => {
       expect(data).toHaveProperty("data");
     });
 
-    it("kit_view(view) second block is HTML embedded resource", async () => {
+    it("kit_view(id, view) second block is HTML embedded resource", async () => {
       const res = await rpc("tools/call", {
         name: "kit_view",
-        arguments: { view: "items" },
+        arguments: { id: "test-inv", view: "items" },
       });
       const result = (res!.result as any);
       const resourceBlock = result.content[1];
@@ -283,10 +313,10 @@ describe("MCP handler: two-tool split", () => {
       expect(resourceBlock.resource.text).toContain("<!DOCTYPE html>");
     });
 
-    it("kit_view(view) returns error for unknown view", async () => {
+    it("kit_view(id, view) returns error for unknown view", async () => {
       const res = await rpc("tools/call", {
         name: "kit_view",
-        arguments: { view: "nonexistent" },
+        arguments: { id: "test-inv", view: "nonexistent" },
       });
       const result = (res!.result as any);
       expect(result.isError).toBe(true);
