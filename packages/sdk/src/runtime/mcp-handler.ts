@@ -92,6 +92,7 @@ export function createMcpHandler(config: McpHandlerConfig): McpHandler {
     platformCdn: config.platformCdn,
     kitCdn: config.kitCdn,
     devAssetBaseUrl: config.devAssetBaseUrl,
+    checkAuthz: config.checkAuthz,
   });
 
   const protocol = createProtocolHandler({

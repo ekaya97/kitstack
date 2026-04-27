@@ -29,14 +29,14 @@ afterEach(() => {
 
 describe("uploadKitBundle", () => {
   it("uploads server bundle to bundles/{kitId}/kit.mjs", async () => {
-    setupBuildDir({ "kit.mjs": "export default {}" });
+    setupBuildDir({ "kit.zip": "zipdata" });
     await uploadKitBundle({ buildDir: BUILD_DIR, kitId: "crm", bucketName: "test-bucket" });
 
     const calls = s3Mock.commandCalls(PutObjectCommand);
     expect(calls).toHaveLength(1);
-    expect(calls[0].args[0].input.Key).toBe("bundles/crm/kit.mjs");
+    expect(calls[0].args[0].input.Key).toBe("bundles/crm/kit.zip");
     expect(calls[0].args[0].input.Bucket).toBe("test-bucket");
-    expect(calls[0].args[0].input.ContentType).toBe("application/javascript");
+    expect(calls[0].args[0].input.ContentType).toBe("application/zip");
   });
 
   it("uploads manifest to bundles/{kitId}/manifest.json", async () => {
@@ -71,7 +71,7 @@ describe("uploadKitBundle", () => {
 
   it("returns the count of uploaded files", async () => {
     setupBuildDir({
-      "kit.mjs": "code",
+      "kit.zip": "zipdata",
       "manifest.json": "{}",
       "shell.html": "<html>",
     });
@@ -86,7 +86,7 @@ describe("uploadKitBundle", () => {
   });
 
   it("sets Cache-Control header", async () => {
-    setupBuildDir({ "kit.mjs": "code" });
+    setupBuildDir({ "kit.zip": "zipdata" });
     await uploadKitBundle({
       buildDir: BUILD_DIR,
       kitId: "crm",
@@ -99,7 +99,7 @@ describe("uploadKitBundle", () => {
   });
 
   it("uses no-cache by default", async () => {
-    setupBuildDir({ "kit.mjs": "code" });
+    setupBuildDir({ "kit.zip": "zipdata" });
     await uploadKitBundle({ buildDir: BUILD_DIR, kitId: "crm", bucketName: "b" });
 
     const call = s3Mock.commandCalls(PutObjectCommand)[0];

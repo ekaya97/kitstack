@@ -1,5 +1,5 @@
 import type { LibSQLDatabase } from "drizzle-orm/libsql";
-import type { KitDefinition, KitToolResult, KitContext, ToolDefinition } from "../../types";
+import type { KitDefinition, KitToolResult, KitContext, ToolDefinition, AuthzRequirement } from "../../types";
 import type { KitServerAdapter, ResolvedKit } from "../types";
 import { zodToJsonSchema } from "../../runtime/zod-to-json-schema";
 import { generateShell } from "../../shell-template";
@@ -19,6 +19,12 @@ export interface LocalAdapterOptions {
   kitCdn?: string;
   /** Dev asset base URL for relay mode. */
   devAssetBaseUrl?: string;
+  /** Authorization check function. If omitted, authorize hooks are skipped. */
+  checkAuthz?: (
+    db: LibSQLDatabase,
+    requirement: AuthzRequirement,
+    ctx: KitContext
+  ) => Promise<boolean>;
 }
 
 /**
@@ -108,7 +114,22 @@ export function localAdapter(options: LocalAdapterOptions): KitServerAdapter {
         };
       }
 
-      return tool.handler!(db, parsed.data, makeCtx(userId));
+      // Run authorize hook if present and checkAuthz is configured
+      const ctx = makeCtx(userId);
+      if (tool.authorize && options.checkAuthz) {
+        const requirements = tool.authorize(parsed.data, ctx);
+        for (const req of requirements) {
+          const allowed = await options.checkAuthz(db, req, ctx);
+          if (!allowed) {
+            return {
+              content: [{ type: "text", text: `Forbidden: missing "${req.relation}" on ${req.objectType} "${req.objectId}"` }],
+              isError: true,
+            };
+          }
+        }
+      }
+
+      return tool.handler!(db, parsed.data, ctx);
     },
 
     async executeLoader(kitId, viewSlug, userId) {

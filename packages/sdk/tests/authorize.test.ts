@@ -160,7 +160,7 @@ describe("MCP handler — authorize hook", () => {
       method: "tools/call",
       params: {
         name: "kit",
-        arguments: { cmd: "delete_item", params: { itemId: "x" } },
+        arguments: { id: testKitDef.id, cmd: "delete_item", params: { itemId: "x" } },
       },
     });
     const result = (res!.result as any);
@@ -176,7 +176,7 @@ describe("MCP handler — authorize hook", () => {
       method: "tools/call",
       params: {
         name: "kit",
-        arguments: { cmd: "delete_item", params: { itemId: "x" } },
+        arguments: { id: testKitDef.id, cmd: "delete_item", params: { itemId: "x" } },
       },
     });
     const result = (res!.result as any);

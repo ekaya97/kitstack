@@ -1,14 +1,6 @@
 import { describe, it, expect, beforeEach, vi } from "vitest";
 
-// Mock the entire @aws-sdk/client-lambda module since provisionKitLambda
-// uses dynamic import() and waitUntilFunctionActiveV2 (a waiter function,
-// not a Command — aws-sdk-client-mock can't intercept it).
-
 const mockSend = vi.fn();
-const mockGetFunction = vi.fn();
-const mockCreateFunction = vi.fn();
-const mockUpdateCode = vi.fn();
-const mockUpdateConfig = vi.fn();
 
 vi.mock("@aws-sdk/client-lambda", () => {
   return {
@@ -25,7 +17,20 @@ vi.mock("@aws-sdk/client-lambda", () => {
     UpdateFunctionConfigurationCommand: vi.fn().mockImplementation((input: any) => {
       return { _type: "UpdateFunctionConfig", input };
     }),
+    PutFunctionConcurrencyCommand: vi.fn().mockImplementation((input: any) => {
+      return { _type: "PutFunctionConcurrency", input };
+    }),
     waitUntilFunctionActiveV2: vi.fn().mockResolvedValue(undefined),
+    waitUntilFunctionUpdatedV2: vi.fn().mockResolvedValue(undefined),
+  };
+});
+
+vi.mock("@aws-sdk/client-cloudwatch-logs", () => {
+  return {
+    CloudWatchLogsClient: vi.fn().mockImplementation(() => ({ send: vi.fn().mockResolvedValue({}) })),
+    PutRetentionPolicyCommand: vi.fn().mockImplementation((input: any) => {
+      return { _type: "PutRetentionPolicy", input };
+    }),
   };
 });
 
@@ -45,7 +50,6 @@ beforeEach(() => {
 
 describe("provisionKitLambda — create new function", () => {
   beforeEach(() => {
-    // GetFunction throws ResourceNotFoundException → function doesn't exist
     mockSend.mockImplementation((cmd: any) => {
       if (cmd._type === "GetFunction") {
         const err = new Error("Function not found");
@@ -73,12 +77,12 @@ describe("provisionKitLambda — create new function", () => {
     expect(input.FunctionName).toBe("Kit-crm");
     expect(input.Runtime).toBe("nodejs22.x");
     expect(input.Architectures).toEqual(["arm64"]);
-    expect(input.Handler).toBe("index.main");
+    expect(input.Handler).toBe("index.handler");
     expect(input.Role).toBe(BASE_OPTIONS.roleArn);
     expect(input.Code).toEqual({ S3Bucket: "kit-assets", S3Key: "bundles/crm/kit.mjs" });
     expect(input.Layers).toEqual([BASE_OPTIONS.runtimeLayerArn]);
-    expect(input.MemorySize).toBe(256);
-    expect(input.Timeout).toBe(30);
+    expect(input.MemorySize).toBe(128);
+    expect(input.Timeout).toBe(10);
     expect(input.Environment).toEqual({ Variables: {} });
   });
 
@@ -87,6 +91,13 @@ describe("provisionKitLambda — create new function", () => {
     const createCall = mockSend.mock.calls.find((c: any) => c[0]._type === "CreateFunction")!;
     expect(createCall[0].input.MemorySize).toBe(512);
     expect(createCall[0].input.Timeout).toBe(60);
+  });
+
+  it("sets reserved concurrency", async () => {
+    await provisionKitLambda(BASE_OPTIONS);
+    const concurrencyCall = mockSend.mock.calls.find((c: any) => c[0]._type === "PutFunctionConcurrency")!;
+    expect(concurrencyCall[0].input.FunctionName).toBe("Kit-crm");
+    expect(concurrencyCall[0].input.ReservedConcurrentExecutions).toBe(5);
   });
 });
 
@@ -113,7 +124,6 @@ describe("provisionKitLambda — update existing function", () => {
     const types = mockSend.mock.calls.map((c: any) => c[0]._type);
     expect(types).toContain("UpdateFunctionCode");
     expect(types).toContain("UpdateFunctionConfig");
-    // Code update should come before config update
     expect(types.indexOf("UpdateFunctionCode")).toBeLessThan(types.indexOf("UpdateFunctionConfig"));
   });
 
@@ -122,14 +132,24 @@ describe("provisionKitLambda — update existing function", () => {
     const creates = mockSend.mock.calls.filter((c: any) => c[0]._type === "CreateFunction");
     expect(creates).toHaveLength(0);
   });
+
+  it("sets concurrency after update", async () => {
+    await provisionKitLambda(BASE_OPTIONS);
+    const types = mockSend.mock.calls.map((c: any) => c[0]._type);
+    expect(types).toContain("PutFunctionConcurrency");
+    expect(types.indexOf("UpdateFunctionConfig")).toBeLessThan(types.indexOf("PutFunctionConcurrency"));
+  });
 });
 
 describe("provisionKitLambda — error handling", () => {
   it("rethrows non-ResourceNotFoundException errors", async () => {
-    mockSend.mockImplementation(() => {
-      const err = new Error("Access denied");
-      err.name = "AccessDeniedException";
-      throw err;
+    mockSend.mockImplementation((cmd: any) => {
+      if (cmd._type === "GetFunction") {
+        const err = new Error("Access denied");
+        err.name = "AccessDeniedException";
+        throw err;
+      }
+      return {};
     });
     await expect(provisionKitLambda(BASE_OPTIONS)).rejects.toThrow("Access denied");
   });

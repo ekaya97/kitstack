@@ -56,6 +56,8 @@ function setupDb() {
       input_schema TEXT,
       kit_name TEXT,
       kit_description TEXT,
+      kit_triggers TEXT,
+      kit_instructions TEXT,
       lambda_resource TEXT,
       visibility TEXT NOT NULL DEFAULT 'private',
       author_id TEXT,
