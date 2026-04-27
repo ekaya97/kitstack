@@ -1,0 +1,124 @@
+---
+title: defineKit()
+description: API reference for defineKit() — the top-level function that validates and creates a kit definition.
+---
+
+# defineKit()
+
+Creates a validated kit definition from your configuration. This is the entry point for every kit.
+
+## Signature
+
+```ts
+function defineKit(config: KitConfig): KitDefinition
+```
+
+## Parameters
+
+| Parameter | Type | Required | Description |
+|-----------|------|----------|-------------|
+| `id` | `string` | Yes | Unique kit identifier. Must be kebab-case. |
+| `version` | `string` | Yes | Semver version string (e.g., `"1.0.0"`). |
+| `name` | `string` | Yes | Human-readable display name. |
+| `description` | `string` | Yes | Short description of the kit's purpose. |
+| `schema` | `Record<string, unknown>` | Yes | Drizzle schema object (e.g., `{ contacts, deals }`). |
+| `migrationsDir` | `string` | No | Absolute path to the `migrations/` directory containing SQL files. |
+| `migrationSql` | `string` | No | Raw SQL migration string. Takes precedence over `migrationsDir`. |
+| `instructions` | `string` | Yes | System prompt injected into the LLM's context. |
+| `tools` | `ToolDefinition[]` | Yes | Array of tools created with [`defineTool()`](/docs/api/define-tool). |
+| `views` | `ViewDefinition[]` | No | Array of views created with [`defineView()`](/docs/api/define-view). |
+
+## Returns
+
+`KitDefinition` — a frozen object used by the dev server, build pipeline, test harness, and `serve()`.
+
+## Validations
+
+`defineKit()` runs these checks at call time. Failures throw immediately.
+
+### Throwing errors
+
+| Rule | Error code | Description |
+|------|-----------|-------------|
+| Every tool has `load()` or `handler()` | `TOOL_MISSING_IMPL` | Tools with no implementation are caught at definition time |
+| Tool names are `snake_case` | `TOOL_INVALID_NAME` | Regex: `/^[a-z][a-z0-9]*(?:_[a-z0-9]+)*$/` |
+| Tool descriptions >= 10 chars | `TOOL_SHORT_DESCRIPTION` | The LLM needs descriptions to choose the right tool |
+| No duplicate tool names | `KIT_DUPLICATE_TOOLS` | Lists the duplicated names |
+| View slugs are `kebab-case` | `KIT_INVALID_VIEW_SLUG` | Regex: `/^[a-z][a-z0-9]*(?:-[a-z0-9]+)*$/` |
+| No duplicate view slugs | `KIT_DUPLICATE_VIEWS` | Lists the duplicated slugs |
+
+### Non-throwing warnings
+
+- Tool description longer than 200 characters
+- Tool arg fields missing `.describe()` on Zod schema
+- Tool name starts with the kit ID as a prefix (e.g., `crm_add_contact` in kit `crm`)
+
+## Examples
+
+### Basic kit
+
+```ts filename="kit.config.ts"
+import { defineKit } from "@kitstack/sdk";
+import { resolve } from "node:path";
+import { schema } from "./src/schema";
+import { instructions } from "./src/instructions";
+import { addItem } from "./src/tools/add-item";
+import { listItems } from "./src/tools/list-items";
+import { dashboardView } from "./src/views/dashboard";
+
+export default defineKit({
+  id: "inventory",
+  version: "1.0.0",
+  name: "Inventory Kit",
+  description: "Track inventory items with categories and quantities",
+  schema,
+  migrationsDir: resolve(import.meta.dirname, "migrations"),
+  instructions,
+  tools: [addItem, listItems],
+  views: [dashboardView],
+});
+```
+
+### Kit with raw SQL migrations
+
+```ts filename="kit.config.ts"
+export default defineKit({
+  id: "simple",
+  version: "0.1.0",
+  name: "Simple Kit",
+  description: "Minimal kit with inline migrations",
+  schema: {},
+  migrationSql: `
+    CREATE TABLE IF NOT EXISTS items (
+      id TEXT PRIMARY KEY,
+      name TEXT NOT NULL,
+      created_at INTEGER NOT NULL
+    );
+  `,
+  instructions: "Use this kit to manage items.",
+  tools: [addItem],
+});
+```
+
+### Kit without views
+
+```ts filename="kit.config.ts"
+export default defineKit({
+  id: "analytics",
+  version: "1.0.0",
+  name: "Analytics Kit",
+  description: "Query analytics data",
+  schema,
+  migrationsDir: resolve(import.meta.dirname, "migrations"),
+  instructions,
+  tools: [queryEvents, summarize],
+  // No views — tools only
+});
+```
+
+## Notes
+
+- `defineKit()` runs at import time. When `kit.config.ts` is imported by the dev server or build pipeline, validations execute immediately. Invalid kits fail fast.
+- All errors include a machine-readable `code` (e.g., `"TOOL_INVALID_NAME"`) and a `docUrl` pointing to `https://docs.kitstack.dev/errors/[code]`.
+- View `placeholder` data is extracted and stored in `kit._placeholders`, then removed from view definitions. Placeholders never appear in the production build.
+- Related: [`defineTool()`](/docs/api/define-tool), [`defineView()`](/docs/api/define-view), [Errors](/docs/api/errors)

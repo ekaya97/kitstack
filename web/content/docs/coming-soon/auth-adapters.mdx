@@ -1,0 +1,206 @@
+---
+title: Auth Adapters
+description: API reference for auth adapters — none(), kitstack(), oauth(), and the AuthAdapter interface.
+---
+
+# Auth Adapters
+
+Auth adapters plug into [`serve()`](/docs/api/serve) to handle user authentication. They validate tokens, manage OAuth flows, and return a `userId` for each MCP request.
+
+```ts
+import { none, kitstack, oauth } from "@kitstack/sdk/server/auth";
+```
+
+## AuthAdapter interface
+
+All adapters implement this interface:
+
+```ts
+interface AuthAdapter {
+  metadata(): OAuthServerMetadata;
+  authorize(req: Request): Promise<{ redirect: string }>;
+  token(req: Request): Promise<{
+    accessToken: string;
+    refreshToken?: string;
+    expiresIn: number;
+  }>;
+  revoke(req: Request): Promise<void>;
+  validate(token: string): Promise<{ userId: string } | null>;
+}
+```
+
+### OAuthServerMetadata
+
+```ts
+interface OAuthServerMetadata {
+  issuer: string;
+  authorization_endpoint: string;
+  token_endpoint: string;
+  revocation_endpoint?: string;
+  response_types_supported: string[];
+  grant_types_supported: string[];
+  token_endpoint_auth_methods_supported: string[];
+}
+```
+
+---
+
+## none()
+
+No-op adapter for local development. Accepts all tokens and returns a fixed user ID.
+
+```ts
+function none(options?: { userId?: string }): AuthAdapter
+```
+
+| Option | Type | Default | Description |
+|--------|------|---------|-------------|
+| `userId` | `string` | `"local-dev-user"` | The user ID returned for all requests. |
+
+```ts filename="server.ts"
+import { none } from "@kitstack/sdk/server/auth";
+
+serve({
+  kit,
+  auth: none(),                        // userId: "local-dev-user"
+  // auth: none({ userId: "dev-42" }), // custom userId
+  db: { url: "file:.kitstack/dev.db" },
+  transport: "stdio",
+});
+```
+
+<Warning>
+Never use `none()` in production. It accepts every request regardless of the token.
+</Warning>
+
+---
+
+## kitstack()
+
+Delegates authentication to KitStack's OAuth 2.0 authorization server.
+
+```ts
+function kitstack(config: {
+  clientId: string;
+  clientSecret: string;
+  kitstackUrl?: string;
+}): AuthAdapter
+```
+
+| Option | Type | Default | Description |
+|--------|------|---------|-------------|
+| `clientId` | `string` | Required | OAuth client ID |
+| `clientSecret` | `string` | Required | OAuth client secret |
+| `kitstackUrl` | `string` | `"https://kitstack.co"` | Override for staging/dev |
+
+### How it works
+
+| Method | KitStack endpoint | Purpose |
+|--------|-------------------|---------|
+| `metadata()` | Constructed locally | Returns OAuth server metadata |
+| `authorize()` | `GET /oauth/authorize` | Redirects to KitStack's consent screen |
+| `token()` | `POST /oauth/token` | Exchanges code for access/refresh tokens |
+| `revoke()` | `POST /oauth/revoke` | Revokes a token |
+| `validate()` | `GET /oauth/userinfo` | Reads `sub` claim to get userId |
+
+```ts filename="server.ts"
+import { kitstack } from "@kitstack/sdk/server/auth";
+
+serve({
+  kit,
+  auth: kitstack({
+    clientId: process.env.KITSTACK_CLIENT_ID!,
+    clientSecret: process.env.KITSTACK_CLIENT_SECRET!,
+  }),
+  db: { url: process.env.DATABASE_URL! },
+  transport: "http",
+  port: 3000,
+});
+```
+
+---
+
+## oauth()
+
+Bring-your-own OAuth provider. You supply callbacks for each step.
+
+```ts
+function oauth(config: {
+  issuer: string;
+  authorize: (req: Request) => Promise<{ redirect: string }>;
+  exchangeCode?: (code: string) => Promise<{
+    accessToken: string;
+    refreshToken?: string;
+    expiresIn: number;
+  }>;
+  validateToken: (token: string) => Promise<{ userId: string } | null>;
+  revokeToken?: (token: string) => Promise<void>;
+}): AuthAdapter
+```
+
+| Option | Type | Required | Description |
+|--------|------|----------|-------------|
+| `issuer` | `string` | Yes | Base URL for the OAuth server metadata. |
+| `authorize` | `(req) => Promise<{ redirect }>` | Yes | Handles authorization requests. |
+| `exchangeCode` | `(code) => Promise<{ accessToken, ... }>` | No | Exchanges auth code for tokens. |
+| `validateToken` | `(token) => Promise<{ userId } \| null>` | Yes | Validates bearer tokens. |
+| `revokeToken` | `(token) => Promise<void>` | No | Revokes a token. |
+
+<Note>
+If `exchangeCode` is omitted, the token endpoint returns a stub token (`"no-exchange-configured"`). This supports API-key flows where `validateToken` is the only real auth check.
+</Note>
+
+```ts filename="server.ts"
+import { oauth } from "@kitstack/sdk/server/auth";
+
+serve({
+  kit,
+  auth: oauth({
+    issuer: "https://my-kit.example.com",
+    authorize: async (req) => {
+      const url = new URL(req.url);
+      const state = url.searchParams.get("state");
+      return {
+        redirect: `https://auth0.example.com/authorize?state=${state}`,
+      };
+    },
+    exchangeCode: async (code) => {
+      const res = await fetch("https://auth0.example.com/oauth/token", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          grant_type: "authorization_code",
+          code,
+          client_id: process.env.AUTH0_CLIENT_ID,
+          client_secret: process.env.AUTH0_CLIENT_SECRET,
+        }),
+      });
+      const data = await res.json();
+      return {
+        accessToken: data.access_token,
+        refreshToken: data.refresh_token,
+        expiresIn: data.expires_in,
+      };
+    },
+    validateToken: async (token) => {
+      const res = await fetch("https://auth0.example.com/userinfo", {
+        headers: { Authorization: `Bearer ${token}` },
+      });
+      if (!res.ok) return null;
+      const user = await res.json();
+      return { userId: user.sub };
+    },
+  }),
+  db: { url: process.env.DATABASE_URL! },
+  transport: "http",
+  port: 3000,
+});
+```
+
+## Notes
+
+- `validate()` must return `null` for invalid tokens, not throw. Throwing conflates "bad token" (401) with "adapter crashed" (500).
+- Neither adapter caches validated tokens. Every MCP request triggers a `validate()` call.
+- OAuth metadata is constructed in-memory, not fetched from a remote `.well-known` endpoint.
+- Credentials are sent via `client_secret_post` (POST body), not HTTP Basic auth.
+- Related: [Authentication guide](/docs/guides/authentication), [`serve()`](/docs/api/serve)

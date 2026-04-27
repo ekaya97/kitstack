@@ -8,6 +8,59 @@
   }
 }
 
+/* ── Fumadocs theme overrides ── */
+:root {
+  --fd-background: 42 33% 96%;       /* ks-paper #faf7f1 */
+  --fd-foreground: 30 12% 8%;        /* ks-ink #171512 */
+  --fd-muted: 30 8% 38%;             /* ks-muted #6b6357 */
+  --fd-muted-foreground: 30 8% 38%;
+  --fd-card: 0 0% 100%;
+  --fd-card-foreground: 30 12% 8%;
+  --fd-border: 34 25% 78%;           /* ks-hair #d9ceb8 */
+  --fd-primary: 16 66% 51%;          /* ks-accent #d65a2f */
+  --fd-primary-foreground: 0 0% 100%;
+  --fd-accent: 37 43% 91%;           /* ks-paper-warm #f4ede0 */
+  --fd-accent-foreground: 30 12% 8%;
+  --fd-ring: 16 66% 51%;
+  --fd-sidebar-width: 240px;
+}
+
+/* Sidebar styling */
+[data-fd-sidebar] {
+  background: transparent !important;
+  border-color: hsl(var(--fd-border)) !important;
+}
+
+/* Sidebar links */
+[data-fd-sidebar] a[data-active="true"] {
+  color: hsl(var(--fd-foreground)) !important;
+  font-weight: 600 !important;
+}
+
+/* TOC styling */
+[data-fd-toc] a[data-active="true"] {
+  color: hsl(var(--fd-primary)) !important;
+}
+
+/* Code blocks — light theme */
+:root {
+  --fd-code-background: 30 12% 8%;     /* ks-ink */
+  --fd-code-foreground: 42 33% 96%;    /* ks-paper */
+}
+
+.fd-codeblock {
+  border-radius: 0.75rem !important;
+}
+
+/* Inline code */
+:not(pre) > code {
+  background: #f4ede0 !important;
+  color: #171512 !important;
+  padding: 0.15em 0.4em !important;
+  border-radius: 0.3em !important;
+  font-size: 0.875em !important;
+}
+
 @layer components {
   /* Buttons */
   .ks-btn {

@@ -1,10 +1,14 @@
 import type { Config } from "tailwindcss";
 import { heroui } from "@heroui/theme";
+import { createPreset } from "fumadocs-ui/tailwind-plugin";
 
 const config: Config = {
+  presets: [createPreset()],
   content: [
     "./src/**/*.{js,ts,jsx,tsx,mdx}",
+    "./content/**/*.mdx",
     "./node_modules/@heroui/theme/dist/**/*.{js,ts,jsx,tsx}",
+    "./node_modules/fumadocs-ui/dist/**/*.js",
   ],
   theme: {
     extend: {

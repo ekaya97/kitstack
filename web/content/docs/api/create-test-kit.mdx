@@ -1,0 +1,173 @@
+---
+title: createTestKit()
+description: API reference for createTestKit() — spin up an in-memory database, run migrations, and test tools and views.
+---
+
+# createTestKit()
+
+Creates a test harness with an in-memory SQLite database, runs your kit's migrations, and returns methods for calling tools and loading views.
+
+```ts
+import { createTestKit } from "@kitstack/sdk/testing";
+```
+
+## Signature
+
+```ts
+async function createTestKit(
+  kitDef: KitDefinition,
+  options?: {
+    checkAuthz?: (
+      db: LibSQLDatabase,
+      requirement: AuthzRequirement,
+      ctx: KitContext
+    ) => Promise<boolean>;
+  }
+): Promise<TestKit>
+```
+
+## Parameters
+
+| Parameter | Type | Required | Description |
+|-----------|------|----------|-------------|
+| `kitDef` | `KitDefinition` | Yes | Kit definition from [`defineKit()`](/docs/api/define-kit). |
+| `options.checkAuthz` | `(db, requirement, ctx) => Promise<boolean>` | No | Authorization callback. If omitted, all calls are permitted. |
+
+## Returns
+
+`TestKit` — an object with the following members:
+
+### testKit.call()
+
+```ts
+call(toolName: string, args?: Record<string, unknown>): Promise<KitToolResult>
+```
+
+Invoke a tool as the default user (`\{ userId: "test-user", kitId \}`). Arguments are validated with Zod.
+
+### testKit.callAs()
+
+```ts
+callAs(
+  ctx: Partial<KitContext>,
+  toolName: string,
+  args?: Record<string, unknown>
+): Promise<KitToolResult>
+```
+
+Invoke a tool with a custom context. Partial fields are merged with defaults.
+
+### testKit.loadView()
+
+```ts
+loadView(viewSlug: string, ctx?: Partial<KitContext>): Promise<unknown>
+```
+
+Run a view's loader directly. Returns the raw data (not wrapped in `KitToolResult`).
+
+### testKit.reset()
+
+```ts
+reset(): Promise<void>
+```
+
+Delete all rows from all tables. Schema is preserved. Faster than recreating the database.
+
+<Warning>
+`reset()` uses `DELETE FROM`, not `DROP TABLE` + recreate. If your migrations include `INSERT` seed data, it won't be re-seeded. Call your seeding tool again after `reset()`.
+</Warning>
+
+### testKit.cleanup()
+
+```ts
+cleanup(): Promise<void>
+```
+
+Close the database connection. Call this in `afterAll()`.
+
+### testKit.db
+
+```ts
+db: LibSQLDatabase
+```
+
+Direct Drizzle database access for assertions.
+
+## Examples
+
+### Basic test setup
+
+```ts filename="test/tools.test.ts"
+import { describe, it, expect, beforeAll, afterEach, afterAll } from "vitest";
+import { createTestKit } from "@kitstack/sdk/testing";
+import kit from "../kit.config";
+import { contacts } from "../src/schema";
+
+describe("CRM tools", () => {
+  let testKit: Awaited<ReturnType<typeof createTestKit>>;
+
+  beforeAll(async () => {
+    testKit = await createTestKit(kit);
+  });
+
+  afterEach(async () => {
+    await testKit.reset();
+  });
+
+  afterAll(async () => {
+    await testKit.cleanup();
+  });
+
+  it("creates a contact", async () => {
+    const result = await testKit.call("add_contact", { name: "Alice" });
+    expect(result.isError).toBeUndefined();
+    expect(result.content[0].text).toContain("Alice");
+
+    const rows = await testKit.db.select().from(contacts);
+    expect(rows).toHaveLength(1);
+  });
+});
+```
+
+### Testing authorization
+
+```ts filename="test/authz.test.ts"
+const testKit = await createTestKit(kit, {
+  checkAuthz: async (db, req, ctx) => {
+    return ctx.userId === "test-user";
+  },
+});
+
+const denied = await testKit.callAs(
+  { userId: "attacker" },
+  "delete_contact",
+  { contactId: "c1" },
+);
+expect(denied.isError).toBe(true);
+```
+
+### Testing view loaders
+
+```ts filename="test/views.test.ts"
+await testKit.call("add_contact", { name: "Alice" });
+
+const data = await testKit.loadView("contacts");
+expect(data).toHaveLength(1);
+expect(data[0].name).toBe("Alice");
+```
+
+### Testing migration errors
+
+```ts filename="test/migrations.test.ts"
+import { MigrationError } from "@kitstack/sdk";
+
+await expect(createTestKit(badKit)).rejects.toThrow(MigrationError);
+```
+
+## Notes
+
+- Migrations run immediately when `createTestKit()` is called. Bad SQL causes the promise to reject with `MigrationError`.
+- Unknown tool names and validation failures return `KitToolResult` with `isError: true`, matching MCP protocol behavior.
+- Load-only tools (no handler) are auto-wrapped with `kit.json()`, same as production.
+- The in-memory database is fully isolated — no file I/O, no shared state between test suites.
+- Related: [`defineKit()`](/docs/api/define-kit), [Testing guide](/docs/guides/testing)

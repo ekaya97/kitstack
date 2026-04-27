@@ -1,0 +1,193 @@
+---
+title: How to Set Up Authentication
+description: Configure auth adapters for your self-hosted kit — KitStack OAuth, custom OAuth providers, and the AuthAdapter interface.
+---
+
+# How to Set Up Authentication
+
+When you self-host a kit with [`serve()`](/docs/api/serve), you need an auth adapter to identify users. The adapter validates tokens on every MCP request and returns a `userId` that your tools receive in `ctx.userId`.
+
+<Note>
+This guide covers self-hosted auth. Kits published to the KitStack marketplace use platform authentication automatically.
+</Note>
+
+## Using KitStack as identity provider
+
+The simplest production setup. Users authenticate with their KitStack account via OAuth 2.0:
+
+```ts filename="server.ts"
+import { serve } from "@kitstack/sdk/server";
+import { kitstack } from "@kitstack/sdk/server/auth";
+import kit from "./kit.config";
+
+serve({
+  kit,
+  auth: kitstack({
+    clientId: process.env.KITSTACK_CLIENT_ID!,
+    clientSecret: process.env.KITSTACK_CLIENT_SECRET!,
+  }),
+  db: {
+    url: process.env.DATABASE_URL!,
+    authToken: process.env.DATABASE_TOKEN!,
+  },
+  transport: "http",
+  port: 3000,
+});
+```
+
+The adapter handles the full OAuth flow:
+
+1. MCP client discovers auth requirements via `/.well-known/oauth-authorization-server`
+2. Client redirects user to KitStack's consent screen
+3. KitStack returns an authorization code
+4. Adapter exchanges code for access + refresh tokens
+5. On each MCP request, adapter validates the bearer token via KitStack's userinfo endpoint
+
+### Configuration
+
+| Option | Default | Description |
+|--------|---------|-------------|
+| `clientId` | Required | OAuth client ID from KitStack |
+| `clientSecret` | Required | OAuth client secret from KitStack |
+| `kitstackUrl` | `"https://kitstack.co"` | Override for staging/development |
+
+## Using a custom OAuth provider
+
+For fully self-hosted kits that manage their own users (Auth0, Keycloak, custom):
+
+```ts filename="server.ts"
+import { serve } from "@kitstack/sdk/server";
+import { oauth } from "@kitstack/sdk/server/auth";
+import kit from "./kit.config";
+
+serve({
+  kit,
+  auth: oauth({
+    issuer: "https://my-kit.example.com",
+    authorize: async (req) => {
+      const url = new URL(req.url);
+      const state = url.searchParams.get("state");
+      return {
+        redirect: `https://auth0.example.com/authorize?state=${state}&audience=my-kit`,
+      };
+    },
+    exchangeCode: async (code) => {
+      const res = await fetch("https://auth0.example.com/oauth/token", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          grant_type: "authorization_code",
+          code,
+          client_id: process.env.AUTH0_CLIENT_ID,
+          client_secret: process.env.AUTH0_CLIENT_SECRET,
+        }),
+      });
+      const data = await res.json();
+      return {
+        accessToken: data.access_token,
+        refreshToken: data.refresh_token,
+        expiresIn: data.expires_in,
+      };
+    },
+    validateToken: async (token) => {
+      const res = await fetch("https://auth0.example.com/userinfo", {
+        headers: { Authorization: `Bearer ${token}` },
+      });
+      if (!res.ok) return null;
+      const user = await res.json();
+      return { userId: user.sub };
+    },
+  }),
+  db: { url: process.env.DATABASE_URL! },
+  transport: "http",
+  port: 3000,
+});
+```
+
+### API-key-only authentication
+
+If you use pre-shared API keys instead of OAuth, omit `exchangeCode`:
+
+```ts filename="server.ts"
+auth: oauth({
+  issuer: "https://my-kit.example.com",
+  authorize: async (req) => {
+    return { redirect: "https://my-kit.example.com/api-keys" };
+  },
+  validateToken: async (token) => {
+    // Look up API key in your database
+    const key = await db.select().from(apiKeys).where(eq(apiKeys.key, token));
+    return key[0] ? { userId: key[0].userId } : null;
+  },
+}),
+```
+
+<Note>
+When `exchangeCode` is omitted, the token endpoint returns a stub token. Your `validateToken` should handle this — for API-key flows, the real auth check happens in `validateToken`, not during code exchange.
+</Note>
+
+## Building a custom adapter
+
+For full control, implement the `AuthAdapter` interface:
+
+```ts filename="src/auth/my-adapter.ts"
+import type { AuthAdapter, OAuthServerMetadata } from "@kitstack/sdk/server/auth";
+
+export function myAdapter(config: { issuer: string }): AuthAdapter {
+  return {
+    metadata(): OAuthServerMetadata {
+      return {
+        issuer: config.issuer,
+        authorization_endpoint: `${config.issuer}/oauth/authorize`,
+        token_endpoint: `${config.issuer}/oauth/token`,
+        response_types_supported: ["code"],
+        grant_types_supported: ["authorization_code"],
+        token_endpoint_auth_methods_supported: ["client_secret_post"],
+      };
+    },
+
+    async authorize(req) {
+      // Parse the request, build redirect URL
+      return { redirect: "https://..." };
+    },
+
+    async token(req) {
+      // Exchange code for tokens
+      return {
+        accessToken: "...",
+        refreshToken: "...",
+        expiresIn: 3600,
+      };
+    },
+
+    async revoke(req) {
+      // Invalidate a token
+    },
+
+    async validate(token) {
+      // Return { userId } or null
+      return { userId: "..." };
+    },
+  };
+}
+```
+
+<Warning>
+`validate()` must return `null` for invalid tokens — not throw. The server layer distinguishes "invalid token" (401) from "adapter crashed" (500). Throwing conflates both cases.
+</Warning>
+
+## Gotchas
+
+<Warning>
+Neither `kitstack()` nor `oauth()` caches validated tokens. Every MCP request triggers a call to `validate()`, which makes an HTTP request. For high-throughput deployments, wrap your `validateToken` in a cache (e.g., LRU cache with TTL matching your token expiry).
+</Warning>
+
+<Note>
+OAuth metadata is constructed in-memory, not fetched from a remote `/.well-known/` endpoint. Both adapters build their metadata from the provided config. If your upstream provider changes endpoint URLs, update your adapter config.
+</Note>
+
+## Next steps
+
+- [Self-hosting guide](/docs/guides/self-hosting) — full serve() setup
+- [Auth adapters API](/docs/api/auth-adapters) — complete interface reference
+- [Authorization concept](/docs/concepts/authorization) — tool-level access control

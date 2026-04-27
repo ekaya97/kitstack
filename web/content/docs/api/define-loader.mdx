@@ -1,0 +1,97 @@
+---
+title: defineLoader()
+description: API reference for defineLoader() — type-safe wrapper for view loader functions.
+---
+
+# defineLoader()
+
+Type-safe wrapper for view loader functions. Returns the same function with proper type inference for use with [`defineView()`](/docs/api/define-view).
+
+## Signature
+
+```ts
+function defineLoader<T>(
+  fn: (db: LibSQLDatabase, ctx: KitContext) => Promise<T>
+): (db: LibSQLDatabase, ctx: KitContext) => Promise<T>
+```
+
+## Parameters
+
+| Parameter | Type | Required | Description |
+|-----------|------|----------|-------------|
+| `fn` | `(db, ctx) => Promise<T>` | Yes | Async function that queries the database and returns data for a view. |
+
+### Function parameters
+
+| Parameter | Type | Description |
+|-----------|------|-------------|
+| `db` | `LibSQLDatabase` | Drizzle database instance |
+| `ctx` | `KitContext` | `{ userId: string, kitId: string, params?: Record<string, string> }` |
+
+## Returns
+
+The same function, typed. The return type `T` flows through to [`defineView()`](/docs/api/define-view) and the `LoaderData` type helper.
+
+## Examples
+
+### Basic loader
+
+```ts filename="src/views/dashboard/loader.ts"
+import { defineLoader } from "@kitstack/sdk";
+import { items } from "../../schema";
+import { count } from "drizzle-orm";
+
+export const loader = defineLoader(async (db, ctx) => {
+  const rows = await db.select().from(items);
+  const [countRow] = await db.select({ total: count() }).from(items);
+  return { items: rows, total: countRow.total };
+});
+```
+
+### Composing tool load functions
+
+```ts filename="src/views/pipeline/loader.ts"
+import { defineLoader } from "@kitstack/sdk";
+import { listContacts } from "../../tools/list-contacts";
+import { listDeals } from "../../tools/list-deals";
+
+export const loader = defineLoader(async (db, ctx) => {
+  const contacts = await listContacts.load(db, { limit: 100 }, ctx);
+  const deals = await listDeals.load(db, { limit: 50 }, ctx);
+  return { contacts, deals };
+});
+```
+
+## Type helpers
+
+### LoaderData
+
+Extract the return type of a loader for use in component props:
+
+```ts
+import type { LoaderData } from "@kitstack/sdk";
+import type { loader } from "./loader";
+
+type Props = { data: LoaderData<typeof loader> };
+
+export function PipelineView({ data }: Props) {
+  // data is fully typed: { contacts: Contact[], deals: Deal[] }
+}
+```
+
+### Infer
+
+General-purpose type helper for extracting async return types:
+
+```ts
+import type { Infer } from "@kitstack/sdk";
+import { loadContacts } from "./tools/list-contacts";
+
+type ContactData = Infer<typeof loadContacts>;
+```
+
+## Notes
+
+- `defineLoader()` is a pass-through — it returns the same function. Its purpose is type inference, not runtime behavior.
+- Loaders receive `ctx` (not `args`) because they are called per-view, not per-tool. If a view needs tool arguments, call the tool's `load()` function with hardcoded or derived args.
+- Related: [`defineView()`](/docs/api/define-view), [Views concept](/docs/concepts/views)

@@ -1,0 +1,231 @@
+---
+title: How to Define Tools
+description: Practical guide to defining tools — handler patterns, shared loaders, result formatting, and authorization.
+---
+
+# How to Define Tools
+
+This guide walks through the patterns you'll use when building tools for your kit.
+
+<Note>
+This guide assumes you've completed the [Getting Started](/docs/getting-started) tutorial and understand [how tools work](/docs/concepts/tools).
+</Note>
+
+## Creating a handler-only tool
+
+The simplest tool has a name, description, args, and a handler:
+
+```ts filename="src/tools/add-expense.ts"
+import { defineTool, kit } from "@kitstack/sdk";
+import { z } from "zod";
+import { expenses } from "../schema";
+import { nanoid } from "nanoid";
+
+export const addExpense = defineTool({
+  name: "add_expense",
+  description: "Record a new expense with amount, category, and date",
+  args: z.object({
+    description: z.string().describe("What the expense is for"),
+    amount: z.number().describe("Gross amount in euros"),
+    category: z.enum(["travel", "software", "office", "meals", "other"])
+      .describe("Expense category"),
+    date: z.string().optional()
+      .describe("Date in YYYY-MM-DD format. Defaults to today."),
+  }),
+  handler: async (db, args, ctx) => {
+    const id = nanoid();
+    await db.insert(expenses).values({
+      id,
+      description: args.description,
+      amountGross: args.amount,
+      category: args.category,
+      date: args.date ?? new Date().toISOString().slice(0, 10),
+      createdAt: new Date(),
+    });
+    return kit.text(
+      `Expense recorded: ${args.description} — €${args.amount.toFixed(2)} (${args.category})`
+    );
+  },
+});
+```
+
+## Creating a tool with load and handler
+
+When a view needs the same data as a tool, extract the query into a `load` function:
+
+```ts filename="src/tools/list-expenses.ts"
+import { defineTool, kit } from "@kitstack/sdk";
+import { z } from "zod";
+import { expenses } from "../schema";
+import { desc } from "drizzle-orm";
+
+export async function loadExpenses(db, args, ctx) {
+  return db
+    .select()
+    .from(expenses)
+    .orderBy(desc(expenses.date))
+    .limit(args.limit);
+}
+
+export const listExpenses = defineTool({
+  name: "list_expenses",
+  description: "List recent expenses, optionally filtered by category",
+  args: z.object({
+    limit: z.number().optional().default(25)
+      .describe("Maximum number of expenses to return"),
+    category: z.string().optional()
+      .describe("Filter by category"),
+  }),
+  load: loadExpenses,
+  handler: async (db, args, ctx) => {
+    const rows = await loadExpenses(db, args, ctx);
+    if (rows.length === 0) return kit.text("No expenses found.");
+    const lines = rows.map(
+      (r) => `| ${r.date} | ${r.description} | €${r.amountGross.toFixed(2)} | ${r.category} |`
+    );
+    return kit.text(
+      `| Date | Description | Amount | Category |\n|------|-------------|--------|----------|\n${lines.join("\n")}`
+    );
+  },
+});
+```
+
+Now any view loader can call `listExpenses.load(db, args, ctx)` to reuse the query.
+
+## Result formatting
+
+Use the [`kit` helpers](/docs/api/kit-helpers) for consistent responses:
+
+```ts filename="src/tools/examples.ts"
+// Plain text — most common for confirmations
+return kit.text(`Contact "${args.name}" added (ID: ${id}).`);
+
+// JSON — for data-heavy responses (auto pretty-printed)
+return kit.json({ contacts: rows, total: rows.length });
+
+// Error — when the operation can't be completed
+return kit.error("Cannot delete a deal in 'closed-won' stage.");
+
+// Not found — standardized missing resource message
+return kit.notFound("contact", args.contactId);
+
+// Validation error — bad input that Zod didn't catch
+return kit.validationError("Start date must be before end date.");
+
+// Conflict — resource state prevents the operation
+return kit.conflict("A sequence with that name already exists.");
+```
+
+<Note>
+These helpers return `KitToolResult` objects — they don't throw. The LLM sees error results and can respond accordingly (e.g., asking the user for a different ID).
+</Note>
+
+## Handling optional and default arguments
+
+Zod's `.optional()` and `.default()` work as expected:
+
+```ts filename="src/tools/search.ts"
+args: z.object({
+  query: z.string().describe("Search term"),
+  limit: z.number().optional().default(10)
+    .describe("Max results (default: 10)"),
+  includeArchived: z.boolean().optional()
+    .describe("Include archived items. Default: false."),
+}),
+```
+
+- `optional()` fields are omitted from the JSON Schema's `required` array
+- `default()` fields get a `default` value in the JSON Schema and are also omitted from `required`
+- The LLM uses these to decide which arguments to send
+
+## Adding authorization
+
+For tools that modify or delete resources, add an `authorize` hook:
+
+```ts filename="src/tools/delete-expense.ts"
+export const deleteExpense = defineTool({
+  name: "delete_expense",
+  description: "Delete an expense record",
+  args: z.object({
+    expenseId: z.string().describe("The expense ID to delete"),
+  }),
+  authorize: (args, ctx) => [
+    { relation: "owner", objectType: "expense", objectId: args.expenseId },
+  ],
+  handler: async (db, args, ctx) => {
+    const [expense] = await db
+      .select()
+      .from(expenses)
+      .where(eq(expenses.id, args.expenseId));
+    if (!expense) return kit.notFound("expense", args.expenseId);
+
+    await db.delete(expenses).where(eq(expenses.id, args.expenseId));
+    return kit.text(`Expense "${expense.description}" deleted.`);
+  },
+});
+```
+
+The `authorize` hook runs *before* the handler. If the authz engine denies the request, the handler never executes.
+
+## Registering tools in your kit
+
+Add all tools to the `tools` array in `kit.config.ts`:
+
+```ts filename="kit.config.ts" highlight={8}
+import { addExpense } from "./src/tools/add-expense";
+import { listExpenses } from "./src/tools/list-expenses";
+import { deleteExpense } from "./src/tools/delete-expense";
+
+export default defineKit({
+  id: "expense",
+  // ...
+  tools: [addExpense, listExpenses, deleteExpense],
+});
+```
+
+<Warning>
+Every tool name must be unique within a kit. `defineKit()` throws `KIT_DUPLICATE_TOOLS` if two tools share a name.
+</Warning>
+
+## Common patterns
+
+### Upsert with conflict handling
+
+```ts filename="src/tools/update-settings.ts"
+handler: async (db, args, ctx) => {
+  await db
+    .insert(settings)
+    .values({ key: args.key, value: args.value })
+    .onConflictDoUpdate({
+      target: settings.key,
+      set: { value: args.value },
+    });
+  return kit.text(`Setting "${args.key}" updated.`);
+},
+```
+
+### Returning structured data for the LLM
+
+When the LLM needs to reason about the result (not just display it), return markdown:
+
+```ts
+handler: async (db, args, ctx) => {
+  const deal = await db.select().from(deals).where(eq(deals.id, args.dealId));
+  if (!deal[0]) return kit.notFound("deal", args.dealId);
+
+  const d = deal[0];
+  return kit.text([
+    `## ${d.name}`,
+    `- **Value:** €${d.value.toLocaleString()}`,
+    `- **Stage:** ${d.stage}`,
+    `- **Contact:** ${d.contactName}`,
+    `- **Created:** ${d.createdAt}`,
+  ].join("\n"));
+},
+```
+
+## Next steps
+
+- [Defining views](/docs/guides/defining-views) — connect tool loaders to React components
+- [Testing](/docs/guides/testing) — test tools with `createTestKit()`
+- [`defineTool()` API reference](/docs/api/define-tool) — full parameter documentation

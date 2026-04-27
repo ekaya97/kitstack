@@ -1,0 +1,166 @@
+---
+title: defineTool()
+description: API reference for defineTool() — create a tool with typed arguments, a handler, and optional load function.
+---
+
+# defineTool()
+
+Creates a typed tool definition. Tools are the actions an LLM can call in your kit.
+
+## Signature
+
+```ts
+// With load and optional handler
+function defineTool<T extends z.ZodType, TData>(config: {
+  name: string;
+  description: string;
+  args: T;
+  authorize?: (args: z.infer<T>, ctx: KitContext) => AuthzRequirement[];
+  load: (db: LibSQLDatabase, args: z.infer<T>, ctx: KitContext) => Promise<TData>;
+  handler?: (db: LibSQLDatabase, args: z.infer<T>, ctx: KitContext) => Promise<KitToolResult>;
+}): ToolDefinition;
+
+// With handler only (no load)
+function defineTool<T extends z.ZodType>(config: {
+  name: string;
+  description: string;
+  args: T;
+  authorize?: (args: z.infer<T>, ctx: KitContext) => AuthzRequirement[];
+  handler: (db: LibSQLDatabase, args: z.infer<T>, ctx: KitContext) => Promise<KitToolResult>;
+}): ToolDefinition;
+```
+
+## Parameters
+
+| Parameter | Type | Required | Description |
+|-----------|------|----------|-------------|
+| `name` | `string` | Yes | Tool name. Must be `snake_case`. |
+| `description` | `string` | Yes | What the tool does. Must be >= 10 characters. Shown to the LLM. |
+| `args` | `z.ZodType` | Yes | Zod schema defining the tool's arguments. |
+| `authorize` | `(args, ctx) => AuthzRequirement[]` | No | Returns authorization requirements checked before the handler runs. |
+| `load` | `(db, args, ctx) => Promise<TData>` | No | Data loading function. Reusable by view loaders. |
+| `handler` | `(db, args, ctx) => Promise<KitToolResult>` | No | Handler that returns a formatted result. Required if `load` is omitted. |
+
+At least one of `load` or `handler` must be provided.
+
+## Handler parameters
+
+| Parameter | Type | Description |
+|-----------|------|-------------|
+| `db` | `LibSQLDatabase` | Drizzle database instance for type-safe queries |
+| `args` | `z.infer<T>` | Validated arguments (Zod runs before the handler) |
+| `ctx` | `KitContext` | `{ userId: string, kitId: string, params?: Record<string, string> }` |
+
+## Returns
+
+`ToolDefinition` — passed to [`defineKit()`](/docs/api/define-kit) in the `tools` array.
+
+When `load` is provided, the returned object has a typed `.load()` method that view loaders can call directly.
+
+## Behavior
+
+- If only `load` is provided (no `handler`), the SDK auto-wraps it with [`kit.json()`](/docs/api/kit-helpers). The return value of `load` is serialized as pretty-printed JSON.
+- If both `load` and `handler` are provided, the handler controls the response. The `load` function is available for view loaders to reuse.
+- Argument validation happens in `callTool()`, which is called by both the MCP handler and the test harness. Validation errors return `KitToolResult` with `isError: true`.
+
+## Examples
+
+### Handler-only tool
+
+```ts filename="src/tools/add-contact.ts"
+import { defineTool, kit } from "@kitstack/sdk";
+import { z } from "zod";
+import { contacts } from "../schema";
+import { nanoid } from "nanoid";
+
+export const addContact = defineTool({
+  name: "add_contact",
+  description: "Add a new contact to the CRM",
+  args: z.object({
+    name: z.string().describe("Contact's full name"),
+    company: z.string().optional().describe("Company name"),
+    email: z.string().optional().describe("Email address"),
+  }),
+  handler: async (db, args, ctx) => {
+    const id = nanoid();
+    await db.insert(contacts).values({
+      id,
+      name: args.name,
+      company: args.company ?? null,
+      email: args.email ?? null,
+    });
+    return kit.text(`Contact "${args.name}" added (ID: ${id}).`);
+  },
+});
+```
+
+### Tool with load and handler
+
+```ts filename="src/tools/list-contacts.ts"
+import { defineTool, kit } from "@kitstack/sdk";
+import { z } from "zod";
+import { contacts } from "../schema";
+
+async function loadContacts(db, args, ctx) {
+  return db.select().from(contacts).limit(args.limit);
+}
+
+export const listContacts = defineTool({
+  name: "list_contacts",
+  description: "List all contacts in the CRM",
+  args: z.object({
+    limit: z.number().optional().default(25).describe("Max results"),
+  }),
+  load: loadContacts,
+  handler: async (db, args, ctx) => {
+    const rows = await loadContacts(db, args, ctx);
+    if (rows.length === 0) return kit.text("No contacts found.");
+    return kit.text(rows.map((r) => `- ${r.name}`).join("\n"));
+  },
+});
+
+// View loaders can reuse the query:
+// listContacts.load(db, { limit: 100 }, ctx)
+```
+
+### Load-only tool (auto-wrapped with kit.json)
+
+```ts filename="src/tools/count-items.ts"
+export const countItems = defineTool({
+  name: "count_items",
+  description: "Count all items in the database",
+  args: z.object({}),
+  load: async (db, args, ctx) => {
+    const [row] = await db.select({ count: count() }).from(items);
+    return { total: row.count };
+  },
+  // Returns: { "total": 42 } as formatted JSON
+});
+```
+
+### Tool with authorization
+
+```ts filename="src/tools/delete-deal.ts"
+export const deleteDeal = defineTool({
+  name: "delete_deal",
+  description: "Delete a deal from the pipeline",
+  args: z.object({
+    dealId: z.string().describe("The deal ID to delete"),
+  }),
+  authorize: (args, ctx) => [
+    { relation: "owner", objectType: "deal", objectId: args.dealId },
+  ],
+  handler: async (db, args, ctx) => {
+    await db.delete(deals).where(eq(deals.id, args.dealId));
+    return kit.text("Deal deleted.");
+  },
+});
+```
+
+## Notes
+
+- Tool names must be `snake_case`. The regex is `/^[a-z][a-z0-9]*(?:_[a-z0-9]+)*$/`.
+- Do not prefix tool names with the kit ID. The runtime prefixes automatically in monolith mode.
+- Use `.describe()` on every Zod field. These descriptions appear in the JSON Schema that the LLM uses to understand parameters.
+- Descriptions under 10 characters are rejected. Over 200 characters triggers a warning.
+- Related: [`defineKit()`](/docs/api/define-kit), [Kit helpers](/docs/api/kit-helpers)

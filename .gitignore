@@ -45,6 +45,7 @@ next-env.d.ts
 /databases/
 
 docs/
+!web/*/docs
 
 .env.*
 

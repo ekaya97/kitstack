@@ -1,0 +1,184 @@
+---
+title: How to Self-Host a Kit
+description: Run your kit as a standalone MCP server with serve() — stdio for local clients, HTTP for production.
+---
+
+# How to Self-Host a Kit
+
+The `serve()` function runs your kit as a complete MCP server. Use it when you want to run your kit independently — outside the KitStack marketplace.
+
+<Note>
+This guide assumes you've completed the [Getting Started](/docs/getting-started) tutorial.
+</Note>
+
+## Quick start with HTTP
+
+Create a `server.ts` at the root of your kit:
+
+```ts filename="server.ts"
+import { serve } from "@kitstack/sdk/server";
+import { kitstack } from "@kitstack/sdk/server/auth";
+import kit from "./kit.config";
+
+serve({
+  kit,
+  auth: kitstack({
+    clientId: process.env.KITSTACK_CLIENT_ID!,
+    clientSecret: process.env.KITSTACK_CLIENT_SECRET!,
+  }),
+  db: {
+    url: process.env.TURSO_URL!,
+    authToken: process.env.TURSO_AUTH_TOKEN!,
+  },
+  transport: "http",
+  port: Number(process.env.PORT) || 3000,
+});
+```
+
+The HTTP transport exposes two endpoints:
+
+| Endpoint | Purpose |
+|----------|---------|
+| `POST /` | MCP JSON-RPC endpoint. Validates Bearer token via auth adapter. |
+| `GET /.well-known/oauth-authorization-server` | OAuth metadata for MCP client discovery. |
+
+Any MCP client that supports HTTP can connect to your server.
+
+## stdio transport
+
+For local-only use cases where the LLM client launches your kit as a subprocess:
+
+```ts filename="server.ts"
+import { serve } from "@kitstack/sdk/server";
+import { none } from "@kitstack/sdk/server/auth";
+import kit from "./kit.config";
+
+serve({
+  kit,
+  auth: none(),
+  db: { url: "file:.kitstack/dev.db" },
+  transport: "stdio",
+});
+```
+
+```bash filename="Terminal"
+npx tsx server.ts
+```
+
+<Warning>
+In stdio mode, never use `console.log()` in your tool handlers. Anything written to stdout corrupts the JSON-RPC stream. Use `console.error()` for debug output.
+</Warning>
+
+## Monolith mode: multiple kits
+
+Run multiple kits in a single server process:
+
+```ts filename="server.ts"
+import { serve } from "@kitstack/sdk/server";
+import { kitstack } from "@kitstack/sdk/server/auth";
+import crmKit from "../kits/crm/kit.config";
+import outreachKit from "../kits/outreach/kit.config";
+
+serve({
+  kits: [crmKit, outreachKit],
+  databases: {
+    crm: { url: process.env.CRM_DB! },
+    "cold-outreach": { url: process.env.OUTREACH_DB! },
+  },
+  auth: kitstack({
+    clientId: process.env.KITSTACK_CLIENT_ID!,
+    clientSecret: process.env.KITSTACK_CLIENT_SECRET!,
+  }),
+  transport: "http",
+  port: 3000,
+});
+```
+
+In monolith mode:
+
+- Tools are namespaced by kit ID (e.g., `crm/add_contact`)
+- Views are namespaced similarly (e.g., `crm/pipeline`)
+- Each kit uses its own database from the `databases` map
+- All kits share the same auth adapter
+
+<Warning>
+The `databases` map keys must match kit IDs exactly. A kit with `id: "cold-outreach"` requires `databases["cold-outreach"]`, not `databases["outreach"]`.
+</Warning>
+
+## Auth adapters
+
+Three built-in adapters are available:
+
+### `none()` — development only
+
+```ts
+import { none } from "@kitstack/sdk/server/auth";
+
+serve({
+  kit,
+  auth: none(), // Accepts all tokens, returns userId: "local-dev-user"
+  // ...
+});
+```
+
+<Warning>
+Never use `none()` in production. It accepts every request and returns a fixed user ID.
+</Warning>
+
+### `kitstack()` — KitStack identity provider
+
+Delegates authentication to KitStack's OAuth 2.0 server:
+
+```ts
+import { kitstack } from "@kitstack/sdk/server/auth";
+
+serve({
+  kit,
+  auth: kitstack({
+    clientId: process.env.KITSTACK_CLIENT_ID!,
+    clientSecret: process.env.KITSTACK_CLIENT_SECRET!,
+  }),
+  // ...
+});
+```
+
+### `oauth()` — bring your own provider
+
+For fully self-hosted kits with independent user management:
+
+```ts
+import { oauth } from "@kitstack/sdk/server/auth";
+
+serve({
+  kit,
+  auth: oauth({
+    issuer: "https://my-kit.example.com",
+    authorize: async (req) => {
+      return { redirect: "https://auth.example.com/authorize?..." };
+    },
+    validateToken: async (token) => {
+      const user = await verifyToken(token);
+      return user ? { userId: user.id } : null;
+    },
+  }),
+  // ...
+});
+```
+
+See [Authentication guide](/docs/guides/authentication) for full examples.
+
+## Gotchas
+
+<Note>
+Token caching is the caller's responsibility. Neither `kitstack()` nor `oauth()` caches validated tokens. Every MCP request triggers a validation call. For high-throughput deployments, wrap your `validateToken` in an LRU cache.
+</Note>
+
+<Warning>
+The `none()` adapter's OAuth metadata returns `http://localhost` URLs. If you accidentally use it with HTTP transport in production, MCP clients will try to authenticate against localhost.
+</Warning>
+
+## Next steps
+
+- [Authentication guide](/docs/guides/authentication) — detailed adapter setup
+- [`serve()` API reference](/docs/api/serve) — full parameter documentation
+- [Auth adapters API](/docs/api/auth-adapters) — adapter interfaces and options

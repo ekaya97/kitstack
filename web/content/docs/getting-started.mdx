@@ -1,0 +1,195 @@
+---
+title: Getting Started
+description: Build your first kit and connect it to any MCP-compatible LLM client in 5 minutes.
+---
+
+# Getting Started
+
+You'll scaffold a kit, connect it to your LLM client via the relay, and see the full development loop — tool calls, view rendering, and live editing — without touching any infrastructure.
+
+## Prerequisites
+
+- [Node.js](https://nodejs.org) 20 or later
+- A KitStack account (for the dev relay)
+- An MCP-compatible LLM client (Claude Desktop, Claude.ai, Cursor, etc.)
+
+## Step 1: Scaffold the kit
+
+```bash filename="Terminal"
+npx kitstack init my-first-kit
+```
+
+This creates a `my-first-kit/` directory with a complete, runnable kit.
+
+```bash filename="Terminal"
+cd my-first-kit
+npm install
+```
+
+## Step 2: Explore the project structure
+
+```
+my-first-kit/
+  kit.config.ts          # Kit definition — tools, views, metadata
+  package.json           # Dependencies
+  tsconfig.json          # TypeScript config
+  tailwind.config.ts     # Tailwind for view styling
+  drizzle.config.ts      # Drizzle-kit migration config
+  migrations/            # SQL migration files (auto-generated)
+  src/
+    schema.ts            # Drizzle table definitions
+    instructions.ts      # System prompt for the LLM
+    tools/
+      example.ts         # Example tool with load + handler
+    views/
+      dashboard/
+        index.ts         # View definition
+        loader.ts        # Server-side data fetching
+        View.tsx          # React component
+  test/
+    tools.test.ts        # Test using createTestKit()
+```
+
+The key file is `kit.config.ts`. It ties everything together with [`defineKit()`](/docs/api/define-kit):
+
+```ts filename="kit.config.ts"
+import { defineKit } from "@kitstack/sdk";
+import { resolve } from "node:path";
+import { schema } from "./src/schema";
+import { instructions } from "./src/instructions";
+import { exampleTool } from "./src/tools/example";
+import { dashboardView } from "./src/views/dashboard";
+
+export default defineKit({
+  id: "my-first-kit",
+  version: "0.1.0",
+  name: "My First Kit",
+  description: "A starter kit to learn the SDK",
+  schema,
+  migrationsDir: resolve(import.meta.dirname, "migrations"),
+  instructions,
+  tools: [exampleTool],
+  views: [dashboardView],
+});
+```
+
+## Step 3: Run tests
+
+The scaffolded kit includes a test that validates everything works:
+
+```bash filename="Terminal"
+npm test
+```
+
+This uses [`createTestKit()`](/docs/api/create-test-kit) to spin up an in-memory database, run migrations, and exercise the example tool.
+
+## Step 4: Log in and start the dev server
+
+```bash filename="Terminal"
+npx kitstack login
+npx kitstack dev
+```
+
+The dev server connects to the KitStack relay and prints a public URL:
+
+```
+  Relay connected. Session URL:
+  https://mcp.kitstack.co/dev/a3f2b1c8
+
+  Add this URL to your LLM client's MCP server list.
+```
+
+## Step 5: Connect your LLM client
+
+Add the relay URL as an MCP server in your LLM client:
+
+- **Claude.ai** — Settings > MCP Servers > Add server > paste the URL
+- **Claude Desktop** — add to `claude_desktop_config.json`:
+  ```json filename="claude_desktop_config.json"
+  {
+    "mcpServers": {
+      "my-first-kit": {
+        "url": "https://mcp.kitstack.co/dev/a3f2b1c8"
+      }
+    }
+  }
+  ```
+- **Cursor / other MCP clients** — add the URL in the MCP server settings
+
+Your kit's tools now appear in the tool list. Try asking:
+
+> "Add an item called Groceries"
+
+The LLM calls your `add_item` tool, inserts a row into the database, and confirms the result.
+
+> "Show me the dashboard"
+
+The LLM renders your dashboard view as an interactive React component directly in the chat.
+
+## Step 6: Edit a view and see it live
+
+This is where the relay shines. Open `src/views/dashboard/View.tsx`, change some text, and save.
+
+Now refresh the page in your LLM client. The view re-renders with your updated code — **no rebuild, no redeploy, no need to ask the LLM to call the tool again**. The modules get hot-replaced on refresh, so you can have the LLM call `kit_view` once and iterate on the component by just refreshing. This is WYSIWYG for MCP apps.
+
+## Step 7: Edit a tool
+
+Open `src/tools/example.ts`. Change the tool's response message, save, and restart the dev server (`Ctrl+C`, then `npx kitstack dev`). The LLM picks up the change immediately.
+
+Every tool follows this pattern:
+
+```ts filename="src/tools/example.ts"
+import { defineTool, kit } from "@kitstack/sdk";
+import { z } from "zod";
+
+export const exampleTool = defineTool({
+  name: "add_item",
+  description: "Add a new item to the list",
+  args: z.object({
+    name: z.string().describe("The item name"),
+  }),
+  handler: async (db, args, ctx) => {
+    // db is a Drizzle instance — use your schema for type-safe queries
+    // args is validated by Zod before reaching this function
+    // ctx has userId and kitId
+    return kit.text(`Item "${args.name}" added.`);
+  },
+});
+```
+
+<Note>
+View changes are hot — edit `View.tsx` and the next render serves fresh code without restart. Tool handler changes require restarting `kitstack dev`.
+</Note>
+
+## Using stdio mode (optional)
+
+If you prefer a direct connection without the relay (e.g., for offline development), use stdio mode:
+
+```bash filename="Terminal"
+npx kitstack dev --stdio
+```
+
+Then configure your LLM client to launch the process directly:
+
+```json filename="claude_desktop_config.json"
+{
+  "mcpServers": {
+    "my-first-kit": {
+      "command": "npx",
+      "args": ["kitstack", "dev", "--stdio"],
+      "cwd": "/absolute/path/to/my-first-kit"
+    }
+  }
+}
+```
+
+<Note>
+Stdio mode requires the client to support launching local processes. The relay works with any MCP client that supports HTTP endpoints — including web-based clients like Claude.ai.
+</Note>
+
+## Next steps
+
+- [How kits work](/docs/concepts/kits) — understand the architecture
+- [Defining tools](/docs/guides/defining-tools) — the load/handler pattern, arguments, and result helpers
+- [Defining views](/docs/guides/defining-views) — React views with server-side loaders
+- [Testing your kit](/docs/guides/testing) — the `createTestKit()` harness

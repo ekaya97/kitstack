@@ -1,0 +1,267 @@
+---
+title: How to Test Your Kit
+description: Testing tools and views with createTestKit() — in-memory database, assertions, multi-user scenarios, and authorization.
+---
+
+# How to Test Your Kit
+
+The KitStack SDK includes a test harness that spins up an in-memory SQLite database, runs your migrations, and lets you call tools and loaders without starting a server.
+
+<Note>
+This guide uses [Vitest](https://vitest.dev) — the test runner scaffolded by `kitstack init`. The harness works with any test framework.
+</Note>
+
+## Basic setup
+
+```ts filename="test/tools.test.ts"
+import { describe, it, expect, beforeAll, afterEach, afterAll } from "vitest";
+import { createTestKit } from "@kitstack/sdk/testing";
+import kit from "../kit.config";
+
+describe("expense tools", () => {
+  let testKit: Awaited<ReturnType<typeof createTestKit>>;
+
+  beforeAll(async () => {
+    testKit = await createTestKit(kit);
+  });
+
+  afterEach(async () => {
+    await testKit.reset(); // Clear all data, keep schema
+  });
+
+  afterAll(async () => {
+    await testKit.cleanup(); // Close DB connection
+  });
+
+  it("adds an expense", async () => {
+    const result = await testKit.call("add_expense", {
+      description: "Flight to Berlin",
+      amount: 342.50,
+      category: "travel",
+    });
+
+    expect(result.isError).toBeUndefined();
+    expect(result.content[0].text).toContain("Flight to Berlin");
+  });
+});
+```
+
+`createTestKit()` returns a `TestKit` with five methods:
+
+| Method | Purpose |
+|--------|---------|
+| `call(toolName, args?)` | Call a tool as the default user (`"test-user"`) |
+| `callAs(ctx, toolName, args?)` | Call a tool as a different user |
+| `loadView(viewSlug, ctx?)` | Run a view's loader, get typed data back |
+| `reset()` | Delete all rows from all tables (keeps schema) |
+| `cleanup()` | Close the database connection |
+
+## Testing tool results
+
+Tool results are `KitToolResult` objects with a `content` array and an optional `isError` flag:
+
+```ts filename="test/tools.test.ts"
+it("lists expenses", async () => {
+  // Seed data
+  await testKit.call("add_expense", {
+    description: "Coffee",
+    amount: 4.50,
+    category: "meals",
+  });
+
+  const result = await testKit.call("list_expenses", { limit: 10 });
+
+  expect(result.isError).toBeUndefined();
+  expect(result.content[0].text).toContain("Coffee");
+  expect(result.content[0].text).toContain("4.50");
+});
+```
+
+### Parsing JSON results
+
+Load-only tools (with `load` but no `handler`) return JSON strings. Parse them:
+
+```ts
+const result = await testKit.call("count_items", {});
+const data = JSON.parse(result.content[0].text);
+expect(data.total).toBe(2);
+```
+
+## Testing error cases
+
+```ts filename="test/errors.test.ts"
+it("returns error for unknown tool", async () => {
+  const result = await testKit.call("nonexistent_tool", {});
+  expect(result.isError).toBe(true);
+  expect(result.content[0].text).toContain("Unknown tool");
+});
+
+it("validates arguments with Zod", async () => {
+  const result = await testKit.call("add_expense", {});
+  // Missing required fields
+  expect(result.isError).toBe(true);
+  expect(result.content[0].text).toContain("Invalid arguments");
+});
+
+it("handles not-found gracefully", async () => {
+  const result = await testKit.call("delete_expense", {
+    expenseId: "does-not-exist",
+  });
+  expect(result.isError).toBe(true);
+  expect(result.content[0].text).toContain("not found");
+});
+```
+
+## Direct database assertions
+
+The `testKit.db` property gives you a Drizzle instance for direct queries:
+
+```ts filename="test/tools.test.ts"
+import { expenses } from "../src/schema";
+
+it("inserts into the database", async () => {
+  await testKit.call("add_expense", {
+    description: "Lunch",
+    amount: 12.00,
+    category: "meals",
+  });
+
+  const rows = await testKit.db.select().from(expenses);
+  expect(rows).toHaveLength(1);
+  expect(rows[0].description).toBe("Lunch");
+  expect(rows[0].amountGross).toBe(12.00);
+});
+```
+
+## Multi-user testing with callAs()
+
+Test isolation between users:
+
+```ts filename="test/multi-user.test.ts"
+it("isolates data by user context", async () => {
+  await testKit.callAs(
+    { userId: "user-a" },
+    "add_expense",
+    { description: "User A expense", amount: 10, category: "other" },
+  );
+
+  await testKit.callAs(
+    { userId: "user-b" },
+    "add_expense",
+    { description: "User B expense", amount: 20, category: "other" },
+  );
+
+  // If your tool filters by userId, each user sees only their data
+  const resultA = await testKit.callAs(
+    { userId: "user-a" },
+    "list_expenses",
+    {},
+  );
+  expect(resultA.content[0].text).toContain("User A expense");
+  expect(resultA.content[0].text).not.toContain("User B expense");
+});
+```
+
+## Testing authorization
+
+Pass `checkAuthz` to test access control:
+
+```ts filename="test/authz.test.ts"
+it("denies unauthorized access", async () => {
+  const testKit = await createTestKit(kit, {
+    checkAuthz: async (db, req, ctx) => {
+      // Only allow "test-user" to be an owner
+      return ctx.userId === "test-user" && req.relation === "owner";
+    },
+  });
+
+  // Default user ("test-user") can delete
+  const ok = await testKit.call("delete_expense", { expenseId: "e1" });
+  // Note: may still return not-found, but not forbidden
+
+  // Different user is denied
+  const denied = await testKit.callAs(
+    { userId: "attacker" },
+    "delete_expense",
+    { expenseId: "e1" },
+  );
+  expect(denied.isError).toBe(true);
+  expect(denied.content[0].text).toContain("Forbidden");
+
+  await testKit.cleanup();
+});
+```
+
+## Testing view loaders
+
+```ts filename="test/views.test.ts"
+it("loads the expenses view", async () => {
+  await testKit.call("add_expense", {
+    description: "Conference ticket",
+    amount: 299,
+    category: "travel",
+  });
+
+  const data = await testKit.loadView("expenses");
+
+  expect(data).toBeDefined();
+  expect(data.expenses).toHaveLength(1);
+  expect(data.total).toBe(299);
+});
+```
+
+You can also test a tool's raw `load` function directly:
+
+```ts
+import { listExpenses } from "../src/tools/list-expenses";
+
+it("loads raw expense data", async () => {
+  const data = await listExpenses.load(testKit.db, { limit: 10 }, {
+    userId: "test-user",
+    kitId: "expense",
+  });
+  expect(data).toEqual([]);
+});
+```
+
+## Testing migration errors
+
+Bad migration SQL is caught when `createTestKit()` is called:
+
+```ts filename="test/migrations.test.ts"
+import { MigrationError, defineKit } from "@kitstack/sdk";
+
+it("rejects invalid migration SQL", async () => {
+  const badKit = defineKit({
+    id: "bad",
+    version: "0.0.1",
+    name: "Bad Kit",
+    description: "Kit with invalid SQL",
+    schema: {},
+    migrationSql: "NOT VALID SQL",
+    instructions: "",
+    tools: [],
+  });
+
+  await expect(createTestKit(badKit)).rejects.toThrow(MigrationError);
+});
+```
+
+<Warning>
+`createTestKit()` runs migrations immediately. If the SQL is invalid, the promise rejects before any test runs. Wrap the `createTestKit()` call itself in `expect(...).rejects.toThrow()`.
+</Warning>
+
+## Gotchas
+
+<Warning>
+`reset()` deletes data but does **not** re-run migrations. If your migrations include `INSERT` seed data, that data won't exist after `reset()`. Call your seeding tool again after `reset()` if needed.
+</Warning>
+
+<Note>
+The test harness validates arguments with Zod exactly like production. If you pass invalid arguments, you get `isError: true` with an "Invalid arguments" message — not a thrown exception.
+</Note>
+
+## Next steps
+
+- [`createTestKit()` API reference](/docs/api/create-test-kit) — full parameter documentation
+- [Defining tools](/docs/guides/defining-tools) — patterns for tool handlers

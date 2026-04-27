@@ -1,0 +1,132 @@
+---
+title: Authorization
+description: How the authorize hook works — tool-level access control with pluggable authz engines.
+---
+
+# Authorization
+
+Authorization controls *who* can use *which* tools on *which* resources. The SDK provides a hook-based model where tools declare their requirements and a pluggable engine evaluates them.
+
+## How authorization works
+
+The authorization flow has two parts:
+
+1. **Tools declare requirements** — the `authorize` hook on a tool returns an array of `AuthzRequirement` objects.
+2. **The engine evaluates them** — the `checkAuthz` callback (provided to the handler or test kit) checks each requirement and returns `true` or `false`.
+
+If any requirement returns `false`, the tool call is rejected with a "Forbidden" error before the handler runs.
+
+```
+Tool call arrives
+  → Zod validates arguments
+  → authorize(args, ctx) returns requirements
+  → checkAuthz(db, requirement, ctx) evaluates each one
+  → All pass? → handler runs
+  → Any fail? → "Forbidden" error returned
+```
+
+## Defining authorize hooks
+
+Add an `authorize` function to any tool that needs access control:
+
+```ts filename="src/tools/delete-sequence.ts"
+import { defineTool, kit } from "@kitstack/sdk";
+import { z } from "zod";
+
+export const deleteSequence = defineTool({
+  name: "delete_sequence",
+  description: "Delete an outreach sequence",
+  args: z.object({
+    sequenceId: z.string().describe("The sequence ID to delete"),
+  }),
+  authorize: (args, ctx) => [
+    { relation: "owner", objectType: "sequence", objectId: args.sequenceId },
+  ],
+  handler: async (db, args, ctx) => {
+    await db.delete(sequences).where(eq(sequences.id, args.sequenceId));
+    return kit.text("Sequence deleted.");
+  },
+});
+```
+
+### AuthzRequirement
+
+Each requirement is a tuple of three fields:
+
+| Field | Type | Description |
+|-------|------|-------------|
+| `relation` | `string` | The relationship to check (e.g., `"owner"`, `"editor"`, `"viewer"`) |
+| `objectType` | `string` | The type of resource (e.g., `"sequence"`, `"deal"`, `"contact"`) |
+| `objectId` | `string` | The specific resource ID |
+
+The semantics are: "Does the current user have the `relation` relationship to `objectType:objectId`?"
+
+## Providing the authz engine
+
+### In production (MCP handler)
+
+Pass `checkAuthz` when creating the handler:
+
+```ts filename="server.ts"
+import { createMcpHandler } from "@kitstack/sdk/runtime";
+
+const handler = createMcpHandler({
+  kit,
+  db,
+  checkAuthz: async (db, requirement, ctx) => {
+    // Query your authz engine — OpenFGA, custom RBAC table, etc.
+    const result = await db
+      .select()
+      .from(authzTuples)
+      .where(
+        and(
+          eq(authzTuples.userId, ctx.userId),
+          eq(authzTuples.relation, requirement.relation),
+          eq(authzTuples.objectType, requirement.objectType),
+          eq(authzTuples.objectId, requirement.objectId),
+        )
+      );
+    return result.length > 0;
+  },
+});
+```
+
+### In tests
+
+Pass `checkAuthz` to `createTestKit()`:
+
+```ts filename="test/authz.test.ts"
+import { createTestKit } from "@kitstack/sdk/testing";
+
+const testKit = await createTestKit(kit, {
+  checkAuthz: async (db, req, ctx) => {
+    // Simple test logic — only allow "test-user"
+    return ctx.userId === "test-user";
+  },
+});
+
+// This passes — default userId is "test-user"
+const result = await testKit.call("delete_sequence", { sequenceId: "s1" });
+
+// This fails — different user
+const denied = await testKit.callAs(
+  { userId: "other-user" },
+  "delete_sequence",
+  { sequenceId: "s1" },
+);
+expect(denied.isError).toBe(true);
+```
+
+## Default behavior: permit all
+
+<Note>
+If `checkAuthz` is omitted, **all tool calls are permitted**. Authorization hooks are silently skipped. This is the default for local development with `kitstack dev`.
+</Note>
+
+This design lets you add `authorize` hooks to tools incrementally without breaking existing setups. Tools without an `authorize` hook are always permitted regardless of whether `checkAuthz` is configured.
+
+## Next steps
+
+- [`defineTool()` API reference](/docs/api/define-tool) — authorize hook signature
+- [Testing guide](/docs/guides/testing) — testing authorization with `callAs()`
+- [Authentication](/docs/guides/authentication) — connecting auth adapters to identify users

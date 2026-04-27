@@ -1,0 +1,145 @@
+---
+title: How to Build and Deploy
+description: Build your kit for production, validate migrations, and publish to the KitStack marketplace.
+---
+
+# How to Build and Deploy
+
+This guide covers the build pipeline, what it validates, and how to publish your kit.
+
+<Note>
+This guide assumes you've completed the [Getting Started](/docs/getting-started) tutorial and have a working kit.
+</Note>
+
+## Building your kit
+
+```bash filename="Terminal"
+npx kitstack build
+```
+
+The build pipeline runs these steps in order:
+
+1. **Load** — imports `kit.config.ts`, running all `defineKit()` validations
+2. **Validate migrations** — executes every SQL statement against an in-memory SQLite database
+3. **Bundle server** — esbuild compiles your tool handlers into a single `kit.mjs`
+4. **Generate view entries** — creates mount points for each view
+5. **Bundle views** — Vite compiles React components into `vendor.js` + `shared.js` + per-view modules
+6. **Compile CSS** — Tailwind processes `src/views/styles.css`
+7. **Generate shell** — builds the MCP Apps HTML shell
+8. **Write manifest** — `manifest.json` with hashes, sizes, SDK version
+
+Output appears at `.kitstack/build/`:
+
+```
+.kitstack/build/
+  kit.mjs           # Server bundle
+  kit.zip           # Lambda archive
+  manifest.json     # Build metadata
+  shell.html        # MCP Apps shell
+  views/
+    vendor.js       # React + ReactDOM (shared)
+    shared.js       # SDK hooks (shared)
+    style.css       # Compiled Tailwind
+    my-kit/
+      dashboard.js  # Per-view module
+      contacts.js
+```
+
+### Build output
+
+```
+  ✓ Loaded kit.config.ts — "CRM Kit" (12 tools, 5 views)
+  ✓ Migration SQL valid (8 statements)
+  ✓ Validation passed
+  ✓ Server bundle: .kitstack/build/kit.mjs (42.3 KB)
+  ✓ Generated 5 view entries
+  ✓ View bundles: 5 view modules + 2 shared chunks (187.4 KB total)
+  ✓ CSS: .kitstack/build/views/style.css (8.2 KB)
+  ✓ Shell: .kitstack/build/shell.html (3.1 KB)
+  ✓ Manifest: .kitstack/build/manifest.json
+```
+
+## Build validations
+
+The build catches errors that `kitstack dev` intentionally skips for speed:
+
+| Check | Error code | What it catches |
+|-------|-----------|-----------------|
+| Kit config loads | Various `TOOL_*`, `KIT_*` | Invalid names, short descriptions, duplicates |
+| View.tsx files exist | — | Declared views without matching component files |
+| Migration SQL valid | — | Syntax errors in SQL statements |
+| No DROP statements | `MIGRATION_DROP_FORBIDDEN` | Destructive migration commands |
+| Bundle size warnings | — | Server > 1MB, view modules > 500KB |
+
+<Warning>
+DROP statements are forbidden in migration SQL. This is a hard rule — not configurable. The build fails immediately with `MIGRATION_DROP_FORBIDDEN`.
+</Warning>
+
+### Bundle size tips
+
+If you see size warnings:
+
+- **Server bundle > 1MB** — check your esbuild externals. Heavy packages like `@libsql/client` should be externalized, not bundled.
+- **View module > 500KB** — check your component's dependency tree. Import specific subpaths (e.g., `date-fns/format` instead of the full `date-fns` package).
+
+## Publishing to the marketplace
+
+
+### Authenticate
+
+```bash filename="Terminal"
+npx kitstack login
+```
+
+This opens your browser to authenticate with your KitStack account. Credentials are saved to `~/.kitstack/credentials.json`.
+
+### Build
+
+```bash filename="Terminal"
+npx kitstack build
+```
+
+If you've already built and haven't changed anything, this step is optional — `publish` will use the existing build output.
+
+### Publish
+
+```bash filename="Terminal"
+npx kitstack publish
+```
+
+This uploads your build artifacts (server bundle, views, shell) to the KitStack platform. You'll see:
+
+```
+  Publishing "CRM Kit" (crm@1.0.0)...
+  12 tools, 5 views
+  Uploaded.
+  Kit ID: crm — Status: in review
+```
+
+
+Published kits default to **private** visibility — only you can see and use them.
+
+### Visibility options
+
+| Visibility | Who can see it | Who can use it |
+|------------|---------------|---------------|
+| `private` | Only authorized users | Users with activator access |
+| `unlisted` | Anyone with the direct URL | Users with activator access |
+| `public` | Everyone (marketplace listing) | Users with activator access |
+
+## Self-hosted deployment
+
+## Gotchas
+
+<Warning>
+Always build before deploying. The upload does not validate — it sends whatever is in `.kitstack/build/`. If the directory is empty or stale, you'll deploy an old or broken version.
+</Warning>
+
+<Warning>
+`kitstack publish` requires authentication. Run `kitstack login` first. Credentials are stored at `~/.kitstack/credentials.json` and persist across sessions.
+</Warning>
+
+## Next steps
+
+- [CLI: build](/docs/cli/build) — build command reference
+- [CLI: deploy](/docs/cli/deploy) — deploy command reference

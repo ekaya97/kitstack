@@ -1,0 +1,145 @@
+---
+title: serve()
+description: API reference for serve() — run your kit as a standalone MCP server with stdio or HTTP transport.
+---
+
+# serve()
+
+Runs your kit as a complete MCP server. Wires together the MCP handler, a database connection, an auth adapter, and a transport layer.
+
+```ts
+import { serve } from "@kitstack/sdk/server";
+```
+
+## Signature
+
+```ts
+async function serve(options: ServeOptions): Promise<void>
+```
+
+`ServeOptions` is a union of two modes:
+
+### Single kit mode
+
+```ts
+interface ServeSingleOptions {
+  kit: KitDefinition;
+  db: DbConfig;
+  auth?: AuthAdapter;
+  transport?: "stdio" | "http";
+  port?: number;
+}
+```
+
+### Monolith mode
+
+```ts
+interface ServeMonolithOptions {
+  kits: KitDefinition[];
+  databases: Record<string, DbConfig>;
+  auth?: AuthAdapter;
+  transport?: "stdio" | "http";
+  port?: number;
+}
+```
+
+## Parameters
+
+| Parameter | Type | Required | Description |
+|-----------|------|----------|-------------|
+| `kit` | `KitDefinition` | Yes (single mode) | Kit definition from `defineKit()`. |
+| `kits` | `KitDefinition[]` | Yes (monolith mode) | Array of kit definitions. |
+| `db` | `DbConfig` | Yes (single mode) | Database connection config. |
+| `databases` | `Record<string, DbConfig>` | Yes (monolith mode) | Map of kit ID → database config. |
+| `auth` | `AuthAdapter` | No | Auth adapter. Defaults to `none()`. |
+| `transport` | `"stdio" \| "http"` | No | Transport protocol. Default: `"stdio"`. |
+| `port` | `number` | No | HTTP port. Default: `3000`. Only used with `transport: "http"`. |
+
+### DbConfig
+
+```ts
+interface DbConfig {
+  url: string;        // Database URL (e.g., "file:.kitstack/dev.db" or Turso URL)
+  authToken?: string; // Auth token for remote databases (e.g., Turso)
+}
+```
+
+## Examples
+
+### Local development with stdio
+
+```ts filename="server.ts"
+import { serve } from "@kitstack/sdk/server";
+import { none } from "@kitstack/sdk/server/auth";
+import kit from "./kit.config";
+
+serve({
+  kit,
+  auth: none(),
+  db: { url: "file:.kitstack/dev.db" },
+  transport: "stdio",
+});
+```
+
+### Production HTTP server
+
+```ts filename="server.ts"
+import { serve } from "@kitstack/sdk/server";
+import { kitstack } from "@kitstack/sdk/server/auth";
+import kit from "./kit.config";
+
+serve({
+  kit,
+  auth: kitstack({
+    clientId: process.env.KITSTACK_CLIENT_ID!,
+    clientSecret: process.env.KITSTACK_CLIENT_SECRET!,
+  }),
+  db: {
+    url: process.env.TURSO_URL!,
+    authToken: process.env.TURSO_AUTH_TOKEN!,
+  },
+  transport: "http",
+  port: Number(process.env.PORT) || 3000,
+});
+```
+
+### Monolith mode
+
+```ts filename="server.ts"
+import { serve } from "@kitstack/sdk/server";
+import crmKit from "../kits/crm/kit.config";
+import outreachKit from "../kits/outreach/kit.config";
+
+serve({
+  kits: [crmKit, outreachKit],
+  databases: {
+    crm: { url: process.env.CRM_DB! },
+    "cold-outreach": { url: process.env.OUTREACH_DB! },
+  },
+  transport: "http",
+  port: 3000,
+});
+```
+
+## Transport details
+
+### stdio
+
+- Reads newline-delimited JSON-RPC from stdin
+- Writes responses to stdout
+- Diagnostic output goes to stderr
+- Keeps the process alive via `await new Promise(() => {})`
+
+### HTTP
+
+- `POST /` — MCP JSON-RPC endpoint (validates Bearer token via auth adapter)
+- `GET /.well-known/oauth-authorization-server` — OAuth metadata from the auth adapter
+- Unauthenticated requests proceed without a userId when using `none()` auth
+
+## Notes
+
+- `serve()` never returns (the promise never resolves). The server runs until the process exits.
+- In monolith mode, tools are prefixed with their kit ID (e.g., `crm/add_contact`). Views are similarly namespaced.
+- The `databases` map keys must match kit IDs exactly. Missing keys cause an immediate error at startup.
+- In monolith mode, the first kit's database is used as the handler's default. Ensure tool handlers always use the correct connection.
+- Related: [Self-hosting guide](/docs/guides/self-hosting), [Auth adapters](/docs/api/auth-adapters)

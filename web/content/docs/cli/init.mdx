@@ -1,0 +1,67 @@
+---
+title: kitstack init
+description: CLI reference for kitstack init — scaffold a new kit project.
+---
+
+# kitstack init
+
+Scaffold a complete, runnable kit project.
+
+## Usage
+
+```bash filename="Terminal"
+npx kitstack init <name>
+```
+
+## Arguments
+
+| Argument | Required | Description |
+|----------|----------|-------------|
+| `name` | Yes | Kit name. Must be kebab-case (e.g., `my-crm-kit`). |
+
+## What it creates
+
+```
+<name>/
+  kit.config.ts          # defineKit() with migrationsDir
+  package.json           # @kitstack/sdk, zod, drizzle-orm, vitest
+  tsconfig.json          # ESNext + bundler resolution + JSX
+  tailwind.config.ts     # KitStack preset
+  drizzle.config.ts      # drizzle-kit config
+  migrations/            # Generated SQL files
+  .gitignore
+  src/
+    schema.ts            # Drizzle table definition (items)
+    instructions.ts      # LLM system prompt
+    tools/
+      example.ts         # defineTool() with load + handler
+    views/
+      dashboard/
+        index.ts          # defineView()
+        loader.ts         # Server-side data fetching
+        View.tsx           # React component
+  test/
+    tools.test.ts         # vitest + createTestKit()
+```
+
+## Details
+
+- **Name validation:** the regex is `/^[a-z][a-z0-9]*(?:-[a-z0-9]+)*$/`. Uppercase, underscores, leading digits, and trailing hyphens are rejected.
+- **Display name:** `"my-crm-kit"` becomes `"My CRM Kit"` via split-on-hyphen capitalization.
+- **Templates are inline:** templates are string functions, not file copies. The CLI is self-contained with no external template directory.
+- **The example tool has a shared `load` function** that's used by both the tool handler and the dashboard view loader — demonstrating the SDK's data-reuse pattern from day one.
+- **Non-interactive:** no prompts. Everything is created in one shot.
+
+## Example
+
+```bash filename="Terminal"
+npx kitstack init expense-tracker
+cd expense-tracker
+npm install
+npm test
+npx kitstack dev
+```
+
+## Next steps
+
+After scaffolding, follow the [Getting Started](/docs/getting-started) tutorial to connect your LLM client.

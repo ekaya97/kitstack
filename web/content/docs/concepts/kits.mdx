@@ -1,0 +1,136 @@
+---
+title: Kits
+description: What a kit is, how it differs from a full MCP server, and how its pieces fit together.
+---
+
+# Kits
+
+A kit is a lightweight MCP app that gives an LLM domain-specific capabilities. It packages tools, views, a database schema, and system instructions into a single deployable unit that any MCP-compatible client can connect to.
+
+Think of kits as apps on an app store. They're focused utility tools — not full-blown software. A CRM, an expense tracker, a sequence builder. They bridge the gap between LLM conversations and long-term persistence without the complexity of building and hosting a full MCP server.
+
+## What makes kits different from MCP servers
+
+When you build a standard MCP server, you handle everything: the JSON-RPC transport, tool registration, authentication, database connections, deployment infrastructure. KitStack handles all of that. You write:
+
+1. **Tool handlers** — functions that run when the LLM calls an action
+2. **View components** — React UI that renders inside the LLM client
+3. **A schema** — Drizzle table definitions for your database
+
+KitStack provides the server, the router, the auth layer, the database provisioning, and the deployment pipeline. It's the difference between writing a React component and setting up a web server from scratch.
+
+## How a kit runs
+
+Your kit doesn't run as its own server. Instead, a single **MCP router** hosted by KitStack handles all kits:
+
+1. An LLM client connects to the router via the MCP protocol.
+2. The router authenticates the user and discovers which kits they've activated.
+3. When the LLM calls a tool, the router dispatches to your kit's handler in a sandboxed Lambda.
+4. Your handler queries the user's isolated database and returns a result.
+5. The router forwards the result back to the LLM client.
+
+Your kit code runs in a sandbox with minimal permissions — no database credentials in environment variables, no access to other kits' data.
+
+## Two-tool progressive discovery
+
+### The problem with flat tool lists
+
+The MCP protocol loads all available tools into the system prompt. Connect three MCP servers with 10 tools each, and the LLM sees 30 tool definitions before the conversation even starts. This causes two problems:
+
+1. **Context window pollution.** Every tool definition consumes tokens that could be used for the actual conversation. More tools means less room for reasoning, and attention quality degrades as the prompt grows.
+2. **Tool boundary confusion.** When different servers provide similar functionality — two CRM tools, two email tools — the LLM mixes them. It calls server A to fetch data, then server B to update it, because both have a `get_contacts` tool and the LLM can't reliably distinguish between them.
+
+### How KitStack solves this
+
+KitStack exposes exactly **two MCP tools**: `kit` (for actions) and `kit_view` (for UI). Your action names are embedded in the tool description, and the LLM drills down through three levels:
+
+```
+kit()                    → list available actions (markdown table)
+kit(cmd)                 → describe an action's parameters (JSON Schema)
+kit(cmd, params)         → run an action
+```
+
+This doubles down on a CLI metaphor. Calling `kit` is like calling `bash` — the LLM enters a context and works within it. The interaction follows a tree structure:
+
+1. The LLM sees available kits at the root
+2. It enters a specific kit (e.g., CRM)
+3. It discovers and uses that kit's actions
+4. It can switch to another kit when the task requires it
+
+This tree structure means the LLM works through one kit at a time. Once it's inside your CRM kit, it stays there — progressive discovery creates focus. There's no risk of mixing your CRM tools with another server's CRM tools, because the context boundary is explicit.
+
+The escape hatch is always there — the LLM can switch kits at any time. But the default behavior is focused, sequential work within one kit, which matches how these tools are actually used and is dramatically better for LLM attention than having all leaf nodes available at once.
+
+## Anatomy of a kit
+
+Every kit is defined by a single `kit.config.ts` file:
+
+```ts filename="kit.config.ts"
+import { defineKit } from "@kitstack/sdk";
+
+export default defineKit({
+  id: "crm",                           // Unique identifier (kebab-case)
+  version: "1.0.0",                     // Semver
+  name: "CRM Kit",                      // Human-readable name
+  description: "Contacts, deals, pipeline",
+  schema,                               // Drizzle table definitions
+  migrationsDir: resolve(import.meta.dirname, "migrations"),
+  instructions: crmInstructions,        // System prompt for the LLM
+  tools: [addContact, listContacts, addDeal, ...],
+  views: [contactsView, pipelineView, ...],
+});
+```
+
+### Tools
+
+Tools are the actions the LLM can take. Each tool has a name, a Zod argument schema, and a handler function that receives a database connection, validated arguments, and a context object.
+
+Tools can optionally separate data loading from presentation using the `load`/`handler` split — the same query powers both the tool's text response and a view's React component.
+
+See [How tools work](/docs/concepts/tools) for details.
+
+### Views
+
+Views are stateful React components that render inside the LLM client as interactive iframes (via MCP Apps). Each view has a server-side loader that fetches data and a client-side component that can display it, collect user input, call tools to persist changes, and refresh itself. The `useKit()` hook manages view state — it auto-reloads data on mount, exposes `callTool` for mutations, and `reload` for refetching.
+
+Views are optional. A kit with only tools works perfectly — views add visual richness and interactivity when it helps the user.
+
+See [How views work](/docs/concepts/views) for details.
+
+### Database
+
+Every user gets their own SQLite database for each kit. Not row-level isolation — **completely separate databases**. You define your schema with Drizzle ORM and the SDK handles provisioning, migrations, and connection management.
+
+In development, the database is a local file at `.kitstack/dev.db`. In production, each user gets an isolated Turso database, regularly backed up.
+
+See [Migrations](/docs/concepts/migrations) for details.
+
+### Instructions
+
+The `instructions` field is a system prompt injected into the LLM's context when your kit is active. Use it to teach the LLM *when* to use each tool and *how* to interpret results. Good instructions are the difference between a kit that works and a kit that delights.
+
+## Kit lifecycle
+
+| Phase | What happens |
+|-------|-------------|
+| **Define** | `defineKit()` validates naming conventions, descriptions, uniqueness |
+| **Dev** | `kitstack dev` connects via relay, provisions a local DB, serves views in real-time |
+| **Test** | `createTestKit()` runs against in-memory SQLite |
+| **Build** | `kitstack build` bundles server + views, validates migrations |
+| **Publish** | `kitstack publish` uploads to the KitStack marketplace |
+| **Activate** | Users enable your kit with a single click — no setup required |
+
+## The MCP protocol layer
+
+You don't need to understand JSON-RPC to build a kit — the SDK handles the protocol. But here's what happens during an MCP session:
+
+1. **Initialize** — the client sends `initialize`, the router responds with server info and capabilities.
+2. **List tools** — the client sends `tools/list`, the router returns the `kit` and `kit_view` tool definitions for the user's activated kits.
+3. **Call tool** — the client sends `tools/call` with a tool name and arguments. The SDK validates arguments with Zod, checks authorization, and dispatches to your handler.
+4. **View** — when `kit_view` is called, the SDK runs the loader and returns both the data payload and the HTML shell as an embedded resource.
+
+## Next steps
+
+- [How tools work](/docs/concepts/tools) — the load/handler pattern and progressive discovery
+- [How views work](/docs/concepts/views) — React components inside your LLM client
+- [Getting started](/docs/getting-started) — build your first kit

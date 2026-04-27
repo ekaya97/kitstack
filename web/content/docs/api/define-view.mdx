@@ -1,0 +1,125 @@
+---
+title: defineView()
+description: API reference for defineView() — create a view with a server-side loader and a React component.
+---
+
+# defineView()
+
+Creates a typed view definition. Views are React components that render inside the LLM client's chat.
+
+## Signature
+
+```ts
+function defineView<TLoader extends LoaderFn>(config: {
+  slug: string;
+  name: string;
+  description: string;
+  loader: TLoader;
+  component: React.ComponentType<{ data: Awaited<ReturnType<TLoader>> }>;
+  height?: number;
+  permissions?: { clipboardWrite?: boolean };
+  placeholder?: Awaited<ReturnType<TLoader>>;
+}): ViewDefinition<TLoader>
+```
+
+## Parameters
+
+| Parameter | Type | Required | Description |
+|-----------|------|----------|-------------|
+| `slug` | `string` | Yes | URL-safe identifier. Must be `kebab-case`. Used in `kit_view(view: "slug")`. |
+| `name` | `string` | Yes | Human-readable name. Shown in DevKit sidebar. |
+| `description` | `string` | Yes | Tells the LLM *when* to show this view (e.g., `"after adding contacts"`). |
+| `loader` | `LoaderFn` | Yes | Server-side function that fetches data. Created with [`defineLoader()`](/docs/api/define-loader). |
+| `component` | `React.ComponentType` | Yes | React component that receives `{ data }` from the loader. |
+| `height` | `number` | No | Height in pixels for the iframe. |
+| `permissions.clipboardWrite` | `boolean` | No | Allow writing to clipboard from the view. Default: `false`. |
+| `placeholder` | `Awaited<ReturnType<TLoader>>` | No | Sample data for DevKit when the loader returns empty/null. |
+
+## Returns
+
+`ViewDefinition<TLoader>` — passed to [`defineKit()`](/docs/api/define-kit) in the `views` array.
+
+## Examples
+
+### Basic view
+
+```ts filename="src/views/contacts/index.ts"
+import { defineView } from "@kitstack/sdk";
+import { loader } from "./loader";
+import { ContactsView } from "./View";
+
+export default defineView({
+  slug: "contacts",
+  name: "Contacts",
+  description: "after adding or updating contacts",
+  loader,
+  component: ContactsView,
+  height: 500,
+});
+```
+
+### View with placeholder
+
+```ts filename="src/views/contact-detail/index.ts"
+import { defineView } from "@kitstack/sdk";
+import { loader } from "./loader";
+import { ContactDetailView } from "./View";
+
+export default defineView({
+  slug: "contact-detail",
+  name: "Contact Detail",
+  description: "to view detailed contact info with deals and activity",
+  loader,
+  component: ContactDetailView,
+  placeholder: {
+    contact: {
+      id: "c1",
+      name: "Jane Doe",
+      company: "Acme Corp",
+      email: "jane@acme.co",
+    },
+    deals: [
+      { id: "d1", name: "Brand Refresh", value: 18000, stage: "proposal" },
+    ],
+    recentActivities: [
+      { id: "a1", type: "meeting", description: "Kick-off call" },
+    ],
+  },
+});
+```
+
+### View with permissions
+
+```ts filename="src/views/export/index.ts"
+export default defineView({
+  slug: "export",
+  name: "Export Data",
+  description: "to export data as CSV or JSON",
+  loader,
+  component: ExportView,
+  permissions: {
+    clipboardWrite: true,
+  },
+});
+```
+
+## File structure convention
+
+The build pipeline expects this file layout for each view:
+
+```
+src/views/{slug}/
+  index.ts      # defineView() call
+  loader.ts     # Server-side data function
+  View.tsx       # React component
+```
+
+The component file must be at `src/views/[slug]/View.tsx`. The build fails if it's missing.
+
+## Notes
+
+- View slugs must be `kebab-case`. The regex is `/^[a-z][a-z0-9]*(?:-[a-z0-9]+)*$/`.
+- Placeholders are typed against the loader's return type. TypeScript errors if the shape doesn't match.
+- Placeholders are stripped from the production build and stored in `kit._placeholders`. They only appear in the DevKit.
+- Changes to placeholder data or view config require restarting `kitstack dev`. Only `View.tsx` changes are hot-reloaded.
+- Related: [`defineLoader()`](/docs/api/define-loader), [`defineKit()`](/docs/api/define-kit), [Views concept](/docs/concepts/views)

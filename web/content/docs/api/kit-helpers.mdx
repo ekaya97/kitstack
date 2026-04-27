@@ -1,0 +1,130 @@
+---
+title: Kit Result Helpers
+description: API reference for kit.text(), kit.json(), kit.error(), kit.notFound(), and other result helpers.
+---
+
+# Kit Result Helpers
+
+The `kit` object provides factory functions for creating `KitToolResult` objects — the return type of every tool handler.
+
+```ts
+import { kit } from "@kitstack/sdk";
+```
+
+## kit.text()
+
+Returns a text result. The most common response type.
+
+```ts
+function text(text: string): KitToolResult
+```
+
+```ts filename="src/tools/example.ts"
+return kit.text(`Contact "${args.name}" added (ID: ${id}).`);
+```
+
+**Result:**
+```json
+{ "content": [{ "type": "text", "text": "Contact \"Alice\" added (ID: abc123)." }] }
+```
+
+## kit.json()
+
+Returns pretty-printed JSON. Used for structured data responses.
+
+```ts
+function json(data: unknown): KitToolResult
+```
+
+```ts filename="src/tools/example.ts"
+return kit.json({ contacts: rows, total: rows.length });
+```
+
+**Result:**
+```json
+{ "content": [{ "type": "text", "text": "{\n  \"contacts\": [...],\n  \"total\": 5\n}" }] }
+```
+
+<Note>
+`kit.json()` is what the SDK uses to auto-wrap load-only tools. If your tool defines `load` without a `handler`, the return value of `load` is passed through `kit.json()` automatically.
+</Note>
+
+## kit.error()
+
+Returns an error result. The LLM sees this as a failed tool call and can respond accordingly.
+
+```ts
+function error(text: string): KitToolResult
+```
+
+```ts filename="src/tools/example.ts"
+return kit.error("Cannot delete a deal in 'closed-won' stage.");
+```
+
+**Result:**
+```json
+{ "content": [{ "type": "text", "text": "Cannot delete a deal in 'closed-won' stage." }], "isError": true }
+```
+
+## kit.notFound()
+
+Returns a standardized "not found" error.
+
+```ts
+function notFound(entity: string, id: string): KitToolResult
+```
+
+```ts filename="src/tools/example.ts"
+return kit.notFound("contact", args.contactId);
+```
+
+**Result:**
+```json
+{ "content": [{ "type": "text", "text": "contact not found: \"abc123\"" }], "isError": true }
+```
+
+## kit.validationError()
+
+Returns a validation error for cases Zod doesn't catch (e.g., business logic constraints).
+
+```ts
+function validationError(message: string): KitToolResult
+```
+
+```ts filename="src/tools/example.ts"
+return kit.validationError("Start date must be before end date.");
+```
+
+## kit.conflict()
+
+Returns a conflict error when the current resource state prevents the operation.
+
+```ts
+function conflict(message: string): KitToolResult
+```
+
+```ts filename="src/tools/example.ts"
+return kit.conflict("A sequence with that name already exists.");
+```
+
+## KitToolResult type
+
+All helpers return this type:
+
+```ts
+interface KitToolResult {
+  content: KitToolContentBlock[];
+  isError?: boolean;
+}
+
+type KitToolContentBlock =
+  | { type: "text"; text: string }
+  | { type: "resource"; resource: { uri: string; mimeType: string; text: string } };
+```
+
+## Notes
+
+- These helpers return objects — they don't throw. Use them for errors that the LLM should see and can act on (e.g., "not found", "permission denied").
+- For programming mistakes that should never reach production, throw a `KitStackError` subclass instead.
+- The `isError` flag tells the LLM the tool call failed. It typically acknowledges the error and suggests alternatives.
+- Related: [`defineTool()`](/docs/api/define-tool), [Errors](/docs/api/errors)

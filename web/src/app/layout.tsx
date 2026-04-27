@@ -7,6 +7,7 @@ import {
 } from "next/font/google";
 import { Providers } from "./providers";
 import { NavProgress } from "@/components/shared/nav-progress";
+import "fumadocs-ui/style.css";
 import "./globals.css";
 
 const inter = Inter({

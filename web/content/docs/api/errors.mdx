@@ -1,0 +1,155 @@
+---
+title: Errors
+description: API reference for SDK error classes — KitStackError, ToolValidationError, MigrationError, and more.
+---
+
+# Errors
+
+The SDK defines a hierarchy of error classes for problems caught at definition time, build time, or test setup. These are programming mistakes — not runtime tool errors.
+
+```ts
+import {
+  KitStackError,
+  KitValidationError,
+  ToolValidationError,
+  MigrationError,
+  SchemaError,
+  AuthError,
+} from "@kitstack/sdk";
+```
+
+## Two error channels
+
+The SDK has two distinct error paths. Understanding the difference is important:
+
+| Channel | When | How | Who sees it |
+|---------|------|-----|-------------|
+| **SDK errors** (thrown) | Definition time, build time, test setup | Thrown exceptions (`KitStackError` subclasses) | The developer |
+| **Tool result errors** (`kit.error()`) | Runtime, during tool execution | Returned as `KitToolResult` with `isError: true` | The LLM and the user |
+
+**Rule of thumb:** if the LLM should see the error and can recover, use [`kit.error()`](/docs/api/kit-helpers). If it's a developer mistake that should never reach production, throw a `KitStackError` subclass.
+
+## KitStackError
+
+Base class for all SDK errors.
+
+```ts
+class KitStackError extends Error {
+  code: string;    // Machine-readable error code (e.g., "TOOL_INVALID_NAME")
+  docUrl: string;  // https://docs.kitstack.dev/errors/{code}
+}
+```
+
+Every error includes a `code` you can `switch` on and a `docUrl` pointing to documentation.
+
+## Error classes
+
+### KitValidationError
+
+Kit-level structural problems.
+
+| Code | Description |
+|------|-------------|
+| `KIT_DUPLICATE_TOOLS` | Two or more tools share the same name |
+| `KIT_DUPLICATE_VIEWS` | Two or more views share the same slug |
+| `KIT_INVALID_VIEW_SLUG` | View slug is not valid kebab-case |
+
+```ts
+// Thrown by defineKit()
+defineKit({
+  id: "crm",
+  tools: [addContact, addContact], // duplicate!
+  // ...
+});
+// → KitValidationError { code: "KIT_DUPLICATE_TOOLS" }
+```
+
+### ToolValidationError
+
+Tool-level problems.
+
+| Code | Description |
+|------|-------------|
+| `TOOL_MISSING_IMPL` | Tool has neither `load()` nor `handler()` |
+| `TOOL_INVALID_NAME` | Tool name is not valid snake_case |
+| `TOOL_SHORT_DESCRIPTION` | Tool description is shorter than 10 characters |
+
+```ts
+defineTool({
+  name: "addContact", // camelCase — rejected!
+  description: "Add a new contact to the CRM",
+  args: z.object({}),
+  handler: async () => kit.text("done"),
+});
+// → ToolValidationError { code: "TOOL_INVALID_NAME" }
+```
+
+### MigrationError
+
+SQL migration failures.
+
+```ts
+// Thrown by createTestKit() or kitstack build
+await createTestKit(kit);
+// If migration SQL is invalid:
+// → MigrationError { code: "MIGRATION_FAILED" }
+```
+
+Wrap the `createTestKit()` call to test for migration errors:
+
+```ts
+await expect(createTestKit(badKit)).rejects.toThrow(MigrationError);
+```
+
+### SchemaError
+
+Drizzle schema mismatches (e.g., schema doesn't match the migration output).
+
+### AuthError
+
+CLI authentication failures (e.g., expired token, network error during login).
+
+## Error handling patterns
+
+### In build scripts
+
+```ts
+import { KitStackError } from "@kitstack/sdk";
+
+try {
+  await buildKit(kitRoot);
+} catch (err) {
+  if (err instanceof KitStackError) {
+    console.error(`[${err.code}] ${err.message}`);
+    console.error(`Docs: ${err.docUrl}`);
+    process.exit(1);
+  }
+  throw err;
+}
+```
+
+### In tests
+
+```ts
+import { MigrationError, ToolValidationError } from "@kitstack/sdk";
+
+it("rejects invalid SQL", async () => {
+  await expect(createTestKit(badKit)).rejects.toThrow(MigrationError);
+});
+
+it("rejects bad tool names", () => {
+  expect(() =>
+    defineKit({
+      // ...
+      tools: [badTool],
+    })
+  ).toThrow(ToolValidationError);
+});
+```
+
+## Notes
+
+- All errors auto-generate a `docUrl` from the `code` field: `https://docs.kitstack.dev/errors/[code]`.
+- Errors thrown by `defineKit()` happen at import time. When the build pipeline imports `kit.config.ts`, validation runs immediately.
+- Migration errors are thrown by `createTestKit()` and `kitstack build`, not during `kitstack dev` (dev uses the existing database file).
+- Related: [Kit helpers](/docs/api/kit-helpers) for runtime tool errors, [`defineKit()`](/docs/api/define-kit)

@@ -1,0 +1,270 @@
+---
+title: How to Define Views
+description: Step-by-step guide to creating views — loaders, React components, styling, hooks, and live development.
+---
+
+# How to Define Views
+
+This guide walks through creating a view from scratch — the loader, the React component, styling with Tailwind, wiring up interactivity with hooks, and live-editing during development.
+
+<Note>
+This guide assumes you've completed the [Getting Started](/docs/getting-started) tutorial and understand [how views work](/docs/concepts/views).
+</Note>
+
+## Creating a view
+
+Each view lives in its own directory under `src/views/` with three files.
+
+
+### Define the loader
+
+The loader runs on the server and fetches data for the component. Reuse your tool's `load` function when possible:
+
+```ts filename="src/views/expenses/loader.ts"
+import { defineLoader } from "@kitstack/sdk";
+import { listExpenses } from "../../tools/list-expenses";
+
+export const loader = defineLoader(async (db, ctx) => {
+  const expenses = await listExpenses.load(db, { limit: 50 }, ctx);
+  const total = expenses.reduce((sum, e) => sum + e.amountGross, 0);
+  return { expenses, total };
+});
+```
+
+The loader can compose multiple tool queries, compute derived values, and shape the data however the component needs it.
+
+### Build the React component
+
+```tsx filename="src/views/expenses/View.tsx"
+import type { LoaderData } from "@kitstack/sdk";
+import type { loader } from "./loader";
+
+type Props = { data: LoaderData<typeof loader> };
+
+export function ExpensesView({ data }: Props) {
+  return (
+    <div className="p-4 space-y-4">
+      <div className="flex justify-between items-center">
+        <h2 className="text-lg font-semibold">Expenses</h2>
+        <span className="text-sm text-zinc-500">
+          Total: €{data.total.toFixed(2)}
+        </span>
+      </div>
+      <table className="w-full text-sm">
+        <thead>
+          <tr className="text-left text-zinc-500 border-b">
+            <th className="pb-2">Date</th>
+            <th className="pb-2">Description</th>
+            <th className="pb-2 text-right">Amount</th>
+            <th className="pb-2">Category</th>
+          </tr>
+        </thead>
+        <tbody>
+          {data.expenses.map((e) => (
+            <tr key={e.id} className="border-b border-zinc-100">
+              <td className="py-2">{e.date}</td>
+              <td className="py-2">{e.description}</td>
+              <td className="py-2 text-right">€{e.amountGross.toFixed(2)}</td>
+              <td className="py-2">{e.category}</td>
+            </tr>
+          ))}
+        </tbody>
+      </table>
+    </div>
+  );
+}
+```
+
+### Register the view
+
+```ts filename="src/views/expenses/index.ts"
+import { defineView } from "@kitstack/sdk";
+import { loader } from "./loader";
+import { ExpensesView } from "./View";
+
+export default defineView({
+  slug: "expenses",
+  name: "Expenses",
+  description: "after adding or listing expenses",
+  loader,
+  component: ExpensesView,
+  height: 400,
+});
+```
+
+### Add it to your kit config
+
+```ts filename="kit.config.ts" highlight={4}
+import expensesView from "./src/views/expenses";
+
+export default defineKit({
+  // ...
+  views: [expensesView],
+});
+```
+
+
+## Styling with Tailwind
+
+Each kit has its own `tailwind.config.ts` (scaffolded by `kitstack init`). Create a CSS entry point for your views:
+
+```css filename="src/views/styles.css"
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+```
+
+During `kitstack build`, Tailwind processes this file using your kit's config and outputs a single `style.css` alongside the view bundles.
+
+The KitStack SDK provides a Tailwind preset with sensible defaults. Import it in your config:
+
+```ts filename="tailwind.config.ts"
+import kitstack from "@kitstack/sdk/tailwind-preset";
+
+export default {
+  presets: [kitstack],
+  content: ["./src/views/**/*.tsx"],
+};
+```
+
+## Stateful views with hooks
+
+KitStack views are stateful. They can collect user input, persist changes via tools, and refresh their own data.
+
+Every component receives `data` as a prop (the snapshot from the tool call). Layer `useKit()` on top for live state — it auto-reloads from the loader on mount, so page refreshes always show current database state.
+
+```tsx filename="src/views/expenses/View.tsx"
+import { useKit, useTool } from "@kitstack/sdk/view";
+import type { LoaderData } from "@kitstack/sdk";
+import type { loader } from "./loader";
+
+type Data = LoaderData<typeof loader>;
+
+export function ExpensesView({ data: initialData }: { data: Data }) {
+  const { data: liveData, reload } = useKit<Data>();
+  const deleteTool = useTool("delete_expense", { invalidate: reload });
+
+  const { expenses, total } = liveData ?? initialData;
+
+  return (
+    <div>
+      <p>Total: €{total.toFixed(2)}</p>
+      <table className="w-full text-sm">
+        <tbody>
+          {expenses.map((e) => (
+            <tr key={e.id}>
+              <td>{e.description}</td>
+              <td>€{e.amountGross.toFixed(2)}</td>
+              <td>
+                <button
+                  onClick={() => deleteTool.call({ expenseId: e.id })}
+                  disabled={deleteTool.loading}
+                  className="text-red-500 hover:text-red-700"
+                >
+                  {deleteTool.loading ? "..." : "Delete"}
+                </button>
+              </td>
+            </tr>
+          ))}
+        </tbody>
+      </table>
+      {deleteTool.error && <p className="text-red-500">{deleteTool.error}</p>}
+    </div>
+  );
+}
+```
+
+The flow: component mounts with `initialData` (instant first paint) → `useKit` reloads fresh data on mount → user clicks delete → `useTool` persists the change → `invalidate` triggers `reload` → component re-renders with updated state.
+
+### Available hooks
+
+| Hook | Purpose |
+|------|---------|
+| `useKit<T>()` | Core hook. Returns `data`, `loading`, `reload`, `callTool`, `capabilities`. Auto-reloads on mount so page refreshes always show current state. |
+| `useTool(name, opts?)` | Wraps a single tool call with `loading`, `error`, `reset()`. The `invalidate` option auto-calls reload after success. |
+| `useFile()` | File download, import, and clipboard operations (`download`, `open`, `copy`). |
+
+`useKit` auto-reloads on mount by default. Opt out with `reloadOnMount: false` for static views.
+
+## Live view development
+
+During `kitstack dev`, views are served through the relay from your local Vite dev server. Have the LLM render the view once, then edit `View.tsx`, save, and refresh the page — your updated code appears immediately on the previous tool call. No rebuild, no redeploy, no need to re-invoke the tool.
+
+The modules get hot-replaced on refresh. Each page refresh fetches the latest view code from your local Vite dev server through the relay.
+
+<Note>
+View component changes (`View.tsx`) are served fresh on every render — no restart needed. Tool handler changes and view config changes (slug, height, placeholder) require restarting `kitstack dev`.
+</Note>
+
+### Local DevKit
+
+For rapid iteration without an LLM client, use the DevKit:
+
+```bash filename="Terminal"
+npx kitstack dev --views
+```
+
+This starts a local server (default port 5174) that renders your views with the same double-iframe architecture as production. The DevKit sidebar lists all views, shows a data inspector (with editable JSON), and logs tool calls.
+
+## Placeholder data for development
+
+Views that need context parameters (like an ID from a previous tool call) can define placeholder data for the DevKit:
+
+```ts filename="src/views/contact-detail/index.ts"
+export default defineView({
+  slug: "contact-detail",
+  name: "Contact Detail",
+  description: "to view detailed contact info",
+  loader,
+  component: ContactDetailView,
+  placeholder: {
+    contact: {
+      id: "c1",
+      name: "Jane Doe",
+      company: "Acme Corp",
+      email: "jane@acme.co",
+    },
+    deals: [
+      { id: "d1", name: "Brand Refresh", value: 18000, stage: "proposal" },
+    ],
+    recentActivities: [
+      { id: "a1", type: "meeting", description: "Kick-off call" },
+    ],
+  },
+});
+```
+
+The placeholder is typed against your loader's return type — TypeScript errors if the shape doesn't match. Placeholders are stripped from the production build.
+
+## Setting view permissions
+
+Views can request additional capabilities:
+
+```ts filename="src/views/export/index.ts"
+export default defineView({
+  slug: "export",
+  name: "Export Data",
+  description: "to export data as CSV or JSON",
+  loader,
+  component: ExportView,
+  permissions: {
+    clipboardWrite: true, // Allow writing to clipboard
+  },
+});
+```
+
+## Gotchas
+
+<Warning>
+View file paths matter. The build pipeline expects your component at `src/views/[slug]/View.tsx`. If the file is missing, `kitstack build` fails with a clear error.
+</Warning>
+
+<Warning>
+The shell HTML is generated once at build time (or at handler construction in dev). Changes to view config (slug, height, permissions) require a restart. Only the React component itself is live-served during development.
+</Warning>
+
+## Next steps
+
+- [Testing views](/docs/guides/testing) — test loaders with `loadView()`
+- [`defineView()` API reference](/docs/api/define-view) — full parameter documentation
+- [`defineLoader()` API reference](/docs/api/define-loader) — loader type helpers

@@ -1,0 +1,75 @@
+---
+title: kitstack deploy
+description: CLI reference for kitstack deploy — deploy a built kit to the KitStack platform.
+---
+
+# kitstack deploy
+
+Deploy a built kit to the KitStack platform. Uploads the bundle, seeds the registry, and provisions the runtime.
+
+## Usage
+
+```bash filename="Terminal"
+npx kitstack deploy
+```
+
+Requires authentication (`kitstack login`) and a prior build (`kitstack build`).
+
+## What it does
+
+1. Reads `.kitstack/build/manifest.json`
+2. Uploads build artifacts to S3 (server bundle, views, shell)
+3. Seeds the kit registry (tools and views appear in `tools/list`)
+4. Provisions (or updates) the sandboxed Lambda function
+5. Grants the deployer `activator` + `author` authorization tuples
+
+## Publish to marketplace
+
+```bash filename="Terminal"
+npx kitstack publish
+```
+
+`publish` wraps the full workflow: build (if needed) + upload to the KitStack marketplace API. It sends:
+
+- `manifest` — parsed manifest JSON
+- `bundle` — server bundle as base64
+- `shell` — shell HTML as base64
+- `views[]` — array of view assets as base64
+
+## Visibility
+
+| Visibility | Who can see it | Who can use it |
+|-----------|---------------|---------------|
+| `private` (default) | Only authorized users | Users with activator access |
+| `unlisted` | Anyone with the direct URL | Users with activator access |
+| `public` | Everyone (marketplace listing) | Users with activator access |
+
+## Deployment architecture
+
+Deployed kits run as sandboxed Lambda functions:
+
+- **Runtime:** Node.js 22 on arm64
+- **Code:** loaded from S3 (`bundles/[kitId]/kit.mjs`)
+- **Dependencies:** shared Lambda layer (`drizzle-orm`, `@libsql/client`, `zod`, `nanoid`)
+- **IAM:** minimal role — only `lambda:InvokeFunction` on the MCP router
+- **Database:** no credentials in env vars. Queries go through a proxy authenticated by per-invocation tokens (60s TTL)
+
+## Prerequisites
+
+- Run `kitstack login` first
+- Run `kitstack build` first (or `publish` will build automatically)
+- For manual deploy scripts: run under `npx sst shell` for SST resource bindings
+
+## Gotchas
+
+<Warning>
+The upload does not validate build output. If `.kitstack/build/` is empty or stale, you'll deploy an old or broken version. Always build first.
+</Warning>
+
+<Warning>
+The `databases` map keys in monolith mode must match kit IDs exactly. A kit with `id: "cold-outreach"` needs `databases["cold-outreach"]`.
+</Warning>
+
+<Note>
+First-party and third-party kits use the same pipeline. There is no separate deploy path for platform-maintained kits.
+</Note>

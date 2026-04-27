@@ -1,0 +1,88 @@
+---
+title: kitstack build
+description: CLI reference for kitstack build — validate and bundle a kit for deployment.
+---
+
+# kitstack build
+
+Validate your kit and bundle it for deployment. Produces a server bundle, view modules, CSS, shell HTML, and a manifest.
+
+## Usage
+
+```bash filename="Terminal"
+npx kitstack build
+```
+
+Or with a custom kit root:
+
+```bash filename="Terminal"
+npx kitstack build --config ./kits/crm
+```
+
+## Output
+
+Build artifacts are written to `.kitstack/build/`:
+
+| File | Description |
+|------|-------------|
+| `kit.mjs` | Server bundle (esbuild, ESM) |
+| `kit.zip` | Lambda archive |
+| `manifest.json` | Build metadata with hashes, sizes, SDK version |
+| `shell.html` | MCP Apps HTML shell |
+| `views/vendor.js` | React + ReactDOM (shared across views) |
+| `views/shared.js` | SDK hooks and shared components |
+| `views/[kitId]/[slug].js` | Per-view entry modules |
+| `views/style.css` | Compiled Tailwind CSS |
+
+## Build pipeline
+
+1. **Load** — imports `kit.config.ts`, runs `defineKit()` validations
+2. **Validate migrations** — executes all SQL against an in-memory SQLite database
+3. **Bundle server** — esbuild with `@libsql/client`, `drizzle-orm`, `zod` externalized
+4. **Generate view entries** — creates mount-point code for each view
+5. **Bundle views** — Vite with `manualChunks` (React → vendor, hooks → shared)
+6. **Compile CSS** — Tailwind processes `src/views/styles.css`
+7. **Generate shell** — bakes kit config into the MCP Apps shell HTML
+8. **Write manifest** — `manifest.json` with SHA-256 hashes (12 hex chars)
+
+## Validations
+
+| Check | Error | Description |
+|-------|-------|-------------|
+| Kit config loads | `TOOL_*`, `KIT_*` | Invalid names, short descriptions, duplicates |
+| View.tsx files exist | — | Every declared view must have a component file |
+| Migration SQL valid | — | Each statement executed against in-memory SQLite |
+| No DROP statements | `MIGRATION_DROP_FORBIDDEN` | Hard rule, not configurable |
+
+## Build output example
+
+```
+  ✓ Loaded kit.config.ts — "CRM Kit" (12 tools, 5 views)
+  ✓ Migration SQL valid (8 statements)
+  ✓ Validation passed
+  ✓ Server bundle: .kitstack/build/kit.mjs (42.3 KB)
+  ✓ Generated 5 view entries
+  ✓ View bundles: 5 view modules + 2 shared chunks (187.4 KB total)
+  ✓ CSS: .kitstack/build/views/style.css (8.2 KB)
+  ✓ Shell: .kitstack/build/shell.html (3.1 KB)
+  ✓ Manifest: .kitstack/build/manifest.json
+```
+
+## Size warnings
+
+| Threshold | Message |
+|-----------|---------|
+| Server bundle > 1 MB | "Consider splitting large dependencies" |
+| View module > 500 KB | "Consider code-splitting or reducing dependencies" |
+| Shared chunk > 500 KB | "May slow down initial view loads" |
+
+These are warnings, not hard failures. To fix:
+
+- **Server bundle:** ensure `@libsql/client`, `drizzle-orm`, `zod` are externalized
+- **View modules:** import specific subpaths (e.g., `date-fns/format` not `date-fns`)
+
+## Notes
+
+- Build validation is intentionally stricter than `kitstack dev`. Dev should be fast; build should catch everything before deployment.
+- Migration validation runs against a fresh in-memory database, catching SQL that would fail on a new user's database.
+- The manifest's `sdkVersion` is read from `packages/sdk/package.json` dynamically.
