@@ -91,6 +91,7 @@ Commands:
   init <name>     Scaffold a new kit project
   dev             Start local dev server
   build           Validate and bundle kit for deployment
+  serve           Start self-hosted MCP server
   login           Authenticate with KitStack
   publish         Submit kit to KitStack marketplace
 
@@ -149,6 +150,11 @@ async function main() {
     case "build": {
       const { build } = await import("./commands/build.js");
       await build(commandArgs);
+      break;
+    }
+    case "serve": {
+      const { serve } = await import("./commands/serve.js");
+      await serve(commandArgs);
       break;
     }
     case "login": {
