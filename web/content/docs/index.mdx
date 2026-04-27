@@ -5,9 +5,11 @@ description: The framework for building MCP apps. Tools, views, database, and de
 
 # KitStack SDK
 
-MCP is a powerful standard, but building with it today is rough. You need to spin up a server, implement the protocol, handle auth, manage databases, and figure out deployment — before you even write your first tool.
+MCP is a powerful standard, but building with it today is rough. You need to learn the protocol, implement JSON-RPC, handle auth and OAuth, manage databases, set up deployment infrastructure, and troubleshoot client-specific quirks — before you even write your first tool.
 
-KitStack is to MCP what Next.js is to React. The SDK gives you the framework; the platform gives you the infrastructure. If you can script business logic and build simple UI, you can build and deploy a kit.
+KitStack abstracts all of that away. You write business logic and UI. The SDK handles the MCP protocol, the platform handles infrastructure. You don't need to understand how `tools/list` works, how tool descriptions affect LLM routing, or how different clients handle deferred loading. You define tools, define views, and deploy — KitStack handles the rest.
+
+The current limitations of this approach (discovery overhead, permission granularity, client-dependent behavior) are subject to change as both KitStack and MCP standard adoption evolve. The framework insulates you from those changes — your kit code stays the same even as the underlying protocol and client landscape shifts.
 
 ## What is a kit?
 
