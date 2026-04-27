@@ -19,6 +19,7 @@ export default defineKit({
   schema,
   migrationSql,
   instructions: meetingInstructions,
+  triggers: ["meeting", "action-item", "notes", "transcript", "decision", "agenda"],
   tools: [
     processMeeting,
     listMeetings,

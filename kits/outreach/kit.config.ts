@@ -29,6 +29,7 @@ export default defineKit({
   schema,
   migrationSql,
   instructions: outreachInstructions,
+  triggers: ["outreach", "cold-email", "sequence", "prospect", "campaign", "email"],
   tools: [
     listSequences,
     createSequence,

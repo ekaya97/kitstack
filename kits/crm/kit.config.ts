@@ -32,6 +32,7 @@ export default defineKit({
   schema,
   migrationsDir: resolve(import.meta.dirname, "migrations"),
   instructions: crmInstructions,
+  triggers: ["contact", "person", "company", "deal", "pipeline", "proposal", "follow-up", "crm", "sales"],
   tools: [
     addContact,
     listContacts,

@@ -26,6 +26,7 @@ export default defineKit({
   schema,
   migrationSql,
   instructions: expenseInstructions,
+  triggers: ["expense", "receipt", "invoice", "vat", "tax", "steuerberater", "skr03", "bookkeeping"],
   tools: [
     addExpense,
     importCsv,
