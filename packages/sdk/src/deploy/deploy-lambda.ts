@@ -95,6 +95,7 @@ export async function provisionKitLambda(
     UpdateFunctionConfigurationCommand,
     PutFunctionConcurrencyCommand,
     waitUntilFunctionActiveV2,
+    waitUntilFunctionUpdatedV2,
   } = await import("@aws-sdk/client-lambda");
 
   const lambda = new LambdaClient({ region: options.region });
@@ -110,6 +111,12 @@ export async function provisionKitLambda(
     );
     functionArn = existing.Configuration!.FunctionArn!;
 
+    // Wait for any in-progress update to complete before modifying
+    await waitUntilFunctionUpdatedV2(
+      { client: lambda, maxWaitTime: 120 },
+      { FunctionName: functionName }
+    );
+
     // Update code
     await lambda.send(
       new UpdateFunctionCodeCommand({
@@ -119,9 +126,9 @@ export async function provisionKitLambda(
       })
     );
 
-    // Wait for update to complete before updating config
-    await waitUntilFunctionActiveV2(
-      { client: lambda, maxWaitTime: 60 },
+    // Wait for code update to complete before updating config
+    await waitUntilFunctionUpdatedV2(
+      { client: lambda, maxWaitTime: 120 },
       { FunctionName: functionName }
     );
 
@@ -134,6 +141,12 @@ export async function provisionKitLambda(
         Layers: [runtimeLayerArn],
         Environment: { Variables: {} },
       })
+    );
+
+    // Wait for config update to complete before setting concurrency
+    await waitUntilFunctionUpdatedV2(
+      { client: lambda, maxWaitTime: 120 },
+      { FunctionName: functionName }
     );
 
     console.log(`  ✓ Updated Lambda ${functionName}`);
