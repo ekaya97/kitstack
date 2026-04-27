@@ -240,21 +240,21 @@ new aws.cloudwatch.MetricAlarm("KitInvocationAlarm", {
   statistic: "Sum",
   period: 60,
   evaluationPeriods: 1,
-  threshold: 500,
+  threshold: 300,
   comparisonOperator: "GreaterThanThreshold",
   alarmActions: [killSwitchTopic.arn],
   treatMissingData: "notBreaching",
 });
 
-// Alarm: Kit-* concurrent executions > 20
+// Alarm: Kit-* concurrent executions > 15
 new aws.cloudwatch.MetricAlarm("KitConcurrencyAlarm", {
-  alarmDescription: "Kit Lambda concurrent executions exceeded 20 — kill switch triggered",
+  alarmDescription: "Kit Lambda concurrent executions exceeded 15 — kill switch triggered",
   namespace: "AWS/Lambda",
   metricName: "ConcurrentExecutions",
   statistic: "Maximum",
   period: 60,
   evaluationPeriods: 1,
-  threshold: 20,
+  threshold: 15,
   comparisonOperator: "GreaterThanThreshold",
   alarmActions: [killSwitchTopic.arn],
   treatMissingData: "notBreaching",
