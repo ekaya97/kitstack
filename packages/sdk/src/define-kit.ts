@@ -105,6 +105,7 @@ export function defineKit(config: {
   migrationSql?: string;
   migrationsDir?: string;
   instructions: string;
+  triggers?: string[];
   tools: ToolDefinition[];
   views?: ViewDefinition[];
 }): KitDefinition {
@@ -193,6 +194,18 @@ export function defineKit(config: {
         throw new KitValidationError(
           "KIT_INVALID_VIEW_SLUG",
           `View slug "${view.slug}" must be kebab-case. Use "${suggested}" instead.`
+        );
+      }
+    }
+  }
+
+  // Validate triggers
+  if (config.triggers) {
+    for (const trigger of config.triggers) {
+      if (typeof trigger !== "string" || trigger !== trigger.toLowerCase()) {
+        throw new KitValidationError(
+          "KIT_INVALID_TRIGGER",
+          `Trigger "${trigger}" must be a lowercase string. Use "${String(trigger).toLowerCase()}" instead.`
         );
       }
     }

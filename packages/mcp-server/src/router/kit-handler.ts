@@ -69,6 +69,109 @@ export const KIT_VIEW_TOOL_DEFINITION: McpToolDefinition = {
   },
 } as McpToolDefinition;
 
+// --- Dynamic tool description builders ---
+
+interface KitSummary {
+  id: string;
+  name: string;
+  description: string;
+  triggers: string[];
+  actions: string[];
+}
+
+function groupKitSummaries(
+  allTools: KitRegistryItem[],
+  activatedKitIds: Set<string>
+): KitSummary[] {
+  const kits = new Map<string, KitSummary>();
+
+  for (const tool of allTools) {
+    if (!activatedKitIds.has(tool.kitId)) continue;
+    if (tool.toolName.startsWith("kitstack_")) continue;
+
+    const existing = kits.get(tool.kitId);
+    if (existing) {
+      existing.actions.push(tool.toolName);
+    } else {
+      let triggers: string[] = [];
+      try {
+        triggers = JSON.parse(tool.kitTriggers || "[]");
+      } catch {}
+
+      kits.set(tool.kitId, {
+        id: tool.kitId,
+        name: tool.kitName,
+        description: tool.kitDescription || tool.kitName,
+        triggers,
+        actions: [tool.toolName],
+      });
+    }
+  }
+
+  return Array.from(kits.values());
+}
+
+/**
+ * Build a compact, front-loaded `kit` tool description optimized for
+ * deferred tool search. The first line contains kit names and trigger
+ * keywords so BM25 search can match user intent even before the full
+ * description is loaded.
+ */
+export function buildDynamicKitDescription(
+  allTools: KitRegistryItem[],
+  activatedKitIds: Set<string>
+): string {
+  const kits = groupKitSummaries(allTools, activatedKitIds);
+
+  if (kits.length === 0) {
+    return "KitStack \u2014 persistent tool kits for AI. No kits activated yet. Call kit() to get started.";
+  }
+
+  const totalActions = kits.reduce((sum, k) => sum + k.actions.length, 0);
+
+  // Scale triggers per kit based on count to keep first line compact
+  const maxTriggers = kits.length <= 5 ? 10 : kits.length <= 10 ? 2 : 1;
+  const kitSummaries = kits
+    .map((k) => {
+      const t = k.triggers.slice(0, maxTriggers).join(", ");
+      return t ? `${k.id} (${t})` : k.id;
+    })
+    .join(", ");
+
+  const firstLine = `KitStack \u2014 ${kits.length} apps, ${totalActions} tools in one surface. ${kitSummaries}. Call kit() to see all capabilities.`;
+
+  const cliLine = "kit() \u2192 list kits, kit(id) \u2192 actions, kit(id, cmd) \u2192 params, kit(id, cmd, params) \u2192 run.";
+
+  const actionLines = kits.map((k) => `${k.id}: ${k.actions.join(", ")}`);
+
+  return [firstLine, cliLine, ...actionLines].join("\n");
+}
+
+/**
+ * Build concatenated kit instructions for the MCP `initialize` response.
+ * Returns null if no kits have instructions.
+ */
+export function buildKitInstructions(
+  allTools: KitRegistryItem[],
+  activatedKitIds: Set<string>
+): string | null {
+  const seen = new Set<string>();
+  const instructionBlocks: string[] = [];
+
+  for (const tool of allTools) {
+    if (!activatedKitIds.has(tool.kitId)) continue;
+    if (seen.has(tool.kitId)) continue;
+    seen.add(tool.kitId);
+
+    if (tool.kitInstructions) {
+      instructionBlocks.push(tool.kitInstructions);
+    }
+  }
+
+  if (instructionBlocks.length === 0) return null;
+  return instructionBlocks.join("\n\n---\n\n");
+}
+
 /**
  * Route a kit() call based on which params are present.
  */

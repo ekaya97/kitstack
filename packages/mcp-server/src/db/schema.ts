@@ -8,6 +8,8 @@ export const kitRegistryTable = sqliteTable("kit_registry", {
   inputSchema: text("input_schema").notNull(),
   kitName: text("kit_name").notNull(),
   kitDescription: text("kit_description"),
+  kitTriggers: text("kit_triggers"),
+  kitInstructions: text("kit_instructions"),
   lambdaResource: text("lambda_resource"),
   visibility: text("visibility", {
     enum: ["private", "unlisted", "public"],

@@ -18,6 +18,9 @@ import { createClient, type Client } from "@libsql/client";
 export interface KitManifest {
   kitId: string;
   kitName: string;
+  kitDescription?: string;
+  kitTriggers?: string[];
+  kitInstructions?: string;
   version: string;
   tools: Array<{ name: string; description: string }>;
   views: Array<{ slug: string; name: string; description: string }>;
@@ -87,15 +90,17 @@ export async function seedRegistry(options: SeedRegistryOptions): Promise<void> 
     // Seed kit_registry (tools)
     for (const tool of manifest.tools) {
       await client.execute({
-        sql: `INSERT OR REPLACE INTO kit_registry (kit_id, tool_name, tool_description, input_schema, kit_name, kit_description, lambda_resource, visibility, author_id)
-              VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+        sql: `INSERT OR REPLACE INTO kit_registry (kit_id, tool_name, tool_description, input_schema, kit_name, kit_description, kit_triggers, kit_instructions, lambda_resource, visibility, author_id)
+              VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
         args: [
           manifest.kitId,
           tool.name,
           tool.description,
           "{}",
           manifest.kitName,
-          manifest.kitName,
+          manifest.kitDescription ?? manifest.kitName,
+          JSON.stringify(manifest.kitTriggers ?? []),
+          manifest.kitInstructions ?? null,
           lambdaResource ?? null,
           visibility,
           authorId ?? null,

@@ -276,6 +276,14 @@ export interface KitDefinition {
    */
   migrationsDir?: string;
   instructions: string;
+  /**
+   * Semantic keywords for LLM intent routing. Lowercase, single words
+   * or hyphenated terms that help the LLM match user requests to this kit
+   * without needing to call `kit()` first.
+   *
+   * @example `["contact", "deal", "pipeline", "proposal", "follow-up"]`
+   */
+  triggers?: string[];
   tools: ToolDefinition[];
   views?: ViewDefinition<any>[];
   /**

@@ -36,6 +36,8 @@ export interface KitRegistryItem {
   inputSchema: string;
   kitName: string;
   kitDescription?: string;
+  kitTriggers?: string;
+  kitInstructions?: string;
   lambdaResource?: string | null;
 }
 

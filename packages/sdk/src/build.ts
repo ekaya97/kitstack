@@ -414,6 +414,9 @@ export default defineConfig({
   const manifest = {
     kitId: kit.id,
     kitName: kit.name,
+    kitDescription: kit.description,
+    kitTriggers: kit.triggers ?? [],
+    kitInstructions: kit.instructions,
     version: kit.version,
     sdkVersion: JSON.parse(readFileSync(resolve(import.meta.dirname, "..", "package.json"), "utf-8")).version,
     tools: kit.tools.map((t) => ({
