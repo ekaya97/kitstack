@@ -123,7 +123,7 @@ export async function provisionKitLambda(
 
     // Wait for any in-progress update to complete before modifying
     await waitUntilFunctionUpdatedV2(
-      { client: lambda, maxWaitTime: 120 },
+      { client: lambda, maxWaitTime: 300 },
       { FunctionName: functionName }
     );
 
@@ -138,7 +138,7 @@ export async function provisionKitLambda(
 
     // Wait for code update to complete before updating config
     await waitUntilFunctionUpdatedV2(
-      { client: lambda, maxWaitTime: 120 },
+      { client: lambda, maxWaitTime: 300 },
       { FunctionName: functionName }
     );
 
@@ -156,7 +156,7 @@ export async function provisionKitLambda(
 
     // Wait for config update to complete before setting concurrency
     await waitUntilFunctionUpdatedV2(
-      { client: lambda, maxWaitTime: 120 },
+      { client: lambda, maxWaitTime: 300 },
       { FunctionName: functionName }
     );
 
