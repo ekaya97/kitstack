@@ -171,6 +171,12 @@ export const deleteDeal = defineTool({
 });
 ```
 
+## Runtime limits
+
+<Warning>
+All tools in a kit share a single Lambda runtime with **128 MB memory** and a **10-second timeout**. Every tool invocation — including the loader for views — must complete within 10 seconds and stay under 128 MB. If your handler does heavy computation or returns very large result sets, split the work across multiple tool calls or paginate the output.
+</Warning>
+
 ## Next steps
 
 - [Defining tools guide](/docs/guides/defining-tools) — practical patterns and examples

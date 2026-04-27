@@ -287,15 +287,27 @@ Views use the MCP Apps extension to render inside the LLM client. The SDK handle
 3. The shell and proxy exchange `postMessage` events: `sandbox-proxy-ready`, `sandbox-resource-ready`, `ui/initialize`, `tool-result`.
 4. Your React component mounts after the handshake completes and data is delivered.
 
+## React version
+
+<Warning>
+KitStack deploys React and ReactDOM as shared vendor modules through its CDN. Your kit **must** use **React 19** (`react: "^19.0.0"`, `react-dom: "^19.0.0"`) as dev dependencies. Mismatched versions will cause runtime errors because your view code and the shared vendor bundle expect the same React internals.
+</Warning>
+
 ## View bundling
 
-During `kitstack build`, views are bundled with Vite:
+During `kitstack build`, views are bundled with Vite into three layers:
 
-- **vendor.js** — React, ReactDOM, scheduler (shared across all views, cached separately)
-- **shared.js** — SDK hooks and shared components from `@kitstack/sdk/view`
-- **`[kitId]/[slug].js`** — individual view entry modules
+- **vendor.js** — React, ReactDOM, scheduler. Served from the KitStack CDN and shared across all kits — not bundled into your kit.
+- **shared.js** — SDK hooks and shared components from `@kitstack/sdk/view`. Also served from the CDN — not bundled into your kit.
+- **`[kitId]/[slug].js`** — your individual view entry modules. This is the only code that ships with your kit.
 
 Tailwind CSS is compiled per-kit from `src/views/styles.css` using your kit's `tailwind.config.ts`.
+
+### External component libraries
+
+You can use third-party component libraries (shadcn, Radix, Headless UI, etc.) in your views — they get bundled into your per-kit view module alongside your own code. React and ReactDOM are **not** included in your bundle (they're loaded once from the shared vendor.js), but everything else ships with your view entry file.
+
+Keep view modules lightweight. The build emits a warning when a single view module exceeds **500 KB**. During development, the relay forwards view modules over a WebSocket connection with a **128 KB message limit** — a view that exceeds this will fail to load in relay mode. Heavy libraries like MUI or Ant Design can easily push a single view past both thresholds. Prefer Tailwind CSS with small, focused component libraries (Radix primitives, Headless UI) over full design systems.
 
 ## Next steps
 

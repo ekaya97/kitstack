@@ -133,9 +133,11 @@ One auth, one connection, and the user manages what's available from a single da
 
 ## Current limitations
 
-**Discovery overhead.** Progressive discovery adds round trips compared to direct MCP tools. The LLM may need to call `kit(id)` to inspect available actions before running one. This is a deliberate trade-off — KitStack optimizes for multi-step workflows where one discovery call maps the full surface, not for single one-shot actions.
+**No network.** Kits can't call external APIs or fetch data from the internet — every piece of data enters through the user's conversation. This is a temporary limitation. If your kit needs external endpoints, reach out at hello@kitstack.co and we'll work with you to get them allowed.
 
-**Permission granularity.** Kit actions are not individual MCP tools, so MCP clients cannot enforce per-action permissions natively. KitStack enforces permissions server-side (allow or block per action category). A human-in-the-loop "ask before allow" pattern for sensitive actions is planned but not yet available — it requires an out-of-band confirmation channel that bypasses the LLM.
+**No background execution.** Kits only run when the LLM calls them. No scheduled tasks, no reminders, no triggers. If a workflow depends on "remind me in 3 days" or "check this every morning," a kit can't do that natively. The LLM can surface stored data when the user comes back and asks, but it won't proactively reach out. This is subject to developer feedback — if you want it, [let us know](mailto:hello@kitstack.co) and we'll build it.
+
+**Single-user, single-session.** No collaboration, no shared state between users. The kit is a personal tool. This rules out team CRMs, shared project boards, multi-party workflows. Multi-user collaborative kits are on the roadmap.
 
 **Client behavior varies.** Some LLM clients defer tool loading behind a search index. KitStack's tool description is designed for this (trigger keywords and action names are front-loaded for search matching), but discoverability depends on how each client handles deferred tools. First-time discovery may require a search step; subsequent conversations benefit from the LLM caching kit information in memory.
 
