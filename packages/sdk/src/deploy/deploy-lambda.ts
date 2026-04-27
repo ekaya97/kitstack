@@ -31,6 +31,10 @@ export interface DeployLambdaOptions {
   timeout?: number;
   /** Reserved concurrent executions. Default: 5. */
   reservedConcurrency?: number;
+  /** VPC subnet IDs. When set, the Lambda runs inside a VPC. */
+  subnetIds?: string[];
+  /** VPC security group IDs. Required when subnetIds is set. */
+  securityGroupIds?: string[];
   /** AWS region. Default: from environment. */
   region?: string;
 }
@@ -85,7 +89,13 @@ export async function provisionKitLambda(
     memory = 128,
     timeout = 10,
     reservedConcurrency = 5,
+    subnetIds,
+    securityGroupIds,
   } = options;
+
+  const vpcConfig = subnetIds?.length
+    ? { SubnetIds: subnetIds, SecurityGroupIds: securityGroupIds ?? [] }
+    : undefined;
 
   const {
     LambdaClient,
@@ -132,7 +142,7 @@ export async function provisionKitLambda(
       { FunctionName: functionName }
     );
 
-    // Update configuration (memory, timeout, layer version may have changed)
+    // Update configuration (memory, timeout, layer version, VPC may have changed)
     await lambda.send(
       new UpdateFunctionConfigurationCommand({
         FunctionName: functionName,
@@ -140,6 +150,7 @@ export async function provisionKitLambda(
         Timeout: timeout,
         Layers: [runtimeLayerArn],
         Environment: { Variables: {} },
+        ...(vpcConfig ? { VpcConfig: vpcConfig } : {}),
       })
     );
 
@@ -171,6 +182,7 @@ export async function provisionKitLambda(
         },
         Layers: [runtimeLayerArn],
         Environment: { Variables: {} },
+        ...(vpcConfig ? { VpcConfig: vpcConfig } : {}),
       })
     );
 

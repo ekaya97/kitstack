@@ -42,7 +42,7 @@ async function deploy() {
   });
 
   // 3. Provision Lambda
-  const { roleArn, layerArn } = (Resource as any).KitLambdaInfra;
+  const { roleArn, layerArn, subnetIds, securityGroupIds } = (Resource as any).KitLambdaInfra;
 
   const result = await provisionKitLambda({
     kitId: KIT_ID,
@@ -50,6 +50,8 @@ async function deploy() {
     bundleS3Key: `bundles/${KIT_ID}/kit.zip`,
     roleArn,
     runtimeLayerArn: layerArn,
+    subnetIds,
+    securityGroupIds,
   });
 
   console.log(`\n✅ Kit "${KIT_ID}" deployed. Lambda: ${result.functionName} (${result.created ? "created" : "updated"})\n`);

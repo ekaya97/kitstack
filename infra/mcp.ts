@@ -29,12 +29,33 @@ export const mcpAuthStore = new sst.aws.Dynamo("MCPAuthStore", {
 
 // --- Kit Lambda shared infra (for SDK deploy pipeline) ---
 // Kit Lambdas are provisioned dynamically via `provisionKitLambda()`.
-// All kits share one IAM role and one runtime layer.
+// All kits share one IAM role, one runtime layer, and one VPC.
+
+/**
+ * VPC for kit Lambdas. No NAT = no outbound internet.
+ * Kit code can only reach the DB proxy via the Lambda VPC endpoint.
+ * Future: kits with `network: { outbound: true }` get a NAT-enabled subnet.
+ */
+export const kitVpc = new sst.aws.Vpc("KitVpc", { az: 1 });
+
+/**
+ * VPC endpoint for AWS Lambda service. Required for kit Lambdas to
+ * invoke the McpRouter (DB proxy) from within the VPC without NAT.
+ * Cost: ~$7/month.
+ */
+const lambdaEndpoint = new aws.ec2.VpcEndpoint("KitLambdaEndpoint", {
+  vpcId: kitVpc.nodes.vpc.id,
+  serviceName: `com.amazonaws.eu-central-1.lambda`,
+  vpcEndpointType: "Interface",
+  subnetIds: kitVpc.privateSubnets,
+  securityGroupIds: kitVpc.securityGroups,
+  privateDnsEnabled: true,
+});
 
 /**
  * IAM role for all kit Lambdas.
- * Only allows CloudWatch Logs — no DB, VPC, or S3 access.
- * DB credentials are passed per-invocation by the router.
+ * Allows CloudWatch Logs + VPC networking (ENI management).
+ * No DB, S3, or other AWS access. DB proxy is the only escape path.
  */
 export const kitLambdaRole = new aws.iam.Role("KitLambdaRole", {
   assumeRolePolicy: aws.iam.assumeRolePolicyForPrincipal({
@@ -45,6 +66,12 @@ export const kitLambdaRole = new aws.iam.Role("KitLambdaRole", {
 new aws.iam.RolePolicyAttachment("KitLambdaRoleLogs", {
   role: kitLambdaRole.name,
   policyArn: "arn:aws:iam::aws:policy/service-role/AWSLambdaBasicExecutionRole",
+});
+
+// Kit Lambdas need ENI permissions to run inside a VPC
+new aws.iam.RolePolicyAttachment("KitLambdaRoleVpc", {
+  role: kitLambdaRole.name,
+  policyArn: "arn:aws:iam::aws:policy/service-role/AWSLambdaVPCAccessExecutionRole",
 });
 
 /**
@@ -69,6 +96,8 @@ export const kitLambdaInfra = new sst.Linkable("KitLambdaInfra", {
   properties: {
     roleArn: kitLambdaRole.arn,
     layerArn: kitRuntimeLayer.arn,
+    subnetIds: kitVpc.privateSubnets,
+    securityGroupIds: kitVpc.securityGroups,
   },
 });
 
