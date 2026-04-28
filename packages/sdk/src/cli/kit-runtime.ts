@@ -47,6 +47,14 @@ export async function createLocalRuntime(options: LocalRuntimeOptions = {}): Pro
     throw new Error("Invalid kit.config.ts — must export a defineKit() result as default.");
   }
 
+  // Ensure DB directory exists for file: URLs
+  if (dbUrl.startsWith("file:")) {
+    const { mkdirSync } = await import("node:fs");
+    const { dirname } = await import("node:path");
+    const dbPath = dbUrl.replace("file:", "");
+    mkdirSync(dirname(resolve(kitRoot, dbPath)), { recursive: true });
+  }
+
   // Create database client
   const { createClient } = await import("@libsql/client");
   const { drizzle } = await import("drizzle-orm/libsql");
