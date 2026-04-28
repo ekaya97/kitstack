@@ -1,0 +1,18 @@
+{
+  "compilerOptions": {
+    "target": "ES2022",
+    "module": "ESNext",
+    "moduleResolution": "bundler",
+    "strict": true,
+    "jsx": "react-jsx",
+    "noEmit": true,
+    "skipLibCheck": true,
+    "esModuleInterop": true,
+    "paths": {
+      "@kitstackdev/kit": ["../../packages/sdk/src/index.ts"],
+      "@kitstackdev/kit/view": ["../../packages/sdk/views/src/shared/use-kit.ts"],
+      "@shared/*": ["../../packages/sdk/views/src/shared/*"]
+    }
+  },
+  "include": ["src/", "kit.config.ts", "test/"]
+}
