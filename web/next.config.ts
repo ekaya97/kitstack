@@ -1,5 +1,6 @@
 import { createMDX } from "fumadocs-mdx/next";
 import type { NextConfig } from "next";
+import { resolve } from "path";
 
 const withMDX = createMDX();
 
@@ -12,7 +13,7 @@ const nextConfig: NextConfig = {
     "@aws-sdk/client-s3",
     "@aws-sdk/s3-request-presigner",
   ],
-  outputFileTracingRoot: __dirname,
+  outputFileTracingRoot: resolve(__dirname, ".."),
   images: {
     remotePatterns: [
       {
