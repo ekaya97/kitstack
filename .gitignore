@@ -1,5 +1,5 @@
 # dependencies
-/node_modules
+node_modules/
 /.pnp
 .pnp.*
 .yarn/install-state.gz
@@ -60,5 +60,6 @@ packages/sdk/views/dist/
 
 # next.js (in web/)
 web/.next/
+web/.open-next/
 
 .claude
