@@ -13,6 +13,22 @@ const nextConfig: NextConfig = {
     "@aws-sdk/client-s3",
     "@aws-sdk/s3-request-presigner",
   ],
+  webpack: (config, { isServer }) => {
+    if (isServer) {
+      // Externalize native packages that can't be bundled by webpack.
+      // serverExternalPackages only works for imports within web/,
+      // but we also import from ../packages/mcp-server/ which
+      // resolves @libsql from root node_modules.
+      config.externals = config.externals || [];
+      config.externals.push(
+        /^@libsql\/.*/,
+        /^libsql$/,
+        /^@aws-sdk\/.*/,
+        /^@smithy\/.*/,
+      );
+    }
+    return config;
+  },
   outputFileTracingRoot: __dirname,
   images: {
     remotePatterns: [
