@@ -5,14 +5,13 @@ const withMDX = createMDX();
 
 const nextConfig: NextConfig = {
   reactStrictMode: true,
-  serverExternalPackages: ["sst"],
-  webpack: (config, { isServer }) => {
-    if (isServer) {
-      config.externals = config.externals || [];
-      config.externals.push("sst");
-    }
-    return config;
-  },
+  serverExternalPackages: [
+    "sst",
+    "@libsql/client",
+    "libsql",
+    "@aws-sdk/client-s3",
+    "@aws-sdk/s3-request-presigner",
+  ],
   outputFileTracingRoot: __dirname,
   images: {
     remotePatterns: [

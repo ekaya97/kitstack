@@ -5,6 +5,7 @@ import { Resource } from "sst";
 import * as schema from "@/db/schema";
 
 export const auth = betterAuth({
+  secret: Resource.BetterAuthSecret.value,
   database: drizzleAdapter(db, {
     provider: "sqlite",
     schema,

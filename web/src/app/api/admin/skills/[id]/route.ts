@@ -1,3 +1,4 @@
+export const dynamic = "force-dynamic";
 import { NextRequest, NextResponse } from "next/server";
 import { S3Client, PutObjectCommand, DeleteObjectCommand } from "@aws-sdk/client-s3";
 import { Resource } from "sst";
@@ -6,7 +7,7 @@ import { db } from "@/lib/db";
 import { skills } from "@/db/schema";
 import { requireAdmin } from "@/lib/admin-auth";
 
-const s3 = new S3Client({});
+let _s3: S3Client; function getS3() { if (!_s3) _s3 = new S3Client({}); return _s3; }
 
 export async function PUT(
   request: NextRequest,
@@ -61,7 +62,7 @@ export async function PUT(
     updates.s3Key = s3Key;
     updates.fileSize = `${(buffer.length / 1024).toFixed(0)} KB`;
 
-    await s3.send(
+    await getS3().send(
       new PutObjectCommand({
         Bucket: Resource.SkillAssets.name,
         Key: s3Key,
@@ -100,7 +101,7 @@ export async function DELETE(
 
   // Delete S3 object if present
   if (existing.s3Key) {
-    await s3.send(
+    await getS3().send(
       new DeleteObjectCommand({
         Bucket: Resource.SkillAssets.name,
         Key: existing.s3Key,

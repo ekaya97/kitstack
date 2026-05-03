@@ -1,3 +1,4 @@
+export const dynamic = "force-dynamic";
 import type { Metadata } from "next";
 import Link from "next/link";
 import { notFound } from "next/navigation";
@@ -8,9 +9,6 @@ import { Avatar } from "@/components/ui/avatar";
 import { mdxComponents } from "@/components/blog/mdx-components";
 import { getAllSlugs, getPostBySlug } from "@/lib/blog";
 
-export function generateStaticParams() {
-  return getAllSlugs().map((slug) => ({ slug }));
-}
 
 export async function generateMetadata({
   params,

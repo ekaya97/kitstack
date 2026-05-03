@@ -4,6 +4,14 @@ import * as secrets from "./secrets";
 
 export const web = new sst.aws.Nextjs("Web", {
   path: "web",
+  server: {
+    install: [
+      "@aws-sdk/client-s3",
+      "@aws-sdk/s3-request-presigner",
+      "@libsql/client",
+      "libsql",
+    ],
+  },
   link: [
     webBucket,
     userAssetsBucket,

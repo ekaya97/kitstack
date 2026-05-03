@@ -1,3 +1,4 @@
+export const dynamic = "force-dynamic";
 import { Metadata } from "next";
 import Link from "next/link";
 import { notFound } from "next/navigation";
@@ -23,10 +24,6 @@ import { AppPreviewTabs } from "@/components/shared/app-preview-tabs";
 import { KitActivateCard } from "@/components/shared/kit-activate-card";
 import { TrackKitPageView } from "@/components/shared/track-page-view";
 
-export async function generateStaticParams() {
-  const kits = await getAllKitCards();
-  return kits.map((k) => ({ slug: k.slug }));
-}
 
 export async function generateMetadata({
   params,

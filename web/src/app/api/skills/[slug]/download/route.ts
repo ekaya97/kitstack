@@ -1,3 +1,4 @@
+export const dynamic = "force-dynamic";
 import { NextRequest, NextResponse } from "next/server";
 import { getSkillBySlug, incrementDownloadCount } from "@/services/skill.service";
 import { getDownloadUrl } from "@/services/storage.service";

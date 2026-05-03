@@ -1,3 +1,4 @@
+export const dynamic = "force-dynamic";
 import { NextRequest, NextResponse } from "next/server";
 import { S3Client, PutObjectCommand } from "@aws-sdk/client-s3";
 import { getSignedUrl } from "@aws-sdk/s3-request-presigner";
@@ -7,7 +8,7 @@ import { db } from "@/lib/db";
 import { user } from "@/db/auth-schema";
 import { requireSession } from "@/lib/auth-session";
 
-const s3 = new S3Client({});
+let _s3: S3Client; function getS3() { if (!_s3) _s3 = new S3Client({}); return _s3; }
 
 // POST: upload avatar directly
 export async function POST(request: NextRequest) {
@@ -39,7 +40,7 @@ export async function POST(request: NextRequest) {
   const key = `avatars/${session.user.id}.${ext}`;
   const buffer = Buffer.from(await file.arrayBuffer());
 
-  await s3.send(
+  await getS3().send(
     new PutObjectCommand({
       Bucket: Resource.UserAssets.name,
       Key: key,
@@ -51,7 +52,7 @@ export async function POST(request: NextRequest) {
   // Generate a public-ish URL (presigned, long expiry)
   const { GetObjectCommand } = await import("@aws-sdk/client-s3");
   const imageUrl = await getSignedUrl(
-    s3,
+    getS3(),
     new GetObjectCommand({
       Bucket: Resource.UserAssets.name,
       Key: key,

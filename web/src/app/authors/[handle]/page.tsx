@@ -1,3 +1,4 @@
+export const dynamic = "force-dynamic";
 import type { Metadata } from "next";
 import Image from "next/image";
 import Link from "next/link";
@@ -10,9 +11,6 @@ import { getAllKitCards } from "@/services/kit.service";
 import { getAllSkillCards } from "@/services/skill.service";
 import { AuthorCTA } from "@/components/shared/author-cta";
 
-export function generateStaticParams() {
-  return [{ handle: "kitstack" }];
-}
 
 export async function generateMetadata({
   params,

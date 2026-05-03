@@ -1,3 +1,4 @@
+export const dynamic = "force-dynamic";
 import { Metadata } from "next";
 import Link from "next/link";
 import { notFound } from "next/navigation";
@@ -22,10 +23,6 @@ import { WishlistButton } from "@/components/shared/wishlist-button";
 import { ShareButton } from "@/components/shared/share-modal";
 import { TrackSkillPageView } from "@/components/shared/track-page-view";
 
-export async function generateStaticParams() {
-  const skills = await getAllSkillCards();
-  return skills.map((s) => ({ slug: s.slug }));
-}
 
 export async function generateMetadata({
   params,
