@@ -13,8 +13,12 @@ import {
   deleteUserKitDb,
   updateUserKitDbStatus,
 } from "../../../packages/mcp-server/src/framework/dynamo";
-import { provisionKitDatabase, destroyKitDatabase } from "../../../packages/mcp-server/src/framework/db-provisioner";
 import type { UserKitDbItem } from "../../../packages/mcp-server/src/framework/types";
+
+// Dynamic import to avoid webpack bundling @libsql/client native binaries at build time
+async function getDbProvisioner() {
+  return import("../../../packages/mcp-server/src/framework/db-provisioner");
+}
 import { log } from "@/lib/logger";
 
 const MAX_RETRIES = 3;
@@ -72,12 +76,13 @@ export async function provisionKit(
   }
 
   // Provision new database
+  const { provisionKitDatabase } = await getDbProvisioner();
   const result = await withRetry(
     () => provisionKitDatabase(userId, kitId, migrationSql),
     `provisionKit(${kitId})`
   );
 
-  return result;
+  return result as { dbUrl: string; dbToken: string };
 }
 
 export async function deactivateKitDb(
@@ -95,6 +100,7 @@ export async function deleteKitDb(
   kitId: string
 ): Promise<void> {
   // Destroy the Turso database first (most expensive resource)
+  const { destroyKitDatabase } = await getDbProvisioner();
   await withRetry(
     () => destroyKitDatabase(userId, kitId),
     `destroyKitDatabase(${kitId})`
