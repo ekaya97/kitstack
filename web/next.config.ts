@@ -1,11 +1,14 @@
 import { createMDX } from "fumadocs-mdx/next";
 import type { NextConfig } from "next";
+import { resolve } from "path";
 
 const withMDX = createMDX();
 
 const nextConfig: NextConfig = {
   reactStrictMode: true,
   output: "standalone",
+  // Monorepo root — so Next.js traces hoisted deps from root node_modules
+  outputFileTracingRoot: resolve(__dirname, ".."),
   serverExternalPackages: [
     "sst",
     "@libsql/client",
@@ -15,10 +18,6 @@ const nextConfig: NextConfig = {
   ],
   webpack: (config, { isServer }) => {
     if (isServer) {
-      // Externalize native packages that can't be bundled by webpack.
-      // serverExternalPackages only works for imports within web/,
-      // but we also import from ../packages/mcp-server/ which
-      // resolves @libsql from root node_modules.
       config.externals = config.externals || [];
       config.externals.push(
         /^@libsql\/.*/,
@@ -29,7 +28,6 @@ const nextConfig: NextConfig = {
     }
     return config;
   },
-  outputFileTracingRoot: __dirname,
   images: {
     remotePatterns: [
       {

@@ -4,6 +4,17 @@ import * as secrets from "./secrets";
 
 export const web = new sst.aws.Nextjs("Web", {
   path: "web",
+  // Custom build: after OpenNext builds, fix the standalone path for monorepo.
+  // outputFileTracingRoot points to monorepo root, so standalone output nests
+  // under .next/standalone/web/ — OpenNext expects it at .next/standalone/.next/
+  buildCommand: [
+    "npx --yes @opennextjs/aws@3.9.14 build",
+    "&&",
+    "if [ -d .next/standalone/web/.next ] && [ ! -d .next/standalone/.next ]; then",
+    "ln -s web/.next .next/standalone/.next;",
+    "ln -s web/node_modules .next/standalone/node_modules 2>/dev/null || true;",
+    "fi",
+  ].join(" "),
   server: {
     install: [
       "@aws-sdk/client-s3",
