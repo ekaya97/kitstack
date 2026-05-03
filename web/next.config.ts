@@ -6,6 +6,7 @@ const withMDX = createMDX();
 
 const nextConfig: NextConfig = {
   reactStrictMode: true,
+  output: "standalone",
   serverExternalPackages: [
     "sst",
     "@libsql/client",
