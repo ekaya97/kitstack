@@ -1,10 +1,10 @@
 {
-  "name": "@kitstack/crm-kit",
+  "name": "@kitstackco/crm-kit",
   "version": "0.0.1",
   "private": true,
   "type": "module",
   "dependencies": {
-    "@kitstackdev/kit": "workspace:../../packages/sdk",
+    "@kitstackco/sdk": "*",
     "drizzle-orm": "^0.38.0",
     "@libsql/client": "^0.14.0",
     "zod": "^3.22.0",
