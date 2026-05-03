@@ -1,3 +1,4 @@
+export const dynamic = "force-dynamic";
 import { notFound } from "next/navigation";
 import { Nav } from "@/components/shared/nav";
 import { Footer } from "@/components/shared/footer";

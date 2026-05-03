@@ -1,3 +1,4 @@
+export const dynamic = "force-dynamic";
 import { getAllKitCards } from "@/services/kit.service";
 import { PricingClient } from "./pricing-client";
 

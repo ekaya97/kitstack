@@ -1,3 +1,4 @@
+export const dynamic = "force-dynamic";
 import { Nav } from "@/components/shared/nav";
 import { Footer } from "@/components/shared/footer";
 import { CatMark } from "@/components/ui/cat-mark";
