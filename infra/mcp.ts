@@ -110,6 +110,9 @@ export const appData = new sst.aws.Function("AppData", {
   runtime: "nodejs22.x",
   architecture: "arm64",
   logging: { retention: "1 week" },
+  nodejs: {
+    install: ["@libsql/client", "libsql"],
+  },
   url: { cors: false },
   link: [
     userKitDbs,
@@ -185,6 +188,9 @@ export const mcpRouter = new sst.aws.Function("McpRouter", {
   runtime: "nodejs22.x",
   architecture: "arm64",
   logging: { retention: "1 week" },
+  nodejs: {
+    install: ["@libsql/client", "libsql"],
+  },
   url: { cors: false },
   link: [
     kitBucket,
