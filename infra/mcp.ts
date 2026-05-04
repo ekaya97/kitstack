@@ -290,15 +290,17 @@ new aws.cloudwatch.MetricAlarm("KitInvocationAlarm", {
   treatMissingData: "notBreaching",
 });
 
-// Alarm: Kit-* concurrent executions > 15
+/// Alarm: account-wide concurrent executions > 50
+// Note: no dimension filter — monitors ALL Lambdas including SST/CDK.
+// Threshold must be high enough to not trigger during deploys.
 new aws.cloudwatch.MetricAlarm("KitConcurrencyAlarm", {
-  alarmDescription: "Kit Lambda concurrent executions exceeded 15 — kill switch triggered",
+  alarmDescription: "Account Lambda concurrent executions exceeded 50 — kill switch triggered",
   namespace: "AWS/Lambda",
   metricName: "ConcurrentExecutions",
   statistic: "Maximum",
   period: 60,
   evaluationPeriods: 1,
-  threshold: 15,
+  threshold: 50,
   comparisonOperator: "GreaterThanThreshold",
   alarmActions: [killSwitchTopic.arn],
   treatMissingData: "notBreaching",
