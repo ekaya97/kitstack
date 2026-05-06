@@ -107,7 +107,7 @@ export async function init(args: string[]) {
 // --- Templates ---
 
 function kitConfigTemplate(id: string, displayName: string) {
-  return `import { defineKit } from "@kitstack/sdk";
+  return `import { defineKit } from "@kitstackco/sdk";
 import { resolve } from "node:path";
 import * as schema from "./src/schema";
 import { instructions } from "./src/instructions";
@@ -135,7 +135,7 @@ function packageJsonTemplate(name: string) {
   "private": true,
   "type": "module",
   "dependencies": {
-    "@kitstack/sdk": "*",
+    "@kitstackco/sdk": "*",
     "zod": "^3.22.0",
     "drizzle-orm": "^0.38.0"
   },
@@ -144,7 +144,8 @@ function packageJsonTemplate(name: string) {
     "vitest": "^2.0.0",
     "drizzle-kit": "^0.30.0",
     "@types/react": "^19.0.0",
-    "react": "^19.0.0"
+    "react": "^19.0.0",
+    "react-dom": "^19.0.0"
   },
   "scripts": {
     "dev": "kitstack dev --stdio",
@@ -178,7 +179,7 @@ function tailwindConfigTemplate() {
 
 export default {
   content: ["./src/views/**/*.tsx"],
-  presets: [require("@kitstack/sdk/tailwind-preset")],
+  presets: [require("@kitstackco/sdk/tailwind-preset")],
 } satisfies Config;
 `;
 }
@@ -226,8 +227,8 @@ function exampleToolTemplate() {
   return `import { z } from "zod";
 import { desc } from "drizzle-orm";
 import type { LibSQLDatabase } from "drizzle-orm/libsql";
-import { defineTool, kit } from "@kitstack/sdk";
-import type { KitContext } from "@kitstack/sdk";
+import { defineTool, kit } from "@kitstackco/sdk";
+import type { KitContext } from "@kitstackco/sdk";
 import { items } from "../schema";
 
 const listItemsArgs = z.object({
@@ -263,7 +264,7 @@ export const listItems = defineTool({
 }
 
 function viewIndexTemplate() {
-  return `import { defineView } from "@kitstack/sdk";
+  return `import { defineView } from "@kitstackco/sdk";
 import { loader } from "./loader";
 import { DashboardView } from "./View";
 
@@ -279,7 +280,7 @@ export default defineView({
 }
 
 function viewLoaderTemplate() {
-  return `import { defineLoader } from "@kitstack/sdk";
+  return `import { defineLoader } from "@kitstackco/sdk";
 import { listItems } from "../../tools/example";
 
 export const loader = defineLoader(async (db, ctx) => {
@@ -289,7 +290,7 @@ export const loader = defineLoader(async (db, ctx) => {
 }
 
 function viewComponentTemplate() {
-  return `import type { Infer } from "@kitstack/sdk";
+  return `import type { Infer } from "@kitstackco/sdk";
 import type { loader } from "./loader";
 
 type Data = Infer<typeof loader>;
@@ -323,7 +324,7 @@ export function DashboardView({ data }: { data: Data }) {
 
 function testTemplate() {
   return `import { describe, it, expect, afterEach } from "vitest";
-import { createTestKit } from "@kitstack/sdk/testing";
+import { createTestKit } from "@kitstackco/sdk/testing";
 import kit from "../kit.config";
 
 describe("tools", () => {

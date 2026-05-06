@@ -12,10 +12,15 @@ import {
   copyFileSync,
 } from "fs";
 import { resolve, dirname, relative, join } from "path";
+import { createRequire } from "node:module";
 import type { KitDefinition } from "./types";
 import { KitStackError, MigrationError } from "./errors";
 import { generateShell } from "./shell-template";
 import { generatePreview } from "./preview-template";
+
+// Resolve the SDK package root — works both in monorepo (symlink) and from node_modules
+const _require = createRequire(import.meta.url);
+const sdkDir = resolve(dirname(_require.resolve("@kitstackco/sdk/package.json")));
 
 /**
  * Result returned by {@link buildKit} on success.
@@ -93,7 +98,6 @@ function fileSizeKB(filePath: string): string {
  */
 export async function buildKit(kitRoot: string) {
   const configPath = resolve(kitRoot, "kit.config.ts");
-  const handlerPath = resolve(kitRoot, "handler.ts");
   const outputDir = resolve(kitRoot, ".kitstack", "build");
   const entriesDir = resolve(outputDir, "_entries");
   const viewsDir = resolve(outputDir, "views");
@@ -108,9 +112,8 @@ export async function buildKit(kitRoot: string) {
 
   let kit: KitDefinition;
   try {
-    // tsx registers itself as a TypeScript loader
-    await import("tsx/esm/api");
-    const module = await import(configPath);
+    const { tsImport } = await import("tsx/esm/api");
+    const module = await tsImport(configPath, import.meta.url);
     kit = module.default;
   } catch (e: any) {
     // Surface SDK validation errors with their code and doc URL
@@ -212,13 +215,57 @@ export async function buildKit(kitRoot: string) {
 
   // ── 4. BUNDLE SERVER ───────────────────────────────────────
 
-  if (!existsSync(handlerPath)) {
-    fail(`handler.ts not found at ${handlerPath}. Create a handler that exports the Lambda entry point.`);
+  // Auto-generate a generic Lambda handler that dispatches tools and loaders
+  const generatedHandlerPath = resolve(entriesDir, "_handler.ts");
+  writeFileSync(generatedHandlerPath, `
+import { createClient } from "@libsql/client";
+import { drizzle } from "drizzle-orm/libsql";
+import kit from ${JSON.stringify(configPath)};
+
+interface KitInvocation {
+  toolName?: string;
+  loaderSlug?: string;
+  args?: Record<string, unknown>;
+  userId: string;
+  kitId: string;
+  dbUrl: string;
+  dbToken: string;
+}
+
+const toolMap = new Map(kit.tools.map((t: any) => [t.name, t]));
+const viewMap = new Map((kit.views ?? []).map((v: any) => [v.slug, v]));
+
+export const handler = async (event: KitInvocation) => {
+  const client = createClient({ url: event.dbUrl, authToken: event.dbToken });
+  const db = drizzle(client);
+  const ctx = { userId: event.userId, kitId: event.kitId };
+
+  if (event.loaderSlug) {
+    const view = viewMap.get(event.loaderSlug);
+    if (!view) return { data: null, error: \`Unknown view: \${event.loaderSlug}\` };
+    try { return { data: await view.loader(db, ctx) }; }
+    catch (err: any) { return { data: null, error: err.message }; }
   }
+
+  if (event.toolName === \`kitstack_\${kit.id}_instructions\`) {
+    return { content: [{ type: "text", text: kit.instructions }] };
+  }
+
+  const tool = toolMap.get(event.toolName!);
+  if (!tool) return { content: [{ type: "text", text: \`Unknown tool: \${event.toolName}\` }], isError: true };
+
+  const parsed = tool.args.safeParse(event.args);
+  if (!parsed.success) {
+    return { content: [{ type: "text", text: \`Invalid arguments: \${parsed.error.issues.map((i: any) => \`\${i.path.join(".")}: \${i.message}\`).join(", ")}\` }], isError: true };
+  }
+
+  return await tool.handler(db, parsed.data, ctx);
+};
+`);
 
   try {
     await esbuild({
-      entryPoints: [handlerPath],
+      entryPoints: [generatedHandlerPath],
       bundle: true,
       format: "esm",
       platform: "node",
@@ -282,8 +329,6 @@ export function mount(container, data) {
     // ── 6. BUNDLE VIEWS (Vite) ──────────────────────────────────
 
     // Generate a temporary vite config for this kit's views
-    // Resolve @shared/* — find the SDK views shared directory relative to the SDK package
-    const sdkDir = resolve(import.meta.dirname, "..");
     const sharedDir = resolve(sdkDir, "views", "src", "shared");
     const input: Record<string, string> = {};
     for (const view of kit.views) {
@@ -445,7 +490,7 @@ export default defineConfig({
     kitTriggers: kit.triggers ?? [],
     kitInstructions: kit.instructions,
     version: kit.version,
-    sdkVersion: JSON.parse(readFileSync(resolve(import.meta.dirname, "..", "package.json"), "utf-8")).version,
+    sdkVersion: JSON.parse(readFileSync(resolve(sdkDir, "package.json"), "utf-8")).version,
     tools: kit.tools.map((t) => ({
       name: t.name,
       description: t.description,

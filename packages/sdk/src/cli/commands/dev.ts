@@ -133,7 +133,8 @@ export async function dev(args: string[]) {
   const fullConfigPath = resolve(process.cwd(), configPath);
   let kit: KitDefinition;
   try {
-    const mod = await import(fullConfigPath);
+    const { tsImport } = await import("tsx/esm/api");
+    const mod = await tsImport(fullConfigPath, import.meta.url);
     kit = mod.default ?? mod;
   } catch (err: any) {
     console.error(`Failed to load kit config from ${configPath}: ${err.message}`);

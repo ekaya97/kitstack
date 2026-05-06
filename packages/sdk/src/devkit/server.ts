@@ -71,7 +71,6 @@ export function mount(container, data) {
   }
 
   // Vite config — root is kit dir so Tailwind/PostCSS configs are found
-  const projectRoot = resolve(kitRoot, "../..");
   writeFileSync(resolve(entryDir, "vite.config.ts"), `
 import { defineConfig } from "vite";
 import { resolve } from "path";
@@ -86,8 +85,8 @@ export default defineConfig({
   resolve: {
     dedupe: ["react", "react-dom"],
     alias: {
-      "react": resolve("${projectRoot.replace(/\\/g, "/")}", "node_modules/react"),
-      "react-dom": resolve("${projectRoot.replace(/\\/g, "/")}", "node_modules/react-dom"),
+      "react": resolve("${kitRoot.replace(/\\/g, "/")}", "node_modules/react"),
+      "react-dom": resolve("${kitRoot.replace(/\\/g, "/")}", "node_modules/react-dom"),
     },
   },
 });
@@ -124,8 +123,7 @@ module.exports = {
   writeFileSync(resolve(entryDir, "postcss.config.cjs"), `
 module.exports = {
   plugins: {
-    tailwindcss: { config: "${resolve(entryDir, "tailwind.config.cjs").replace(/\\/g, "/")}" },
-    autoprefixer: {},
+    "@tailwindcss/postcss": {},
   },
 };
 `);
@@ -166,7 +164,15 @@ module.exports = {
 
   // --- DevKit HTTP server ---
 
-  const appHtmlPath = resolve(import.meta.dirname, "app.html");
+  // Resolve app.html from the SDK package
+  const { createRequire } = await import("node:module");
+  const _require = createRequire(import.meta.url);
+  const sdkRoot = resolve(_require.resolve("@kitstackco/sdk/package.json"), "..");
+  // Try dist/ (npm package) first, then src/ (monorepo dev)
+  let appHtmlPath = resolve(sdkRoot, "dist", "devkit", "app.html");
+  if (!existsSync(appHtmlPath)) {
+    appHtmlPath = resolve(sdkRoot, "src", "devkit", "app.html");
+  }
   const appHtmlRaw = readFileSync(appHtmlPath, "utf-8");
 
   const kitMeta = {
@@ -366,7 +372,22 @@ async function loadView(data) {
     window.__KITSTACK_MCP__.view = data.view;
     window.__KITSTACK_DATA__ = data.data;
 
-    const module = await import("/.kitstack/devkit-entries/" + data.view + ".tsx");
+    // Load Tailwind CSS into the iframe by extracting __vite__css from the Vite-served module
+    if (!document.getElementById("ks-tailwind")) {
+      try {
+        const cssRes = await fetch(VITE_URL + "/src/views/styles.css");
+        const cssModule = await cssRes.text();
+        const match = cssModule.match(/const __vite__css = "((?:[^"\\\\]|\\\\.)*)"/s) || cssModule.match(/const __vite__css = '((?:[^'\\\\]|\\\\.)*)'/s);
+        if (match) {
+          const style = document.createElement("style");
+          style.id = "ks-tailwind";
+          style.textContent = JSON.parse('"' + match[1] + '"');
+          document.head.appendChild(style);
+        }
+      } catch {}
+    }
+
+    const module = await import(VITE_URL + "/.kitstack/devkit-entries/" + data.view + ".tsx");
     const container = document.createElement("div");
     root.innerHTML = "";
     root.appendChild(container);

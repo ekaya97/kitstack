@@ -1,33 +1,48 @@
 /**
  * Deploy a kit to the KitStack platform.
  *
- * Uploads build artifacts to S3, seeds the kit registry, provisions a
- * Lambda, and grants the deployer access. The kit is private by default —
- * only the deployer (and invited collaborators) can use it.
+ * Sends build artifacts to the KitStack API which handles S3 upload,
+ * registry seeding, Lambda provisioning, and access grants.
  *
- * Requires `kitstack login` first (needs credentials for authz tuple).
- * Requires SST shell context (needs Resource bindings for S3, Turso, Lambda).
+ * Requires `kitstack login` first.
  *
- * Run: npx sst shell -- npx kitstack deploy
+ * Run: npx kitstack deploy
  */
 import { resolve } from "node:path";
-import { existsSync, readFileSync } from "node:fs";
+import { existsSync, readFileSync, readdirSync, statSync } from "node:fs";
 import { loadCredentials } from "../credentials";
-import type { KitManifest } from "../../deploy/seed-registry";
+
+const KITSTACK_API_URL = process.env.KITSTACK_API_URL || "https://kitstack.co";
 
 const DEPLOY_HELP = `
-kitstack deploy — deploy kit to KitStack platform (private by default)
+kitstack deploy — deploy kit to KitStack platform (private)
 
 Usage:
   kitstack deploy [options]
 
 Options:
   --config <path>   Path to kit root directory (default: .)
-  --public          Make the kit visible on the marketplace
   --help, -h        Show help
 
-Requires: kitstack login, npx sst shell context
+Requires: kitstack login
 `.trim();
+
+function collectFiles(dir: string, base: string): Array<{ name: string; content: string }> {
+  if (!existsSync(dir)) return [];
+  const files: Array<{ name: string; content: string }> = [];
+  for (const entry of readdirSync(dir)) {
+    const full = resolve(dir, entry);
+    if (statSync(full).isDirectory()) {
+      files.push(...collectFiles(full, `${base}/${entry}`));
+    } else {
+      files.push({
+        name: `${base}/${entry}`,
+        content: readFileSync(full).toString("base64"),
+      });
+    }
+  }
+  return files;
+}
 
 export async function deploy(args: string[]) {
   if (args.includes("--help") || args.includes("-h")) {
@@ -41,8 +56,6 @@ export async function deploy(args: string[]) {
   if (configIdx !== -1 && args[configIdx + 1]) {
     kitRoot = resolve(args[configIdx + 1]);
   }
-
-  const isPublic = args.includes("--public");
 
   // Check credentials
   const creds = loadCredentials();
@@ -59,87 +72,86 @@ export async function deploy(args: string[]) {
     process.exit(1);
   }
 
-  const manifest: KitManifest = JSON.parse(readFileSync(manifestPath, "utf-8"));
+  const manifest = JSON.parse(readFileSync(manifestPath, "utf-8"));
   const kitId = manifest.kitId;
 
   console.log(`\nDeploying kit "${kitId}"...\n`);
 
-  // Lazy-load deploy modules and SST Resource
-  const { Resource } = await import("sst");
-  const { uploadKitBundle } = await import("../../deploy/upload.js");
-  const { seedRegistry } = await import("../../deploy/seed-registry.js");
-  const { provisionKitLambda } = await import("../../deploy/deploy-lambda.js");
+  // Collect build artifacts
+  const bundlePath = resolve(buildDir, "kit.zip");
+  if (!existsSync(bundlePath)) {
+    console.error("Server bundle (kit.zip) not found. Run: kitstack build");
+    process.exit(1);
+  }
 
-  // 1. Upload to S3
-  await uploadKitBundle({
-    buildDir,
-    kitId,
-    bucketName: (Resource as any).KitAssets.name,
-  });
-
-  // 2. Seed registry
-  await seedRegistry({
-    tursoUrl: (Resource as any).TursoDbUrl.value,
-    tursoToken: (Resource as any).TursoAuthToken.value,
+  const payload: Record<string, unknown> = {
     manifest,
-    shellS3Key: `apps/kits/${kitId}/shell.html`,
-    visibility: isPublic ? "public" : "private",
-    authorId: creds.email,
+    bundle: readFileSync(bundlePath).toString("base64"),
+  };
+
+  // Shell HTML (for kits with views)
+  const shellPath = resolve(buildDir, "shell.html");
+  if (existsSync(shellPath)) {
+    payload.shell = readFileSync(shellPath).toString("base64");
+  }
+
+  // View files
+  const viewsDir = resolve(buildDir, "views");
+  if (existsSync(viewsDir)) {
+    payload.views = collectFiles(viewsDir, "");
+  }
+
+  // Preview files
+  const previewsDir = resolve(buildDir, "previews");
+  if (existsSync(previewsDir)) {
+    const previews: Array<{ slug: string; content: string }> = [];
+    for (const entry of readdirSync(previewsDir)) {
+      if (entry.endsWith(".html")) {
+        previews.push({
+          slug: entry.replace(".html", ""),
+          content: readFileSync(resolve(previewsDir, entry)).toString("base64"),
+        });
+      }
+    }
+    if (previews.length > 0) payload.previews = previews;
+  }
+
+  // Upload to KitStack API
+  console.log("  Uploading to KitStack...\n");
+
+  const response = await fetch(`${KITSTACK_API_URL}/api/cli/deploy`, {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+      Authorization: `Bearer ${creds.token}`,
+    },
+    body: JSON.stringify(payload),
   });
 
-  // 3. Provision Lambda
-  const infra = (Resource as any).KitLambdaInfra;
-  if (infra?.roleArn && infra?.layerArn) {
-    const result = await provisionKitLambda({
-      kitId,
-      bucketName: (Resource as any).KitAssets.name,
-      bundleS3Key: `bundles/${kitId}/kit.mjs`,
-      roleArn: infra.roleArn,
-      runtimeLayerArn: infra.layerArn,
-    });
-    console.log(`\n  Lambda: ${result.functionName} (${result.created ? "created" : "updated"})`);
-  } else {
-    console.warn("\n  Skipping Lambda (KitLambdaInfra not configured).");
-  }
-
-  // 4. Grant deployer access (authz tuple)
-  try {
-    const { createClient } = await import("@libsql/client");
-    const { nanoid } = await import("nanoid");
-    const client = createClient({
-      url: (Resource as any).TursoDbUrl.value,
-      authToken: (Resource as any).TursoAuthToken.value,
-    });
-
-    // Look up userId from email
-    const userResult = await client.execute({
-      sql: "SELECT id FROM user WHERE email = ?",
-      args: [creds.email],
-    });
-    const userId = userResult.rows[0]?.id as string | undefined;
-
-    if (userId) {
-      const kitSlug = `${kitId}-kit`;
-      await client.execute({
-        sql: `INSERT OR IGNORE INTO authz_tuples (id, subject_type, subject_id, relation, object_type, object_id)
-              VALUES (?, 'user', ?, 'activator', 'kit', ?)`,
-        args: [nanoid(), userId, kitSlug],
-      });
-      await client.execute({
-        sql: `INSERT OR IGNORE INTO authz_tuples (id, subject_type, subject_id, relation, object_type, object_id)
-              VALUES (?, 'user', ?, 'author', 'kit', ?)`,
-        args: [nanoid(), userId, kitSlug],
-      });
-      console.log(`  Access granted: ${creds.email} → ${kitSlug} (activator + author)`);
-    } else {
-      console.warn(`  Could not find user for ${creds.email} — grant access manually.`);
+  if (!response.ok) {
+    const errorBody = await response.text();
+    let errorMessage: string;
+    try {
+      errorMessage = JSON.parse(errorBody).error || errorBody;
+    } catch {
+      errorMessage = errorBody;
     }
-
-    client.close();
-  } catch (err: any) {
-    console.warn(`  Authz grant failed: ${err.message}`);
+    console.error(`  Deploy failed (${response.status}): ${errorMessage}\n`);
+    process.exit(1);
   }
 
-  console.log(`\n✅ Kit "${kitId}" deployed (${isPublic ? "public" : "private"}).\n`);
+  const result = (await response.json()) as {
+    kitId: string;
+    kitSlug: string;
+    tools: number;
+    views: number;
+    lambda: string | null;
+  };
+
+  console.log(`  ✓ Kit "${result.kitId}" deployed (private)`);
+  console.log(`    Tools: ${result.tools}`);
+  console.log(`    Views: ${result.views}`);
+  if (result.lambda) console.log(`    Lambda: ${result.lambda}`);
+  console.log(`\n  Activate it from your dashboard at ${KITSTACK_API_URL}/dashboard?tab=developer\n`);
   process.exit(0);
 }

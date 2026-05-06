@@ -60,8 +60,11 @@ export async function provisionDevDb(
 
   for (const stmt of statements) {
     try {
-      // Add IF NOT EXISTS to CREATE TABLE statements for idempotency
-      const safe = stmt.replace(/CREATE TABLE(?! IF NOT EXISTS)/gi, "CREATE TABLE IF NOT EXISTS");
+      // Add IF NOT EXISTS to CREATE TABLE/INDEX statements for idempotency
+      const safe = stmt
+        .replace(/CREATE TABLE(?! IF NOT EXISTS)/gi, "CREATE TABLE IF NOT EXISTS")
+        .replace(/CREATE INDEX(?! IF NOT EXISTS)/gi, "CREATE INDEX IF NOT EXISTS")
+        .replace(/CREATE UNIQUE INDEX(?! IF NOT EXISTS)/gi, "CREATE UNIQUE INDEX IF NOT EXISTS");
       await client.execute(safe);
     } catch (err: any) {
       throw new MigrationError(

@@ -64,18 +64,21 @@ export function useKit<TData = unknown>(opts?: KitOptions): Kit<TData> {
     }
   }, [bridge]);
 
-  // On mount: render immediately with pre-loaded data (fast first paint),
-  // then fetch fresh data from the loader to converge on true backend state.
-  // This handles the case where the MCP client re-renders a cached tool result
-  // (e.g. on page refresh) — the stale snapshot shows instantly, then gets
-  // replaced with current data.
-  // Opt-out with { reloadOnMount: false } for static views.
+  // On mount: if pre-loaded data is empty, auto-fetch from the loader.
+  // If data is already populated (placeholder or cached tool-result),
+  // render it immediately without a network round-trip.
+  // The user/LLM can trigger reload() explicitly to get fresh data.
+  // Opt-out entirely with { reloadOnMount: false }.
   useEffect(() => {
-    if (reloadOnMount && !hasReloadedOnMount.current && bridge) {
-      hasReloadedOnMount.current = true;
-      reload();
-    }
-  }, [bridge, reload, reloadOnMount]);
+    if (!reloadOnMount || hasReloadedOnMount.current || !bridge) return;
+    hasReloadedOnMount.current = true;
+    // Skip if we already have non-empty data
+    const empty = data == null
+      || (Array.isArray(data) && data.length === 0)
+      || (typeof data === "object" && !Array.isArray(data) && Object.keys(data as object).length === 0);
+    if (!empty) return;
+    reload();
+  }, [bridge, reload, reloadOnMount]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const callTool = useCallback(
     async (name: string, params?: Record<string, unknown>) => {

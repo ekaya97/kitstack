@@ -91,10 +91,10 @@ Commands:
   init <name>     Scaffold a new kit project
   dev             Start local dev server
   build           Validate and bundle kit for deployment
+  deploy          Deploy kit to KitStack (private)
   serve           Start self-hosted MCP server
   call            Execute kit tools from the command line
   login           Authenticate with KitStack
-  publish         Submit kit to KitStack marketplace
 
 Options:
   --help, -h      Show help
@@ -169,9 +169,8 @@ async function main() {
       break;
     }
     case "publish": {
-      const { publish } = await import("./commands/publish.js");
-      await publish(commandArgs);
-      break;
+      console.error("\n  `kitstack publish` is not available yet. A review process is coming soon.\n  Use `kitstack deploy` to deploy your kit privately.\n");
+      process.exit(1);
     }
     case "deploy": {
       const { deploy } = await import("./commands/deploy.js");

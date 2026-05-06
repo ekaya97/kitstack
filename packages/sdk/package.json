@@ -1,21 +1,76 @@
 {
   "name": "@kitstackco/sdk",
-  "version": "0.0.1",
+  "version": "0.1.0",
   "type": "module",
+  "license": "SEE LICENSE IN LICENSE",
   "bin": {
-    "kitstack": "./src/cli/index.ts"
+    "kitstack": "./dist/cli/index.js"
   },
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
   "exports": {
-    ".": "./src/index.ts",
+    ".": {
+      "types": "./dist/index.d.ts",
+      "default": "./dist/index.js"
+    },
     "./view": "./views/src/shared/use-kit.ts",
-    "./testing": "./src/testing/index.ts",
-    "./runtime": "./src/runtime/index.ts",
-    "./server": "./src/server/index.ts",
-    "./tailwind-preset": "./src/tailwind-preset.ts"
+    "./testing": {
+      "types": "./dist/testing/index.d.ts",
+      "default": "./dist/testing/index.js"
+    },
+    "./runtime": {
+      "types": "./dist/runtime/index.d.ts",
+      "default": "./dist/runtime/index.js"
+    },
+    "./server": {
+      "types": "./dist/server/index.d.ts",
+      "default": "./dist/server/index.js"
+    },
+    "./tailwind-preset": {
+      "types": "./dist/tailwind-preset.d.ts",
+      "default": "./dist/tailwind-preset.js"
+    },
+    "./deploy/upload": {
+      "types": "./dist/deploy/upload.d.ts",
+      "default": "./dist/deploy/upload.js"
+    },
+    "./deploy/seed-registry": {
+      "types": "./dist/deploy/seed-registry.d.ts",
+      "default": "./dist/deploy/seed-registry.js"
+    },
+    "./deploy/deploy-lambda": {
+      "types": "./dist/deploy/deploy-lambda.d.ts",
+      "default": "./dist/deploy/deploy-lambda.js"
+    },
+    "./package.json": "./package.json"
+  },
+  "files": [
+    "dist/",
+    "views/",
+    "layer/",
+    "LICENSE"
+  ],
+  "publishConfig": {
+    "access": "public"
+  },
+  "scripts": {
+    "build": "tsup",
+    "prepublishOnly": "npm run build"
   },
   "peerDependencies": {
-    "zod": "^3.22.0",
-    "drizzle-orm": "^0.38.0"
+    "drizzle-orm": "^0.38.0",
+    "zod": "^3.22.0"
+  },
+  "peerDependenciesMeta": {
+    "vite": {
+      "optional": true
+    },
+    "@vitejs/plugin-react": {
+      "optional": true
+    },
+    "tailwindcss": {
+      "optional": true
+    }
   },
   "dependencies": {
     "esbuild": "^0.24.0",
@@ -23,10 +78,11 @@
     "tsx": "^4.0.0"
   },
   "devDependencies": {
-    "typescript": "^5.0.0",
+    "@tailwindcss/typography": "^0.5.19",
+    "@types/node": "^22.0.0",
     "@types/react": "^19.0.0",
     "react": "^19.0.0",
-    "@types/node": "^22.0.0",
-    "@tailwindcss/typography": "^0.5.19"
+    "tsup": "^8.5.1",
+    "typescript": "^5.0.0"
   }
 }

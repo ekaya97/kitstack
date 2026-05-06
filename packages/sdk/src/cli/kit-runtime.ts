@@ -40,7 +40,8 @@ export async function createLocalRuntime(options: LocalRuntimeOptions = {}): Pro
     throw new Error(`No kit.config.ts found at ${kitRoot}`);
   }
 
-  const kitModule = await import(configPath);
+  const { tsImport } = await import("tsx/esm/api");
+  const kitModule = await tsImport(configPath, import.meta.url);
   const kit = kitModule.default ?? kitModule;
 
   if (!kit?.id || !kit?.tools) {
