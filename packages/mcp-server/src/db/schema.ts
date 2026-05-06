@@ -15,6 +15,7 @@ export const kitRegistryTable = sqliteTable("kit_registry", {
     enum: ["private", "unlisted", "public"],
   }).default("private").notNull(),
   authorId: text("author_id"),  // userId of the developer who deployed this kit
+  migrationSql: text("migration_sql"),  // SQL to run when activating (from build manifest)
 }, (table) => [
   uniqueIndex("kit_registry_pk").on(table.kitId, table.toolName),
 ]);
@@ -27,6 +28,7 @@ export const kitViewsTable = sqliteTable("kit_views", {
   viewDescription: text("view_description").notNull(),
   height: integer("height").default(400),
   shellS3Key: text("shell_s3_key"),
+  previewS3Key: text("preview_s3_key"),
 }, (table) => [
   uniqueIndex("kit_views_pk").on(table.kitId, table.viewSlug),
 ]);

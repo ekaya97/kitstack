@@ -2,16 +2,12 @@
 
 import { useState } from "react";
 
-interface AppView {
+interface AppPreviewView {
   name: string;
-  path: string;
+  previewUrl: string;
 }
 
-// TODO: Wire up when mcp-apps build produces app-previews
-const kitViews: Record<string, AppView[]> = {};
-
-export function AppPreviewTabs({ kitSlug }: { kitSlug: string }) {
-  const views = kitViews[kitSlug];
+export function AppPreviewTabs({ views }: { views: AppPreviewView[] }) {
   const [active, setActive] = useState(0);
 
   if (!views || views.length === 0) return null;
@@ -49,8 +45,8 @@ export function AppPreviewTabs({ kitSlug }: { kitSlug: string }) {
           </span>
         </div>
         <iframe
-          key={views[active].path}
-          src={views[active].path}
+          key={views[active].previewUrl}
+          src={views[active].previewUrl}
           className="w-full border-0 bg-white min-h-[280px] sm:min-h-[380px] md:min-h-[480px]"
           style={{ height: 480 }}
           title={views[active].name}

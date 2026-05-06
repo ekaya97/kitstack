@@ -17,6 +17,7 @@ import { PipelineKanban } from "@/components/mcp-apps/pipeline-kanban";
 import { getAllKitCards, getKitCardBySlug } from "@/services/kit.service";
 import { getSkillCardBySlug } from "@/services/skill.service";
 import { getReviewsByTarget, getRatingDistribution } from "@/services/review.service";
+import { getKitPreviewViews } from "@/services/kit-views.service";
 import { ScrollTabs } from "@/components/shared/scroll-tabs";
 import { HeaderRating } from "@/components/reviews/header-rating";
 import { ReviewSection } from "@/components/reviews/review-section";
@@ -48,9 +49,15 @@ export default async function KitDetailPage({
   const kit = await getKitCardBySlug(slug);
   if (!kit) notFound();
 
-  const linkedSkill = kit.fromSkill ? await getSkillCardBySlug(kit.fromSkill) : null;
-  const reviewsList = await getReviewsByTarget("kit", slug);
-  const distribution = await getRatingDistribution("kit", slug);
+  // Derive the registry kitId from the web slug (e.g. "crm-kit" → "crm")
+  const registryKitId = slug.replace(/-kit$/, "");
+
+  const [linkedSkill, reviewsList, distribution, previewViews] = await Promise.all([
+    kit.fromSkill ? getSkillCardBySlug(kit.fromSkill) : Promise.resolve(null),
+    getReviewsByTarget("kit", slug),
+    getRatingDistribution("kit", slug),
+    getKitPreviewViews(registryKitId),
+  ]);
 
   return (
     <div className="bg-ks-paper min-h-screen flex flex-col">
@@ -264,7 +271,7 @@ export default async function KitDetailPage({
           These are the actual screens that render inside your chat. Click through them with sample data.
         </p>
 
-        <AppPreviewTabs kitSlug={slug} />
+        <AppPreviewTabs views={previewViews} />
       </section>
 
       {/* ── SETUP ── */}

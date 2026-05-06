@@ -124,6 +124,12 @@ export async function uploadKitBundle(options: UploadOptions): Promise<number> {
     await upload(shellPath, `apps/kits/${kitId}/shell.html`);
   }
 
+  // Preview HTML pages
+  const previewsDir = resolve(buildDir, "previews");
+  if (existsSync(previewsDir)) {
+    await uploadDir(previewsDir, `apps/kits/${kitId}/previews`);
+  }
+
   // Server bundle (zip for Lambda)
   const zipPath = resolve(buildDir, "kit.zip");
   if (existsSync(zipPath)) {

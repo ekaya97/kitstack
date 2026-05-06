@@ -15,6 +15,7 @@ import { resolve, dirname, relative, join } from "path";
 import type { KitDefinition } from "./types";
 import { KitStackError, MigrationError } from "./errors";
 import { generateShell } from "./shell-template";
+import { generatePreview } from "./preview-template";
 
 /**
  * Result returned by {@link buildKit} on success.
@@ -127,6 +128,13 @@ export async function buildKit(kitRoot: string) {
   }
 
   log("\u2713", `Loaded kit.config.ts \u2014 "${kit.name}" (${kit.tools.length} tools, ${kit.views?.length ?? 0} views)`);
+
+  // ── 2b. RESOLVE MIGRATIONS ─────────────────────────────────
+  // If the kit uses migrationsDir (drizzle-kit output), resolve it into migrationSql
+  if (!kit.migrationSql && kit.migrationsDir) {
+    const { resolveMigrationSql } = await import("./migrations.js");
+    kit.migrationSql = resolveMigrationSql({ migrationsDir: kit.migrationsDir });
+  }
 
   // ── 3. VALIDATE ────────────────────────────────────────────
   // defineKit() already validated: snake_case names, description length,
@@ -406,6 +414,25 @@ export default defineConfig({
     const shellPath = resolve(outputDir, "shell.html");
     writeFileSync(shellPath, shellHtml);
     log("\u2713", `Shell: .kitstack/build/shell.html (${fileSizeKB(shellPath)} KB)`);
+
+    // ── 8b. GENERATE PREVIEWS ─────────────────────────────────
+
+    const placeholders = kit._placeholders ?? {};
+    const previewsDir = resolve(outputDir, "previews");
+    const viewsWithPreviews = kit.views.filter((v) => placeholders[v.slug] !== undefined);
+
+    if (viewsWithPreviews.length > 0) {
+      mkdirSync(previewsDir, { recursive: true });
+      for (const view of viewsWithPreviews) {
+        const html = generatePreview({
+          kitId: kit.id,
+          viewSlug: view.slug,
+          placeholderData: placeholders[view.slug],
+        });
+        writeFileSync(resolve(previewsDir, `${view.slug}.html`), html);
+      }
+      log("\u2713", `Previews: ${viewsWithPreviews.length} preview pages`);
+    }
   }
 
   // ── 9. MANIFEST ────────────────────────────────────────────
@@ -462,6 +489,17 @@ export default defineConfig({
           sizeBytes: fileSize(resolve(outputDir, "shell.html")),
         }
       : null,
+    previews: (kit.views ?? [])
+      .map((v) => {
+        const f = resolve(outputDir, "previews", `${v.slug}.html`);
+        if (!existsSync(f)) return null;
+        return {
+          slug: v.slug,
+          file: `previews/${v.slug}.html`,
+          sizeBytes: fileSize(f),
+        };
+      })
+      .filter(Boolean),
   };
 
   writeFileSync(resolve(outputDir, "manifest.json"), JSON.stringify(manifest, null, 2));

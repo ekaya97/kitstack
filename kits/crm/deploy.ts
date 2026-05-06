@@ -34,11 +34,17 @@ async function deploy() {
   });
 
   // 2. Seed registry
+  const viewPreviewKeys: Record<string, string> = {};
+  for (const p of manifest.previews ?? []) {
+    viewPreviewKeys[p.slug] = `apps/kits/${KIT_ID}/previews/${p.slug}.html`;
+  }
+
   await seedRegistry({
     tursoUrl: (Resource as any).TursoDbUrl.value,
     tursoToken: (Resource as any).TursoAuthToken.value,
     manifest,
     shellS3Key: `apps/kits/${KIT_ID}/shell.html`,
+    viewPreviewKeys,
   });
 
   // 3. Provision Lambda
