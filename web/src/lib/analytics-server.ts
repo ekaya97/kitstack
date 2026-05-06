@@ -101,6 +101,14 @@ export function trackKitDeleted(userId: string, kitSlug: string) {
   capture(userId, "kit_deleted", { kit_slug: kitSlug });
 }
 
+// ── Early Adopter ─────────────────────────────────────────────
+export function trackEarlyAdopterProGranted(
+  userId: string,
+  userNumber: number
+) {
+  capture(userId, "early_adopter_pro_granted", { user_number: userNumber });
+}
+
 // ── Auth ───────────────────────────────────────────────────────
 export function trackUserSignedUp(
   userId: string,

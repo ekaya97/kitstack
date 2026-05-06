@@ -88,6 +88,11 @@ export interface WishlistItemRemovedProps {
   target_slug: string;
 }
 
+// ── Early Adopter ─────────────────────────────────────────────
+export interface EarlyAdopterProGrantedProps {
+  user_number: number;
+}
+
 // ── Event Map ───────────────────────────────────────────────────
 export interface AnalyticsEventMap {
   subscription_created: SubscriptionCreatedProps;
@@ -106,6 +111,7 @@ export interface AnalyticsEventMap {
   review_submitted: ReviewSubmittedProps;
   wishlist_item_added: WishlistItemAddedProps;
   wishlist_item_removed: WishlistItemRemovedProps;
+  early_adopter_pro_granted: EarlyAdopterProGrantedProps;
 }
 
 export type AnalyticsEvent = keyof AnalyticsEventMap;
