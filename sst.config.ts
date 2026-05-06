@@ -1,6 +1,5 @@
 /// <reference path="./.sst/platform/config.d.ts" />
 
-import { DevCommand } from "./.sst/platform/src/components/experimental";
 
 export default $config({
   app(input) {

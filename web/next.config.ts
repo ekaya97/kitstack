@@ -9,19 +9,26 @@ const nextConfig: NextConfig = {
   output: "standalone",
   // Monorepo root — so Next.js traces hoisted deps from root node_modules
   outputFileTracingRoot: resolve(__dirname, ".."),
+  outputFileTracingExcludes: {
+    "*": [
+      "./node_modules/libsql/**",
+      "./node_modules/@libsql/linux-*/**",
+      "./node_modules/@libsql/darwin-*/**",
+      "./node_modules/@libsql/win32-*/**",
+    ],
+  },
+  transpilePackages: ["@kitstackco/mcp-server", "@kitstackco/authz"],
   serverExternalPackages: [
     "sst",
-    "@libsql/client",
-    "libsql",
     "@aws-sdk/client-s3",
     "@aws-sdk/s3-request-presigner",
+    "@aws-sdk/client-dynamodb",
+    "@aws-sdk/util-dynamodb",
   ],
   webpack: (config, { isServer }) => {
     if (isServer) {
       config.externals = config.externals || [];
       config.externals.push(
-        /^@libsql\/.*/,
-        /^libsql$/,
         /^@aws-sdk\/.*/,
         /^@smithy\/.*/,
       );

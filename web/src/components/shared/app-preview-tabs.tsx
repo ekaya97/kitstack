@@ -7,32 +7,8 @@ interface AppView {
   path: string;
 }
 
-// Map kit slugs to their available app views
-const kitViews: Record<string, AppView[]> = {
-  "crm-kit": [
-    { name: "Pipeline", path: "/app-previews/src/crm/pipeline/index.html" },
-    { name: "Contacts", path: "/app-previews/src/crm/contacts/index.html" },
-    { name: "Dashboard", path: "/app-previews/src/crm/dashboard/index.html" },
-    { name: "Contact Detail", path: "/app-previews/src/crm/contact-detail/index.html" },
-    { name: "Proposal", path: "/app-previews/src/crm/proposal/index.html" },
-  ],
-  "expense-tax-prep-kit": [
-    { name: "Expense Table", path: "/app-previews/src/expense/expense-table/index.html" },
-    { name: "Categories", path: "/app-previews/src/expense/category-dashboard/index.html" },
-    { name: "Import Review", path: "/app-previews/src/expense/import-review/index.html" },
-    { name: "Steuerberater Export", path: "/app-previews/src/expense/steuerberater-export/index.html" },
-  ],
-  "cold-outreach-kit": [
-    { name: "Sequence Builder", path: "/app-previews/src/outreach/sequence-builder/index.html" },
-    { name: "Prospect List", path: "/app-previews/src/outreach/prospect-list/index.html" },
-    { name: "Email Preview", path: "/app-previews/src/outreach/email-preview/index.html" },
-  ],
-  "meeting-action-tracker-kit": [
-    { name: "Action Tracker", path: "/app-previews/src/meeting/action-tracker/index.html" },
-    { name: "Meeting Summary", path: "/app-previews/src/meeting/meeting-summary/index.html" },
-    { name: "Meeting History", path: "/app-previews/src/meeting/meeting-history/index.html" },
-  ],
-};
+// TODO: Wire up when mcp-apps build produces app-previews
+const kitViews: Record<string, AppView[]> = {};
 
 export function AppPreviewTabs({ kitSlug }: { kitSlug: string }) {
   const views = kitViews[kitSlug];

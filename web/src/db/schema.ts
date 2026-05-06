@@ -137,7 +137,7 @@ export const authors = sqliteTable("authors", {
 export { user, session, account, verification } from "./auth-schema";
 
 // ── Authorization tuples (Zanzibar-style) ──
-export { authzTuples } from "../../../packages/authz/src/schema";
+export { authzTuples } from "@kitstackco/authz/schema";
 
 // Kit activations (tracks which kits a user has activated)
 export const kitActivations = sqliteTable("kit_activations", {
@@ -175,4 +175,4 @@ export type NewAuthor = typeof authors.$inferInsert;
 export type SkillDownload = typeof skillDownloads.$inferSelect;
 
 // MCP-owned tables (re-exported for Drizzle migrations to see all tables)
-export { kitRegistryTable, kitViewsTable } from "../../../packages/mcp-server/src/db/schema";
+export { kitRegistryTable, kitViewsTable } from "@kitstackco/mcp-server/db/schema";

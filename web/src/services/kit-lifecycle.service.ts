@@ -28,13 +28,13 @@ import {
   trackKitDeleted,
 } from "@/lib/analytics-server";
 import { log } from "@/lib/logger";
-import { grantRelation, revokeRelation } from "../../../packages/authz/src/lifecycle";
+import { grantRelation, revokeRelation } from "@kitstackco/authz/lifecycle";
 
 // Kit migrations
-import { migrationSql as meetingMigrations } from "../../../packages/mcp-server/src/kits/meeting/migrations";
-import { migrationSql as crmMigrations } from "../../../packages/mcp-server/src/kits/crm/migrations";
-import { migrationSql as expenseMigrations } from "../../../packages/mcp-server/src/kits/expense/migrations";
-import { migrationSql as outreachMigrations } from "../../../packages/mcp-server/src/kits/outreach/migrations";
+import { migrationSql as meetingMigrations } from "@kitstackco/mcp-server/kits/meeting/migrations";
+import { migrationSql as crmMigrations } from "@kitstackco/mcp-server/kits/crm/migrations";
+import { migrationSql as expenseMigrations } from "@kitstackco/mcp-server/kits/expense/migrations";
+import { migrationSql as outreachMigrations } from "@kitstackco/mcp-server/kits/outreach/migrations";
 
 const SLUG_TO_KIT_ID: Record<string, string> = {
   "crm-kit": "crm",

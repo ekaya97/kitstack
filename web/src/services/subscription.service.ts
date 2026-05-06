@@ -2,7 +2,7 @@ import { eq, and } from "drizzle-orm";
 import { nanoid } from "nanoid";
 import { db } from "@/lib/db";
 import { subscriptions, type Subscription } from "@/db/schema";
-import { grantRelation, revokeRelation } from "../../../packages/authz/src/lifecycle";
+import { grantRelation, revokeRelation } from "@kitstackco/authz/lifecycle";
 
 
 export async function getSubscription(userId: string): Promise<Subscription | null> {

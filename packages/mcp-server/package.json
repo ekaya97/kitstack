@@ -3,9 +3,19 @@
   "version": "0.0.1",
   "private": true,
   "type": "module",
+  "exports": {
+    "./framework/dynamo": "./src/framework/dynamo.ts",
+    "./framework/types": "./src/framework/types.ts",
+    "./db/schema": "./src/db/schema.ts",
+    "./kits/crm/migrations": "./src/kits/crm/migrations.ts",
+    "./kits/meeting/migrations": "./src/kits/meeting/migrations.ts",
+    "./kits/expense/migrations": "./src/kits/expense/migrations.ts",
+    "./kits/outreach/migrations": "./src/kits/outreach/migrations.ts"
+  },
   "dependencies": {
     "@aws-sdk/client-apigatewaymanagementapi": "^3.1037.0",
     "@aws-sdk/client-dynamodb": "^3.1035.0",
+    "@aws-sdk/util-dynamodb": "^3.996.0",
     "@aws-sdk/client-lambda": "^3.1035.0",
     "@aws-sdk/lib-dynamodb": "^3.1035.0",
     "@libsql/client": "^0.14",

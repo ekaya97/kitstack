@@ -13,6 +13,7 @@ export function initPostHog() {
     ui_host: "https://eu.posthog.com",
     person_profiles: "identified_only",
     capture_pageview: false, // we capture manually to handle SPA route changes
+    disable_compression: true, // Lambda proxy mangles gzip body
   });
 }
 

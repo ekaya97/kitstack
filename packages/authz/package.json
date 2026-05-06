@@ -3,6 +3,12 @@
   "version": "0.0.1",
   "private": true,
   "type": "module",
+  "exports": {
+    "./lifecycle": "./src/lifecycle.ts",
+    "./schema": "./src/schema.ts",
+    "./middleware": "./src/middleware.ts",
+    "./types": "./src/types.ts"
+  },
   "dependencies": {
     "drizzle-orm": "^0.38",
     "nanoid": "^5.1.9"

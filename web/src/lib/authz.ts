@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
-import { authorize } from "../../../packages/authz/src/middleware";
-import type { AuthzRequirement } from "../../../packages/authz/src/types";
+import { authorize } from "@kitstackco/authz/middleware";
+import type { AuthzRequirement } from "@kitstackco/authz/types";
 import { getSessionOrNull } from "./auth-session";
 import { db } from "./db";
 
