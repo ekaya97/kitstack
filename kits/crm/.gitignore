@@ -1,3 +1,4 @@
 .kitstack/
 node_modules/
 dist/
+index.html
