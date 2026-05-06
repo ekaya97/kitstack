@@ -140,7 +140,7 @@ const relayConnect = new sst.aws.Function("RelayConnect", {
   runtime: "nodejs22.x",
   architecture: "arm64",
   logging: { retention: "1 week" },
-  link: [mcpAuthStore, tursoDbUrl, tursoAuthToken],
+  link: [mcpAuthStore],
 });
 
 const relayDisconnect = new sst.aws.Function("RelayDisconnect", {
@@ -167,7 +167,27 @@ export const devRelay = new sst.aws.ApiGatewayWebSocket("DevRelay", {
   domain: $app.stage != "production" ? undefined : "relay.kitstack.co",
 });
 
-devRelay.route("$connect", relayConnect.arn);
+const relayAuth = devRelay.addAuthorizer("RelayAuth", {
+  lambda: {
+    function: {
+      handler: "packages/mcp-server/src/relay/authorizer.handler",
+      timeout: "10 seconds",
+      memory: "128 MB",
+      runtime: "nodejs22.x",
+      architecture: "arm64",
+      logging: { retention: "1 week" },
+      nodejs: {
+        install: ["@libsql/client", "libsql"],
+      },
+      link: [tursoDbUrl, tursoAuthToken],
+    },
+    identitySources: ["route.request.querystring.sessionId", "route.request.querystring.token"],
+  },
+});
+
+devRelay.route("$connect", relayConnect.arn, {
+  auth: { lambda: relayAuth.id },
+});
 devRelay.route("$disconnect", relayDisconnect.arn);
 devRelay.route("$default", relayDefault.arn);
 

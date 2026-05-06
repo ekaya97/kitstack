@@ -7,12 +7,15 @@
  * 3. Turso — per-user kit database provisioning
  *
  * DynamoDB is authoritative. If SQLite diverges, MCP behavior is correct.
+ *
+ * Kit metadata (slug→id mapping, migrations) is resolved dynamically from
+ * the kit_registry table, seeded by `kitstack deploy`.
  */
 
 import { eq, and } from "drizzle-orm";
 import { nanoid } from "nanoid";
 import { db } from "@/lib/db";
-import { kitActivations } from "@/db/schema";
+import { kitActivations, kitRegistryTable } from "@/db/schema";
 import { getSubscription } from "./subscription.service";
 import { PLAN_LIMITS, getActiveKitCount, deleteKitActivation } from "./kit-activation.service";
 import {
@@ -30,27 +33,38 @@ import {
 import { log } from "@/lib/logger";
 import { grantRelation, revokeRelation } from "@kitstackco/authz/lifecycle";
 
-// Kit migrations
-import { migrationSql as meetingMigrations } from "@kitstackco/mcp-server/kits/meeting/migrations";
-import { migrationSql as crmMigrations } from "@kitstackco/mcp-server/kits/crm/migrations";
-import { migrationSql as expenseMigrations } from "@kitstackco/mcp-server/kits/expense/migrations";
-import { migrationSql as outreachMigrations } from "@kitstackco/mcp-server/kits/outreach/migrations";
+/**
+ * Resolve a kit slug (e.g. "crm-kit") to a kitId (e.g. "crm").
+ * Convention: slug = kitId + "-kit"
+ */
+function slugToKitId(slug: string): string {
+  return slug.replace(/-kit$/, "");
+}
 
-const SLUG_TO_KIT_ID: Record<string, string> = {
-  "crm-kit": "crm",
-  "expense-tax-prep-kit": "expense-tax-prep",
-  "cold-outreach-kit": "cold-outreach",
-  "meeting-action-tracker-kit": "meeting-action-tracker",
-};
+/**
+ * Look up the migration SQL for a kit from the registry.
+ * Returns null if the kit isn't registered or has no migrations.
+ */
+async function getKitMigrationSql(kitId: string): Promise<string | null> {
+  const rows = await db
+    .select({ migrationSql: kitRegistryTable.migrationSql })
+    .from(kitRegistryTable)
+    .where(eq(kitRegistryTable.kitId, kitId))
+    .limit(1);
+  return rows[0]?.migrationSql ?? null;
+}
 
-const KIT_MIGRATIONS: Record<string, string> = {
-  crm: crmMigrations,
-  "expense-tax-prep": expenseMigrations,
-  "cold-outreach": outreachMigrations,
-  "meeting-action-tracker": meetingMigrations,
-};
-
-const VALID_KIT_SLUGS = Object.keys(SLUG_TO_KIT_ID);
+/**
+ * Check if a kit exists in the registry.
+ */
+async function kitExistsInRegistry(kitId: string): Promise<boolean> {
+  const rows = await db
+    .select({ kitId: kitRegistryTable.kitId })
+    .from(kitRegistryTable)
+    .where(eq(kitRegistryTable.kitId, kitId))
+    .limit(1);
+  return rows.length > 0;
+}
 
 export interface LifecycleResult {
   ok: boolean;
@@ -72,13 +86,14 @@ export async function activateKit(
   userId: string,
   kitSlug: string
 ): Promise<LifecycleResult> {
-  // Validate kit slug
-  if (!VALID_KIT_SLUGS.includes(kitSlug)) {
+  const kitId = slugToKitId(kitSlug);
+
+  // Validate kit exists in registry
+  const exists = await kitExistsInRegistry(kitId);
+  if (!exists) {
     trackKitActivationFailed(userId, kitSlug, "Unknown kit", "unknown_kit");
     return { ok: false, status: 404, error: `Unknown kit: ${kitSlug}` };
   }
-
-  const kitId = SLUG_TO_KIT_ID[kitSlug];
 
   // Step 1: Check subscription
   const subscription = await getSubscription(userId);
@@ -117,7 +132,7 @@ export async function activateKit(
   }
 
   // Step 2+3: Provision Turso DB + write DynamoDB (source of truth)
-  const migrationSql = KIT_MIGRATIONS[kitId];
+  const migrationSql = await getKitMigrationSql(kitId);
   if (!migrationSql) {
     return { ok: false, status: 500, error: `No migrations for kit: ${kitId}` };
   }
@@ -175,8 +190,9 @@ export async function deactivateKit(
   userId: string,
   kitSlug: string
 ): Promise<LifecycleResult> {
-  const kitId = SLUG_TO_KIT_ID[kitSlug];
-  if (!kitId) {
+  const kitId = slugToKitId(kitSlug);
+  const exists = await kitExistsInRegistry(kitId);
+  if (!exists) {
     return { ok: false, status: 404, error: `Unknown kit: ${kitSlug}` };
   }
 
@@ -228,8 +244,9 @@ export async function deleteKit(
   userId: string,
   kitSlug: string
 ): Promise<LifecycleResult> {
-  const kitId = SLUG_TO_KIT_ID[kitSlug];
-  if (!kitId) {
+  const kitId = slugToKitId(kitSlug);
+  const exists = await kitExistsInRegistry(kitId);
+  if (!exists) {
     return { ok: false, status: 404, error: `Unknown kit: ${kitSlug}` };
   }
 

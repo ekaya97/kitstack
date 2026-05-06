@@ -6,14 +6,15 @@
  */
 
 import { putUserKitDb } from "@kitstackco/mcp-server/framework/dynamo";
+import { Resource } from "sst";
 
 const TURSO_API_BASE = "https://api.turso.tech/v1";
 
 function getTursoConfig() {
-  const token = process.env.TURSO_PLATFORM_API_TOKEN;
-  const org = process.env.TURSO_ORG_NAME;
+  const token = Resource.TursoPlatformApiToken.value;
+  const org = Resource.TursoOrgName.value;
   if (!token || !org) {
-    throw new Error("TURSO_PLATFORM_API_TOKEN and TURSO_ORG_NAME must be set");
+    throw new Error("TursoPlatformApiToken and TursoOrgName SST secrets must be set");
   }
   return { token, org };
 }
