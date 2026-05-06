@@ -105,7 +105,7 @@ async function checkRateLimit(userId: string): Promise<boolean> {
     const count = parseInt(result.Attributes?.cnt?.N || "0", 10);
     return count <= RATE_LIMIT_MAX_REQUESTS;
   } catch (err) {
-    console.error("[RateLimit] DynamoDB error — failing closed:", err);
+    log.error("RateLimit DynamoDB error — failing closed", { error: (err as Error).message });
     return false; // fail-closed: reject request if rate limiter is unavailable
   }
 }
@@ -708,6 +708,7 @@ export async function handler(
       if (!body) return json({ error: "Invalid request body" }, 400, origin);
       const request = body as JsonRpcRequest;
 
+      const mcpStart = Date.now();
       const { response } = await handleMcpRequest(
         request,
         userId,
@@ -716,6 +717,7 @@ export async function handler(
         invokeKitLambda
       );
 
+      log.info("MCP request", { userId, method: request.method, durationMs: Date.now() - mcpStart });
       return json(response, 200, origin);
     }
 

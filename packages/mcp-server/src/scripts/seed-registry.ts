@@ -1,6 +1,7 @@
 import { zodToJsonSchema } from "../shared/zod-to-json-schema";
 import { putRegistryItem } from "../framework/dynamo";
 import type { KitDefinition, KitRegistryItem } from "../framework/types";
+import { log, flushLogs } from "../router/logger";
 
 // Import all kit definitions
 import meetingKit from "../kits/meeting/index";
@@ -38,7 +39,7 @@ async function seedKit(kit: KitDefinition) {
       kitName: kit.name,
     };
     await putRegistryItem(item);
-    console.log(`  ✓ ${tool.name}`);
+    log.info("Seeded tool", { kitId: kit.id, toolName: tool.name });
   }
 
   // Register the instruction meta-tool
@@ -51,21 +52,23 @@ async function seedKit(kit: KitDefinition) {
     kitName: kit.name,
   };
   await putRegistryItem(instructionItem);
-  console.log(`  ✓ kitstack_${kit.id}_instructions`);
+  log.info("Seeded instructions tool", { kitId: kit.id });
 }
 
 async function main() {
   const kits = [meetingKit, crmKit, expenseKit, outreachKit];
 
   for (const kit of kits) {
-    console.log(`\nSeeding ${kit.name} (${kit.tools.length} tools)...`);
+    log.info("Seeding kit", { kitName: kit.name, toolCount: kit.tools.length });
     await seedKit(kit);
   }
 
-  console.log(`\nDone. ${kits.reduce((sum, k) => sum + k.tools.length + 1, 0)} items seeded.`);
+  log.info("Seed complete", { totalItems: kits.reduce((sum, k) => sum + k.tools.length + 1, 0) });
+  await flushLogs();
 }
 
-main().catch((err) => {
-  console.error("Seed failed:", err);
+main().catch(async (err) => {
+  log.error("Seed failed", { error: err.message });
+  await flushLogs();
   process.exit(1);
 });

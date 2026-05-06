@@ -181,7 +181,14 @@ export async function dispatchToolCall(
   };
 
   // Invoke the kit Lambda
-  const result = (await invokeKitLambda(functionId, invocation)) as KitToolResult;
+  let result: KitToolResult;
+  try {
+    result = (await invokeKitLambda(functionId, invocation)) as KitToolResult;
+  } catch (err: any) {
+    log.error("Kit Lambda invocation failed", { kitId: tool.kitId, toolName, userId, functionId, error: err.message });
+    audit({ action: "tool.call.error", userId, toolName, kitId: tool.kitId, durationMs: Date.now() - start, detail: err.message });
+    return { isError: true, content: [{ type: "text" as const, text: `Kit invocation failed: ${err.message}` }] };
+  }
 
   // Track circuit breaker + daily cap (non-blocking)
   recordCircuitBreakerResult(tool.kitId, !!result.isError).catch(() => {});

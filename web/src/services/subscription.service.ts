@@ -3,6 +3,7 @@ import { nanoid } from "nanoid";
 import { db } from "@/lib/db";
 import { subscriptions, type Subscription } from "@/db/schema";
 import { grantRelation, revokeRelation } from "@kitstackco/authz/lifecycle";
+import { log } from "@/lib/logger";
 
 
 export async function getSubscription(userId: string): Promise<Subscription | null> {
@@ -36,6 +37,8 @@ export async function createSubscription(
 
   await grantRelation(db, userId, "subscriber", "subscription", id);
 
+  log.info("Subscription created", { userId, plan, subscriptionId: id });
+
   const result = await db
     .select()
     .from(subscriptions)
@@ -56,4 +59,6 @@ export async function cancelSubscription(userId: string): Promise<void> {
   if (existing) {
     await revokeRelation(db, userId, "subscriber", "subscription", existing.id);
   }
+
+  log.info("Subscription cancelled", { userId, subscriptionId: existing?.id });
 }

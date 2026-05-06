@@ -2,6 +2,7 @@ import { GetObjectCommand, S3Client } from "@aws-sdk/client-s3";
 import { RESOURCE_MIME_TYPE } from "@modelcontextprotocol/ext-apps/server";
 import { getViewsForKit } from "../db/dynamo";
 import { kitCdnUrl, kitAssetsBucket, appDataUrl } from "../config";
+import { log } from "./logger";
 
 const s3 = new S3Client({});
 
@@ -24,10 +25,10 @@ async function fetchFromS3(s3Key: string): Promise<string | null> {
   if (htmlCache.has(s3Key)) return htmlCache.get(s3Key)!;
 
   const bucket = kitAssetsBucket();
-  console.log(`[AppResources] Fetching s3://${bucket}/${s3Key}`);
+  log.debug("AppResources fetching from S3", { bucket, s3Key });
 
   if (!bucket) {
-    console.error("[AppResources] KitAssets bucket not linked");
+    log.error("KitAssets bucket not linked");
     return null;
   }
 
@@ -36,11 +37,11 @@ async function fetchFromS3(s3Key: string): Promise<string | null> {
       new GetObjectCommand({ Bucket: bucket, Key: s3Key })
     );
     const content = await result.Body!.transformToString();
-    console.log(`[AppResources] Loaded ${s3Key} (${content.length} bytes)`);
+    log.debug("AppResources loaded", { s3Key, bytes: content.length });
     htmlCache.set(s3Key, content);
     return content;
   } catch (err: any) {
-    console.error(`[AppResources] S3 fetch failed: ${err.message}`);
+    log.error("AppResources S3 fetch failed", { s3Key, error: err.message });
     return null;
   }
 }

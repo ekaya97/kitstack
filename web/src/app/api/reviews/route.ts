@@ -1,6 +1,8 @@
 export const dynamic = "force-dynamic";
 import { NextRequest, NextResponse } from "next/server";
+import { after } from "next/server";
 import { requireAuthorized } from "@/lib/authz";
+import { log, flushLogs } from "@/lib/logger";
 import {
   getReviewsByTarget,
   getRatingDistribution,
@@ -49,6 +51,8 @@ export async function POST(request: NextRequest) {
   }
 
   try {
+    after(() => flushLogs());
+
     await createReview({
       targetType,
       targetSlug,
@@ -62,7 +66,8 @@ export async function POST(request: NextRequest) {
     trackReviewSubmitted(auth.userId, targetType, targetSlug, rating);
 
     return NextResponse.json({ ok: true }, { status: 201 });
-  } catch {
+  } catch (err: any) {
+    log.error("Review creation failed", { userId: auth.userId, targetType, targetSlug, error: err?.message });
     return NextResponse.json(
       { error: "Could not save review. Please try again." },
       { status: 500 }

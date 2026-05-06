@@ -6,6 +6,7 @@ import type {
   UserKitDbItem,
 } from "./types";
 import { appDataUrl } from "../config";
+import { log } from "./logger";
 import { dispatchToolCall } from "./tool-dispatcher";
 import { getKitApps, getKitShellS3Key, readAppResource } from "./app-resources";
 import { getUserKitDb } from "../db/dynamo";
@@ -506,7 +507,7 @@ async function handleShowApp(
           }) as any;
           loaderData = result?.data ?? null;
         } catch (err: any) {
-          console.error(`[kit_view] Loader invocation failed for ${kitId}/${app.slug}:`, err.message);
+          log.error("kit_view loader invocation failed", { kitId, viewSlug: app.slug, error: err.message });
         }
       }
     }

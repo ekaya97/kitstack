@@ -5,6 +5,7 @@ import { check } from "../../../authz/src/engine";
 import type { AuthzRequirement, Relation, ObjectType } from "../../../authz/src/types";
 import { verifyAccessToken } from "../router/oauth/helpers";
 import { tursoDbUrl, tursoAuthToken } from "../config";
+import { log } from "../router/logger";
 
 let _db: ReturnType<typeof drizzle> | null = null;
 
@@ -34,6 +35,7 @@ export async function mcpRequireAuthorized(
     const db = getTursoDb();
     const result = await authorize(db, { userId }, requirements);
     if (!result.allowed) {
+      log.warn("Authorization denied", { userId, reason: result.reason });
       throw new Error(result.reason ?? "Forbidden");
     }
   }
@@ -58,5 +60,8 @@ export async function mcpCheckTuple(
     objectType,
     objectId,
   });
+  if (!result.allowed) {
+    log.debug("Tuple check denied", { userId, relation, objectType, objectId });
+  }
   return result.allowed;
 }

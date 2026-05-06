@@ -2,6 +2,7 @@ import { createClient } from "@libsql/client";
 import { drizzle } from "drizzle-orm/libsql";
 import { skills, kits } from "./schema";
 import { seedSkills, seedKits } from "./seed-data";
+import { log, flushLogs } from "@/lib/logger";
 
 async function seed() {
   const client = createClient({
@@ -10,7 +11,7 @@ async function seed() {
   });
   const db = drizzle(client);
 
-  console.log(`Seeding ${seedSkills.length} skills...`);
+  log.info("Seeding skills", { count: seedSkills.length });
   for (const skill of seedSkills) {
     await db
       .insert(skills)
@@ -40,7 +41,7 @@ async function seed() {
       });
   }
 
-  console.log(`Seeding ${seedKits.length} kits...`);
+  log.info("Seeding kits", { count: seedKits.length });
   for (const kit of seedKits) {
     await db
       .insert(kits)
@@ -68,11 +69,13 @@ async function seed() {
       });
   }
 
-  console.log("Done.");
+  log.info("Seed complete");
+  await flushLogs();
   process.exit(0);
 }
 
-seed().catch((err) => {
-  console.error("Seed failed:", err);
+seed().catch(async (err) => {
+  log.error("Seed failed", { error: err.message });
+  await flushLogs();
   process.exit(1);
 });

@@ -3,12 +3,14 @@ import { authorize } from "@kitstackco/authz/middleware";
 import type { AuthzRequirement } from "@kitstackco/authz/types";
 import { getSessionOrNull } from "./auth-session";
 import { db } from "./db";
+import { log } from "./logger";
 
 type AuthzSuccess = { ok: true; userId: string; userName: string };
 type AuthzFailure = { ok: false; response: NextResponse };
 type AuthzResult = AuthzSuccess | AuthzFailure;
 
 function deny(message: string, status: number): AuthzFailure {
+  log.warn("Authorization denied", { message, status });
   return {
     ok: false,
     response: NextResponse.json({ error: message }, { status }),

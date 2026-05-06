@@ -7,6 +7,7 @@ import * as schema from "@/db/schema";
 import { user as userTable } from "@/db/auth-schema";
 import { createSubscription } from "@/services/subscription.service";
 import { trackEarlyAdopterProGranted } from "./analytics-server";
+import { log } from "./logger";
 
 const EARLY_ADOPTER_LIMIT = 50;
 
@@ -30,7 +31,7 @@ export const auth = betterAuth({
               trackEarlyAdopterProGranted(user.id, total);
             }
           } catch (e) {
-            console.error("[auth] early-adopter hook failed:", e);
+            log.error("Early-adopter hook failed", { userId: user.id, error: (e as Error).message });
           }
         },
       },
