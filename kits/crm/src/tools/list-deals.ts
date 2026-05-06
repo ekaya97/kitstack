@@ -1,55 +1,42 @@
 import { z } from "zod";
-import { eq, desc } from "drizzle-orm";
-import type { LibSQLDatabase } from "drizzle-orm/libsql";
-import { defineTool, kit } from "../sdk";
-import type { KitContext } from "../sdk";
-import { deals, contacts } from "../schema";
-
-const listDealsArgs = z.object({
-  stage: z.enum(["prospect", "proposal", "negotiation", "won", "lost"]).optional(),
-  limit: z.number().optional().default(25),
-});
-
-async function loadDeals(db: LibSQLDatabase, args: z.infer<typeof listDealsArgs>, ctx: KitContext) {
-  const rows = await db
-    .select({
-      id: deals.id,
-      name: deals.name,
-      contactId: deals.contactId,
-      value: deals.value,
-      currency: deals.currency,
-      stage: deals.stage,
-      notes: deals.notes,
-      expectedCloseDate: deals.expectedCloseDate,
-      createdAt: deals.createdAt,
-      updatedAt: deals.updatedAt,
-      contactName: contacts.name,
-    })
-    .from(deals)
-    .leftJoin(contacts, eq(deals.contactId, contacts.id))
-    .orderBy(desc(deals.createdAt))
-    .limit(args.limit);
-
-  return args.stage ? rows.filter((d) => d.stage === args.stage) : rows;
-}
+import { eq, gte, lte, isNull, desc, and, SQL } from "drizzle-orm";
+import { defineTool, kit } from "@kitstackco/sdk";
+import { deals } from "../schema";
 
 export const listDeals = defineTool({
   name: "list_deals",
-  description: "List deals with optional stage filter",
-  args: listDealsArgs,
-  load: loadDeals,
+  description: "List deals with optional filters",
+  args: z.object({
+    stage: z.string().optional().describe("Filter by stage: lead, contacted, proposal, negotiation, won, lost"),
+    contact_id: z.string().optional().describe("Filter by contact ID"),
+    company_id: z.string().optional().describe("Filter by company ID"),
+    min_value: z.number().optional().describe("Minimum value in cents"),
+    max_value: z.number().optional().describe("Maximum value in cents"),
+    limit: z.number().optional().default(25).describe("Max results"),
+  }),
+  handler: async (db, args) => {
+    const conditions: SQL[] = [isNull(deals.archivedAt)];
 
-  handler: async (db, args, ctx) => {
-    const result = await loadDeals(db, args, ctx);
-    if (result.length === 0) {
-      return kit.text(args.stage ? `No deals in "${args.stage}".` : "No deals yet.");
-    }
+    if (args.stage) conditions.push(eq(deals.stage, args.stage));
+    if (args.contact_id) conditions.push(eq(deals.contactId, args.contact_id));
+    if (args.company_id) conditions.push(eq(deals.companyId, args.company_id));
+    if (args.min_value !== undefined) conditions.push(gte(deals.valueCents, args.min_value));
+    if (args.max_value !== undefined) conditions.push(lte(deals.valueCents, args.max_value));
 
-    let text = `${result.length} deal(s):\n\n| ID | Deal | Contact | Value | Stage | Close Date |\n|----|------|---------|-------|-------|------------|\n`;
-    for (const d of result) {
-      const val = d.value ? `€${d.value.toLocaleString()}` : "—";
-      text += `| \`${d.id}\` | ${d.name} | ${d.contactName || "—"} | ${val} | ${d.stage} | ${d.expectedCloseDate || "—"} |\n`;
+    const rows = await db
+      .select()
+      .from(deals)
+      .where(and(...conditions))
+      .orderBy(desc(deals.createdAt))
+      .limit(args.limit);
+
+    if (rows.length === 0) return kit.text("No deals found.");
+
+    let table = `${rows.length} deal(s):\n\n| Title | Stage | Value | Probability | Close Date |\n|-------|-------|-------|-------------|------------|\n`;
+    for (const d of rows) {
+      const value = d.valueCents ? `${d.currency} ${(d.valueCents / 100).toFixed(2)}` : "—";
+      table += `| ${d.title} | ${d.stage} | ${value} | ${d.probability ?? "—"}% | ${d.expectedClose || "—"} |\n`;
     }
-    return kit.text(text);
+    return kit.text(table);
   },
 });

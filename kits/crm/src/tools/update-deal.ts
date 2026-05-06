@@ -1,43 +1,51 @@
 import { z } from "zod";
-import { eq } from "drizzle-orm";
-import { defineTool, kit } from "../sdk";
+import { eq, like, isNull } from "drizzle-orm";
+import { defineTool, kit } from "@kitstackco/sdk";
 import { deals } from "../schema";
 
 export const updateDeal = defineTool({
   name: "update_deal",
-  description: "Update a deal's stage, value, or other details",
+  description: "Move a deal through stages or update details",
   args: z.object({
-    dealId: z.string().describe("Deal ID"),
-    stage: z.enum(["prospect", "proposal", "negotiation", "won", "lost"]).optional(),
-    value: z.number().optional(),
-    notes: z.string().optional(),
-    expectedCloseDate: z.string().optional(),
+    deal: z.string().describe("Deal ID (deal_xxx) or title for fuzzy match"),
+    stage: z.string().optional().describe("New stage: lead, contacted, proposal, negotiation, won, lost"),
+    value: z.number().optional().describe("New value in cents"),
+    probability: z.number().optional().describe("Win probability 0-100"),
+    expected_close: z.string().optional().describe("Expected close date (ISO)"),
+    lost_reason: z.string().optional().describe("Reason for losing the deal"),
+    notes: z.string().optional().describe("Updated notes"),
   }),
-  handler: async (db, args, ctx) => {
-    const existing = await db
-      .select()
-      .from(deals)
-      .where(eq(deals.id, args.dealId))
-      .then((r) => r[0]);
+  handler: async (db, args) => {
+    // Resolve deal
+    let dealId: string;
+    if (args.deal.startsWith("deal_")) {
+      dealId = args.deal;
+    } else {
+      const matches = await db
+        .select({ id: deals.id, title: deals.title })
+        .from(deals)
+        .where(like(deals.title, `%${args.deal}%`))
+        .limit(5);
 
-    if (!existing) {
-      return kit.notFound("Deal", args.dealId);
+      if (matches.length === 0) return kit.error(`No deal found matching "${args.deal}".`);
+      if (matches.length > 1) {
+        const list = matches.map((d) => `• ${d.title} (${d.id})`).join("\n");
+        return kit.text(`Multiple deals match. Please specify:\n${list}`);
+      }
+      dealId = matches[0].id;
     }
 
-    const updates: Record<string, unknown> = {};
+    const updates: Record<string, unknown> = { updatedAt: new Date().toISOString() };
     if (args.stage !== undefined) updates.stage = args.stage;
-    if (args.value !== undefined) updates.value = args.value;
+    if (args.value !== undefined) updates.valueCents = args.value;
+    if (args.probability !== undefined) updates.probability = args.probability;
+    if (args.expected_close !== undefined) updates.expectedClose = args.expected_close;
+    if (args.lost_reason !== undefined) updates.lostReason = args.lost_reason;
     if (args.notes !== undefined) updates.notes = args.notes;
-    if (args.expectedCloseDate !== undefined) updates.expectedCloseDate = args.expectedCloseDate;
 
-    if (Object.keys(updates).length === 0) {
-      return kit.text("No changes specified.");
-    }
+    await db.update(deals).set(updates).where(eq(deals.id, dealId));
 
-    await db.update(deals).set(updates).where(eq(deals.id, args.dealId));
-    const changes = Object.entries(updates).map(([k, v]) => `${k}: ${v}`).join(", ");
-    return kit.result(
-      kit.updated(args.dealId, "deal", `Deal "${existing.name}" updated — ${changes}.`)
-    );
+    const changes = Object.keys(updates).filter((k) => k !== "updatedAt").join(", ");
+    return kit.result(kit.updated(dealId, "deal", `Deal updated: ${changes}.`));
   },
 });

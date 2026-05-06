@@ -1,57 +1,52 @@
+import { defineKit } from "@kitstackco/sdk";
 import { resolve } from "node:path";
-import { defineKit } from "./src/sdk";
 import * as schema from "./src/schema";
-import { crmInstructions } from "./src/instructions";
-
-// Tools
-import { addContact } from "./src/tools/add-contact";
-import { listContacts } from "./src/tools/list-contacts";
-import { searchContacts } from "./src/tools/search-contacts";
-import { addDeal } from "./src/tools/add-deal";
-import { listDeals } from "./src/tools/list-deals";
-import { updateDeal } from "./src/tools/update-deal";
-import { addActivity } from "./src/tools/add-activity";
-import { getContactDetailTool } from "./src/tools/get-contact-detail";
-import { pipelineDashboard } from "./src/tools/pipeline-dashboard";
-import { generateProposal } from "./src/tools/generate-proposal";
-import { exportData } from "./src/tools/export";
-import { listProposals } from "./src/tools/list-proposals";
+import { instructions } from "./src/instructions";
 
 // Views
-import contactsView from "./src/views/contacts";
-import contactDetailView from "./src/views/contact-detail";
 import pipelineView from "./src/views/pipeline";
-import dashboardView from "./src/views/dashboard";
-import proposalView from "./src/views/proposal";
+import contactsView from "./src/views/contacts";
+import followUpsView from "./src/views/follow-ups";
+
+// Tools
+import { addCompany } from "./src/tools/add-company";
+import { addContact } from "./src/tools/add-contact";
+import { logInteraction } from "./src/tools/log-interaction";
+import { addDeal } from "./src/tools/add-deal";
+import { updateDeal } from "./src/tools/update-deal";
+import { updateContact } from "./src/tools/update-contact";
+import { search } from "./src/tools/search";
+import { listContacts } from "./src/tools/list-contacts";
+import { listDeals } from "./src/tools/list-deals";
+import { followUps } from "./src/tools/follow-ups";
+import { pipeline } from "./src/tools/pipeline";
+import { archive } from "./src/tools/archive";
 
 export default defineKit({
   id: "crm",
   version: "1.0.0",
-  name: "CRM Kit",
-  description: "Full CRM with contacts, deals, pipeline, and proposals",
+  name: "CRM",
+  description: "Personal CRM for tracking contacts, companies, deals, and interactions",
   schema,
   migrationsDir: resolve(import.meta.dirname, "migrations"),
-  instructions: crmInstructions,
-  triggers: ["contact", "person", "company", "deal", "pipeline", "proposal", "follow-up", "crm", "sales"],
-  tools: [
-    addContact,
-    listContacts,
-    searchContacts,
-    addDeal,
-    listDeals,
-    updateDeal,
-    addActivity,
-    getContactDetailTool,
-    pipelineDashboard,
-    generateProposal,
-    exportData,
-    listProposals,
+  instructions,
+  triggers: [
+    "contact", "company", "deal", "pipeline", "follow-up",
+    "crm", "relationship", "sales", "proposal",
   ],
-  views: [
-    contactsView,
-    contactDetailView,
-    pipelineView,
-    dashboardView,
-    proposalView,
+  views: [pipelineView, contactsView, followUpsView],
+  tools: [
+    addCompany,
+    addContact,
+    logInteraction,
+    addDeal,
+    updateDeal,
+    updateContact,
+    search,
+    listContacts,
+    listDeals,
+    followUps,
+    pipeline,
+    archive,
   ],
 });

@@ -1,50 +1,68 @@
-import { sqliteTable, text, integer, real } from "drizzle-orm/sqlite-core";
+import { sqliteTable, text, integer, index } from "drizzle-orm/sqlite-core";
+
+export const companies = sqliteTable("companies", {
+  id: text("id").primaryKey(),
+  name: text("name").notNull(),
+  domain: text("domain"),
+  industry: text("industry"),
+  size: text("size"),
+  notes: text("notes"),
+  tags: text("tags"),
+  archivedAt: text("archived_at"),
+  createdAt: text("created_at").notNull(),
+  updatedAt: text("updated_at").notNull(),
+});
 
 export const contacts = sqliteTable("contacts", {
   id: text("id").primaryKey(),
-  name: text("name").notNull(),
-  company: text("company"),
+  companyId: text("company_id").references(() => companies.id),
+  firstName: text("first_name").notNull(),
+  lastName: text("last_name"),
   email: text("email"),
   phone: text("phone"),
+  role: text("role"),
+  relationship: text("relationship").default("neutral"),
   source: text("source"),
   notes: text("notes"),
-  lastContactedAt: text("last_contacted_at"),
-  createdAt: integer("created_at", { mode: "timestamp" }).$defaultFn(() => new Date()),
-});
+  tags: text("tags"),
+  archivedAt: text("archived_at"),
+  createdAt: text("created_at").notNull(),
+  updatedAt: text("updated_at").notNull(),
+}, (table) => [
+  index("idx_contacts_company").on(table.companyId),
+]);
+
+export const interactions = sqliteTable("interactions", {
+  id: text("id").primaryKey(),
+  contactId: text("contact_id").notNull().references(() => contacts.id),
+  type: text("type").notNull(),
+  summary: text("summary").notNull(),
+  sentiment: text("sentiment"),
+  followUp: text("follow_up"),
+  followUpBy: text("follow_up_by"),
+  occurredAt: text("occurred_at").notNull(),
+  createdAt: text("created_at").notNull(),
+  updatedAt: text("updated_at").notNull(),
+}, (table) => [
+  index("idx_interactions_contact").on(table.contactId),
+]);
 
 export const deals = sqliteTable("deals", {
   id: text("id").primaryKey(),
-  name: text("name").notNull(),
   contactId: text("contact_id").references(() => contacts.id),
-  value: real("value"),
+  companyId: text("company_id").references(() => companies.id),
+  title: text("title").notNull(),
+  valueCents: integer("value_cents"),
   currency: text("currency").default("EUR"),
-  stage: text("stage", {
-    enum: ["prospect", "proposal", "negotiation", "won", "lost"],
-  }).notNull().default("prospect"),
+  stage: text("stage").default("lead"),
+  probability: integer("probability"),
+  expectedClose: text("expected_close"),
+  lostReason: text("lost_reason"),
   notes: text("notes"),
-  expectedCloseDate: text("expected_close_date"),
-  createdAt: integer("created_at", { mode: "timestamp" }).$defaultFn(() => new Date()),
-  updatedAt: integer("updated_at", { mode: "timestamp" }).$defaultFn(() => new Date()),
-});
-
-export const activities = sqliteTable("activities", {
-  id: text("id").primaryKey(),
-  contactId: text("contact_id").references(() => contacts.id),
-  dealId: text("deal_id").references(() => deals.id),
-  type: text("type", {
-    enum: ["call", "email", "meeting", "note", "task"],
-  }).notNull(),
-  description: text("description").notNull(),
-  createdAt: integer("created_at", { mode: "timestamp" }).$defaultFn(() => new Date()),
-});
-
-export const proposals = sqliteTable("proposals", {
-  id: text("id").primaryKey(),
-  dealId: text("deal_id").references(() => deals.id),
-  content: text("content").notNull(),
-  version: integer("version").notNull().default(1),
-  status: text("status", {
-    enum: ["draft", "sent", "accepted", "rejected"],
-  }).notNull().default("draft"),
-  createdAt: integer("created_at", { mode: "timestamp" }).$defaultFn(() => new Date()),
-});
+  archivedAt: text("archived_at"),
+  createdAt: text("created_at").notNull(),
+  updatedAt: text("updated_at").notNull(),
+}, (table) => [
+  index("idx_deals_stage").on(table.stage),
+  index("idx_deals_contact").on(table.contactId),
+]);
