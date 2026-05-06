@@ -189,7 +189,7 @@ module.exports = {
   );
 
   const proxyHtml = generateProxyHtml();
-  const shellHtml = generateDevShellHtml(kit, vitePort);
+  const shellHtml = generateDevShellHtml(kit, vitePort, port);
 
   const httpServer = createServer(async (req, res) => {
     const url = new URL(req.url ?? "/", `http://localhost:${port}`);
@@ -215,6 +215,24 @@ module.exports = {
     if (url.pathname === "/__devkit/proxy") {
       res.writeHead(200, { "Content-Type": "text/html" });
       res.end(proxyHtml);
+      return;
+    }
+
+    // Serve compiled Tailwind CSS (proxied from Vite's ?inline transform)
+    if (url.pathname === "/__devkit/styles.css") {
+      try {
+        const viteRes = await fetch(`http://localhost:${vitePort}/src/views/styles.css?inline`);
+        const jsModule = await viteRes.text();
+        // Extract CSS from: export default "...css..."
+        const match = jsModule.match(/export default "(.*)"$/s);
+        if (match) {
+          const css = match[1].replace(/\\n/g, "\n").replace(/\\"/g, '"').replace(/\\\\/g, "\\");
+          res.writeHead(200, { "Content-Type": "text/css", "Cache-Control": "no-cache" });
+          res.end(css);
+          return;
+        }
+      } catch {}
+      res.writeHead(404); res.end("CSS not available");
       return;
     }
 
@@ -285,16 +303,15 @@ module.exports = {
   });
 }
 
-function generateDevShellHtml(kit: KitDefinition, vitePort: number): string {
+function generateDevShellHtml(kit: KitDefinition, vitePort: number, devkitPort: number): string {
   const viteUrl = `http://localhost:${vitePort}`;
 
   return `<!DOCTYPE html>
 <html>
 <head>
 <meta charset="utf-8">
+<link rel="stylesheet" href="http://localhost:${devkitPort}/__devkit/styles.css">
 <style>
-  * { box-sizing: border-box; margin: 0; padding: 0; }
-  body { font-family: system-ui, -apple-system, sans-serif; font-size: 14px; color: #171512; background: #faf7f1; }
   .ks-loading { display: flex; align-items: center; justify-content: center; min-height: 200px; color: #6b6357; }
   .ks-error { padding: 16px; color: #b91c1c; background: #fef2f2; border: 1px solid #fecaca; border-radius: 6px; }
 </style>
@@ -371,21 +388,6 @@ async function loadView(data) {
   try {
     window.__KITSTACK_MCP__.view = data.view;
     window.__KITSTACK_DATA__ = data.data;
-
-    // Load Tailwind CSS into the iframe by extracting __vite__css from the Vite-served module
-    if (!document.getElementById("ks-tailwind")) {
-      try {
-        const cssRes = await fetch(VITE_URL + "/src/views/styles.css");
-        const cssModule = await cssRes.text();
-        const match = cssModule.match(/const __vite__css = "((?:[^"\\\\]|\\\\.)*)"/s) || cssModule.match(/const __vite__css = '((?:[^'\\\\]|\\\\.)*)'/s);
-        if (match) {
-          const style = document.createElement("style");
-          style.id = "ks-tailwind";
-          style.textContent = JSON.parse('"' + match[1] + '"');
-          document.head.appendChild(style);
-        }
-      } catch {}
-    }
 
     const module = await import(VITE_URL + "/.kitstack/devkit-entries/" + data.view + ".tsx");
     const container = document.createElement("div");
