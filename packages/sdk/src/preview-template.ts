@@ -43,8 +43,6 @@ export function generatePreview(config: PreviewConfig): string {
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <link rel="stylesheet" href="../style.css">
 <style>
-  * { box-sizing: border-box; margin: 0; padding: 0; }
-  body { font-family: system-ui, -apple-system, sans-serif; font-size: 14px; color: #171512; background: #faf7f1; }
   .ks-loading { display: flex; align-items: center; justify-content: center; min-height: 200px; color: #6b6357; }
   .ks-error { padding: 16px; color: #b91c1c; background: #fef2f2; border: 1px solid #fecaca; border-radius: 6px; }
 </style>
