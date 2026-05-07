@@ -3,12 +3,27 @@ import { NextRequest, NextResponse } from "next/server";
 import { eq, and } from "drizzle-orm";
 import { Resource } from "sst";
 import { db } from "@/lib/db";
-import { session as sessionTable } from "@/db/auth-schema";
+import { session as sessionTable, user as userTable } from "@/db/auth-schema";
+import { kitRegistryTable, kitViewsTable } from "@/db/schema";
 import { log } from "@/lib/logger";
-import { writeFileSync, mkdirSync, rmSync } from "node:fs";
-import { resolve } from "node:path";
-import { tmpdir } from "node:os";
 import { nanoid } from "nanoid";
+import {
+  S3Client,
+  PutObjectCommand,
+} from "@aws-sdk/client-s3";
+import {
+  LambdaClient,
+  GetFunctionCommand,
+  CreateFunctionCommand,
+  UpdateFunctionCodeCommand,
+  UpdateFunctionConfigurationCommand,
+  PutFunctionConcurrencyCommand,
+  waitUntilFunctionActiveV2,
+  waitUntilFunctionUpdatedV2,
+} from "@aws-sdk/client-lambda";
+
+const s3 = new S3Client({});
+const lambda = new LambdaClient({});
 
 interface DeployPayload {
   manifest: {
@@ -23,10 +38,10 @@ interface DeployPayload {
     tools: Array<{ name: string; description: string }>;
     views: Array<{ slug: string; name: string; description: string }>;
   };
-  bundle: string; // base64 kit.zip
-  shell?: string; // base64 shell.html
-  views?: Array<{ name: string; content: string }>; // base64 view files
-  previews?: Array<{ slug: string; content: string }>; // base64 preview HTML
+  bundle: string;
+  shell?: string;
+  views?: Array<{ name: string; content: string }>;
+  previews?: Array<{ slug: string; content: string }>;
 }
 
 async function authenticateCli(request: NextRequest): Promise<{ userId: string; email: string } | null> {
@@ -35,24 +50,14 @@ async function authenticateCli(request: NextRequest): Promise<{ userId: string; 
   if (!token) return null;
 
   const [row] = await db
-    .select({
-      userId: sessionTable.userId,
-      expiresAt: sessionTable.expiresAt,
-    })
+    .select({ userId: sessionTable.userId, expiresAt: sessionTable.expiresAt })
     .from(sessionTable)
-    .where(
-      and(
-        eq(sessionTable.token, token),
-        eq(sessionTable.userAgent, "kitstack-cli")
-      )
-    )
+    .where(and(eq(sessionTable.token, token), eq(sessionTable.userAgent, "kitstack-cli")))
     .limit(1);
 
   if (!row) return null;
   if (row.expiresAt && new Date(row.expiresAt) < new Date()) return null;
 
-  // Look up email
-  const { user: userTable } = await import("@/db/auth-schema");
   const [userRow] = await db
     .select({ email: userTable.email })
     .from(userTable)
@@ -63,13 +68,11 @@ async function authenticateCli(request: NextRequest): Promise<{ userId: string; 
 }
 
 export async function POST(request: NextRequest) {
-  // 1. Authenticate
   const auth = await authenticateCli(request);
   if (!auth) {
     return NextResponse.json({ error: "Unauthorized. Run: kitstack login" }, { status: 401 });
   }
 
-  // 2. Parse payload
   let payload: DeployPayload;
   try {
     payload = await request.json();
@@ -84,110 +87,139 @@ export async function POST(request: NextRequest) {
 
   const kitId = manifest.kitId;
   const kitSlug = `${kitId}-kit`;
+  const bucketName = (Resource as any).KitAssets.name;
 
   log.info("CLI deploy started", { userId: auth.userId, kitId, tools: manifest.tools.length });
 
-  // 3. Write artifacts to temp directory (reuse uploadKitBundle which reads from disk)
-  const tempDir = resolve(tmpdir(), `kitstack-deploy-${nanoid(8)}`);
-  mkdirSync(tempDir, { recursive: true });
-
   try {
-    // Write bundle
-    writeFileSync(resolve(tempDir, "kit.zip"), Buffer.from(payload.bundle, "base64"));
-    writeFileSync(resolve(tempDir, "manifest.json"), JSON.stringify(manifest, null, 2));
+    // ── 1. Upload to S3 ─────────────────────────────────────
+    const uploads: Array<{ key: string; body: Buffer; contentType: string }> = [];
 
-    // Write shell
+    uploads.push({ key: `bundles/${kitId}/kit.zip`, body: Buffer.from(payload.bundle, "base64"), contentType: "application/zip" });
+    uploads.push({ key: `bundles/${kitId}/manifest.json`, body: Buffer.from(JSON.stringify(manifest, null, 2)), contentType: "application/json" });
+
     if (payload.shell) {
-      writeFileSync(resolve(tempDir, "shell.html"), Buffer.from(payload.shell, "base64"));
+      uploads.push({ key: `apps/kits/${kitId}/shell.html`, body: Buffer.from(payload.shell, "base64"), contentType: "text/html" });
     }
 
-    // Write views
-    if (payload.views?.length) {
-      const viewsDir = resolve(tempDir, "views");
+    if (payload.views) {
       for (const view of payload.views) {
-        const viewPath = resolve(viewsDir, view.name);
-        mkdirSync(resolve(viewPath, ".."), { recursive: true });
-        writeFileSync(viewPath, Buffer.from(view.content, "base64"));
+        const ext = view.name.endsWith(".css") ? "text/css" : view.name.endsWith(".js") ? "application/javascript" : "application/octet-stream";
+        uploads.push({ key: `apps/kits/${kitId}/${view.name}`, body: Buffer.from(view.content, "base64"), contentType: ext });
       }
     }
 
-    // Write previews
-    if (payload.previews?.length) {
-      const previewsDir = resolve(tempDir, "previews");
-      mkdirSync(previewsDir, { recursive: true });
-      for (const preview of payload.previews) {
-        writeFileSync(resolve(previewsDir, `${preview.slug}.html`), Buffer.from(preview.content, "base64"));
-      }
-    }
-
-    // 4. Upload to S3
-    const { uploadKitBundle } = await import(
-      "@kitstackco/sdk/deploy/upload" as string
-    );
-    await uploadKitBundle({
-      buildDir: tempDir,
-      kitId,
-      bucketName: (Resource as any).KitAssets.name,
-    });
-
-    // 5. Seed registry
-    const { seedRegistry } = await import(
-      "@kitstackco/sdk/deploy/seed-registry" as string
-    );
-
-    // Build preview keys map
-    const viewPreviewKeys: Record<string, string> = {};
-    if (payload.previews?.length) {
+    if (payload.previews) {
       for (const p of payload.previews) {
-        viewPreviewKeys[p.slug] = `apps/kits/${kitId}/previews/${p.slug}.html`;
+        uploads.push({ key: `apps/kits/${kitId}/previews/${p.slug}.html`, body: Buffer.from(p.content, "base64"), contentType: "text/html" });
       }
     }
 
-    await seedRegistry({
-      tursoUrl: (Resource as any).TursoDbUrl.value,
-      tursoToken: (Resource as any).TursoAuthToken.value,
-      manifest,
-      shellS3Key: payload.shell ? `apps/kits/${kitId}/shell.html` : undefined,
-      visibility: "private",
-      authorId: auth.userId,
-      viewPreviewKeys,
-    });
+    for (const { key, body, contentType } of uploads) {
+      await s3.send(new PutObjectCommand({
+        Bucket: bucketName, Key: key, Body: body, ContentType: contentType,
+        CacheControl: "max-age=0, no-cache, no-store, must-revalidate",
+      }));
+    }
+    log.info("S3 upload complete", { kitId, files: uploads.length });
 
-    // 6. Provision Lambda
+    // ── 2. Seed registry (Turso via Drizzle HTTP) ───────────
+    for (const tool of manifest.tools) {
+      await db.insert(kitRegistryTable).values({
+        kitId,
+        toolName: tool.name,
+        toolDescription: tool.description,
+        inputSchema: "{}",
+        kitName: manifest.kitName,
+        kitDescription: manifest.kitDescription ?? manifest.kitName,
+        kitTriggers: JSON.stringify(manifest.kitTriggers ?? []),
+        kitInstructions: manifest.kitInstructions ?? null,
+        lambdaResource: null,
+        visibility: "private",
+        authorId: auth.userId,
+        migrationSql: manifest.migrationSql ?? null,
+      }).onConflictDoUpdate({
+        target: [kitRegistryTable.kitId, kitRegistryTable.toolName],
+        set: {
+          toolDescription: tool.description,
+          inputSchema: "{}",
+          kitName: manifest.kitName,
+          kitDescription: manifest.kitDescription ?? manifest.kitName,
+          kitTriggers: JSON.stringify(manifest.kitTriggers ?? []),
+          kitInstructions: manifest.kitInstructions ?? null,
+          visibility: "private",
+          authorId: auth.userId,
+          migrationSql: manifest.migrationSql ?? null,
+        },
+      });
+    }
+
+    for (const view of manifest.views) {
+      const previewKey = payload.previews?.find((p) => p.slug === view.slug)
+        ? `apps/kits/${kitId}/previews/${view.slug}.html`
+        : null;
+
+      await db.insert(kitViewsTable).values({
+        kitId,
+        viewSlug: view.slug,
+        viewName: view.name,
+        viewDescription: view.description,
+        height: 400,
+        shellS3Key: payload.shell ? `apps/kits/${kitId}/shell.html` : null,
+        previewS3Key: previewKey,
+      }).onConflictDoUpdate({
+        target: [kitViewsTable.kitId, kitViewsTable.viewSlug],
+        set: {
+          viewName: view.name,
+          viewDescription: view.description,
+          shellS3Key: payload.shell ? `apps/kits/${kitId}/shell.html` : null,
+          previewS3Key: previewKey,
+        },
+      });
+    }
+
+    log.info("Registry seeded", { kitId, tools: manifest.tools.length, views: manifest.views.length });
+
+    // ── 3. Provision Lambda ─────────────────────────────────
     const infra = (Resource as any).KitLambdaInfra;
     let lambdaResult: { functionName: string; created: boolean } | null = null;
 
     if (infra?.roleArn && infra?.layerArn) {
-      const { provisionKitLambda } = await import(
-        "@kitstackco/sdk/deploy/deploy-lambda" as string
-      );
-      lambdaResult = await provisionKitLambda({
-        kitId,
-        bucketName: (Resource as any).KitAssets.name,
-        bundleS3Key: `bundles/${kitId}/kit.zip`,
-        roleArn: infra.roleArn,
-        runtimeLayerArn: infra.layerArn,
-      });
+      const functionName = `Kit-${kitId}`;
+      const bundleS3Key = `bundles/${kitId}/kit.zip`;
+      let created = false;
+
+      try {
+        await lambda.send(new GetFunctionCommand({ FunctionName: functionName }));
+        await waitUntilFunctionUpdatedV2({ client: lambda, maxWaitTime: 300 }, { FunctionName: functionName });
+        await lambda.send(new UpdateFunctionCodeCommand({ FunctionName: functionName, S3Bucket: bucketName, S3Key: bundleS3Key }));
+        await waitUntilFunctionUpdatedV2({ client: lambda, maxWaitTime: 300 }, { FunctionName: functionName });
+        await lambda.send(new UpdateFunctionConfigurationCommand({
+          FunctionName: functionName, MemorySize: 128, Timeout: 10,
+          Layers: [infra.layerArn], Environment: { Variables: {} },
+        }));
+        await waitUntilFunctionUpdatedV2({ client: lambda, maxWaitTime: 300 }, { FunctionName: functionName });
+      } catch (err: any) {
+        if (err.name !== "ResourceNotFoundException") throw err;
+        await lambda.send(new CreateFunctionCommand({
+          FunctionName: functionName, Runtime: "nodejs22.x", Architectures: ["arm64"],
+          Handler: "index.handler", MemorySize: 128, Timeout: 10, Role: infra.roleArn,
+          Code: { S3Bucket: bucketName, S3Key: bundleS3Key },
+          Layers: [infra.layerArn], Environment: { Variables: {} },
+        }));
+        created = true;
+        await waitUntilFunctionActiveV2({ client: lambda, maxWaitTime: 60 }, { FunctionName: functionName });
+      }
+
+      await lambda.send(new PutFunctionConcurrencyCommand({ FunctionName: functionName, ReservedConcurrentExecutions: 5 }));
+      lambdaResult = { functionName, created };
+      log.info("Lambda provisioned", { functionName, created });
     }
 
-    // 7. Grant deployer access (authz tuples)
-    const { createClient } = await import("@libsql/client");
-    const tursoClient = createClient({
-      url: (Resource as any).TursoDbUrl.value,
-      authToken: (Resource as any).TursoAuthToken.value,
-    });
-
-    await tursoClient.execute({
-      sql: `INSERT OR IGNORE INTO authz_tuples (id, subject_type, subject_id, relation, object_type, object_id)
-            VALUES (?, 'user', ?, 'activator', 'kit', ?)`,
-      args: [nanoid(), auth.userId, kitSlug],
-    });
-    await tursoClient.execute({
-      sql: `INSERT OR IGNORE INTO authz_tuples (id, subject_type, subject_id, relation, object_type, object_id)
-            VALUES (?, 'user', ?, 'author', 'kit', ?)`,
-      args: [nanoid(), auth.userId, kitSlug],
-    });
-    tursoClient.close();
+    // ── 4. Grant access ─────────────────────────────────────
+    const { grantRelation } = await import("@kitstackco/authz/lifecycle");
+    await grantRelation(db, auth.userId, "activator", "kit", kitSlug);
+    await grantRelation(db, auth.userId, "author", "kit", kitSlug);
 
     log.info("CLI deploy succeeded", { userId: auth.userId, kitId, lambda: lambdaResult?.functionName });
 
@@ -203,10 +235,5 @@ export async function POST(request: NextRequest) {
   } catch (err: any) {
     log.error("CLI deploy failed", { userId: auth.userId, kitId, error: err.message });
     return NextResponse.json({ error: `Deploy failed: ${err.message}` }, { status: 500 });
-  } finally {
-    // Clean up temp directory
-    try {
-      rmSync(tempDir, { recursive: true, force: true });
-    } catch {}
   }
 }

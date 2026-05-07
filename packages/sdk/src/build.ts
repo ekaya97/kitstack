@@ -429,12 +429,14 @@ export default defineConfig({
 
     const stylesPath = resolve(kitRoot, "src", "views", "styles.css");
     const cssOutput = resolve(viewsDir, "style.css");
-    const twConfig = resolve(kitRoot, "tailwind.config.ts");
 
-    if (existsSync(stylesPath) && existsSync(twConfig)) {
+    if (existsSync(stylesPath)) {
       try {
+        // Use postcss with @tailwindcss/postcss for Tailwind v4
+        const postcssConfigPath = resolve(outputDir, "_postcss.config.cjs");
+        writeFileSync(postcssConfigPath, `module.exports = { plugins: { "@tailwindcss/postcss": {} } };`);
         execSync(
-          `npx tailwindcss -i "${stylesPath}" -o "${cssOutput}" --config "${twConfig}" --minify`,
+          `npx postcss "${stylesPath}" -o "${cssOutput}" --config "${postcssConfigPath}"`,
           { cwd: kitRoot, stdio: "pipe" }
         );
         log("\u2713", `CSS: .kitstack/build/views/style.css (${fileSizeKB(cssOutput)} KB)`);

@@ -1,5 +1,5 @@
-import { webBucket, userAssetsBucket, skillBucket, kitCdn } from "./storage";
-import { mcpRouter, userKitDbs } from "./mcp";
+import { webBucket, userAssetsBucket, skillBucket, kitBucket, kitCdn } from "./storage";
+import { mcpRouter, userKitDbs, kitLambdaInfra } from "./mcp";
 import * as secrets from "./secrets";
 
 export const web = new sst.aws.Nextjs("Web", {
@@ -15,6 +15,19 @@ export const web = new sst.aws.Nextjs("Web", {
     "ln -s web/node_modules .next/standalone/node_modules 2>/dev/null || true;",
     "fi",
   ].join(" "),
+  permissions: [
+    {
+      actions: ["lambda:*"],
+      resources: [
+        "arn:aws:lambda:*:*:function:Kit-*",
+        "arn:aws:lambda:*:*:layer:KitRuntime:*",
+      ],
+    },
+    {
+      actions: ["iam:PassRole"],
+      resources: ["arn:aws:iam::*:role/KitLambdaRole-*"],
+    },
+  ],
   server: {
     architecture: "arm64",
     install: [
@@ -22,13 +35,17 @@ export const web = new sst.aws.Nextjs("Web", {
       "@aws-sdk/s3-request-presigner",
       "@aws-sdk/client-dynamodb",
       "@aws-sdk/util-dynamodb",
+      "@aws-sdk/client-lambda",
+      "@aws-sdk/client-cloudwatch-logs",
     ],
   },
   link: [
     webBucket,
     userAssetsBucket,
     skillBucket,
+    kitBucket,
     kitCdn,
+    kitLambdaInfra,
     mcpRouter,
     userKitDbs,
     ...Object.values(secrets),

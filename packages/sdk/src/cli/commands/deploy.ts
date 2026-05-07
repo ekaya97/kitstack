@@ -32,13 +32,11 @@ function collectFiles(dir: string, base: string): Array<{ name: string; content:
   const files: Array<{ name: string; content: string }> = [];
   for (const entry of readdirSync(dir)) {
     const full = resolve(dir, entry);
+    const name = base ? `${base}/${entry}` : entry;
     if (statSync(full).isDirectory()) {
-      files.push(...collectFiles(full, `${base}/${entry}`));
+      files.push(...collectFiles(full, name));
     } else {
-      files.push({
-        name: `${base}/${entry}`,
-        content: readFileSync(full).toString("base64"),
-      });
+      files.push({ name, content: readFileSync(full).toString("base64") });
     }
   }
   return files;
