@@ -51,6 +51,7 @@ export const web = new sst.aws.Nextjs("Web", {
     ...Object.values(secrets),
   ],
   environment: {
+    USER_KIT_DBS_TABLE: userKitDbs.name,
     NEXT_PUBLIC_BETTER_AUTH_URL: $app.stage != "production" ? "http://localhost:3000" : "https://kitstack.co",
     NEXT_PUBLIC_POSTHOG_KEY: process.env.NEXT_PUBLIC_POSTHOG_KEY || "",
     NEXT_PUBLIC_POSTHOG_HOST: "https://eu.i.posthog.com",

@@ -70,13 +70,24 @@ export async function provisionKitDatabase(
   const { org } = getTursoConfig();
   const dbName = `ks-${userId}-${kitId}`.replace(/[^a-z0-9-]/g, "-");
 
-  const createResult = await tursoFetch(`/organizations/${org}/databases`, {
-    method: "POST",
-    body: JSON.stringify({ name: dbName, group: "default" }),
-  });
-
-  const hostname = createResult.database?.hostname;
-  if (!hostname) throw new Error("Failed to get database hostname from Turso");
+  let hostname: string;
+  try {
+    const createResult = await tursoFetch(`/organizations/${org}/databases`, {
+      method: "POST",
+      body: JSON.stringify({ name: dbName, group: "default" }),
+    });
+    hostname = createResult.database?.hostname;
+    if (!hostname) throw new Error("Failed to get database hostname from Turso");
+  } catch (err: any) {
+    if (err.message?.includes("409")) {
+      // DB already exists — fetch its hostname
+      const existing = await tursoFetch(`/organizations/${org}/databases/${dbName}`);
+      hostname = existing.database?.hostname;
+      if (!hostname) throw new Error("Failed to get existing database hostname");
+    } else {
+      throw err;
+    }
+  }
   const dbUrl = `libsql://${hostname}`;
 
   const tokenResult = await tursoFetch(
