@@ -7,6 +7,8 @@ import { instructions } from "./src/instructions";
 import pipelineView from "./src/views/pipeline";
 import contactsView from "./src/views/contacts";
 import followUpsView from "./src/views/follow-ups";
+import dashboardView from "./src/views/dashboard";
+import contactDetailView from "./src/views/contact-detail";
 
 // Tools
 import { addCompany } from "./src/tools/add-company";
@@ -34,7 +36,7 @@ export default defineKit({
     "contact", "company", "deal", "pipeline", "follow-up",
     "crm", "relationship", "sales", "proposal",
   ],
-  views: [pipelineView, contactsView, followUpsView],
+  views: [dashboardView, pipelineView, contactsView, contactDetailView, followUpsView],
   tools: [
     addCompany,
     addContact,
