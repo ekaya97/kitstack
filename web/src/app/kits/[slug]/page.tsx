@@ -14,7 +14,9 @@ import {
   MCPApp,
 } from "@/components/claude-chat/claude-chat";
 import { PipelineKanban } from "@/components/mcp-apps/pipeline-kanban";
-import { getAllKitCards, getKitCardBySlug } from "@/services/kit.service";
+import { getAllKitCards, getKitBySlug, getKitCardBySlug, isKitAccessible, isPrivateKit, resolveAuthorName } from "@/services/kit.service";
+import { auth } from "@/lib/auth";
+import { headers } from "next/headers";
 import { getSkillCardBySlug } from "@/services/skill.service";
 import { getReviewsByTarget, getRatingDistribution } from "@/services/review.service";
 import { getKitPreviewViews } from "@/services/kit-views.service";
@@ -46,8 +48,22 @@ export default async function KitDetailPage({
   params: Promise<{ slug: string }>;
 }) {
   const { slug } = await params;
-  const kit = await getKitCardBySlug(slug);
-  if (!kit) notFound();
+
+  // Access control: private kits only visible to their author
+  const rawKit = await getKitBySlug(slug);
+  if (!rawKit) notFound();
+
+  let userId: string | null = null;
+  try {
+    const session = await auth.api.getSession({ headers: await headers() });
+    if (session) userId = session.user.id;
+  } catch {}
+
+  if (!isKitAccessible(rawKit, userId)) notFound();
+
+  const kit = (await getKitCardBySlug(slug))!;
+  const isPrivate = isPrivateKit(rawKit);
+  const authorName = await resolveAuthorName(rawKit.author ?? "kitstack");
 
   // Derive the registry kitId from the web slug (e.g. "crm-kit" → "crm")
   const registryKitId = slug.replace(/-kit$/, "");
@@ -88,13 +104,22 @@ export default async function KitDetailPage({
                 <CatMark cat={kit.cat} size={14} />
                 {kit.cat}
               </span>
-              <span className="inline-flex items-center gap-1.5 font-mono text-[11px] text-green-700">
-                <span className="w-[7px] h-[7px] rounded-full bg-green-600" />
-                live
-              </span>
-              <span className="ks-chip ks-chip-soft !text-[10px]">
-                &euro;5/mo Starter unlocks
-              </span>
+              {isPrivate ? (
+                <span className="inline-flex items-center gap-1.5 font-mono text-[11px] text-amber-700">
+                  <span className="w-[7px] h-[7px] rounded-full bg-amber-500" />
+                  private
+                </span>
+              ) : (
+                <span className="inline-flex items-center gap-1.5 font-mono text-[11px] text-green-700">
+                  <span className="w-[7px] h-[7px] rounded-full bg-green-600" />
+                  live
+                </span>
+              )}
+              {!isPrivate && (
+                <span className="ks-chip ks-chip-soft !text-[10px]">
+                  &euro;5/mo Starter unlocks
+                </span>
+              )}
             </div>
 
             {/* Title */}
@@ -110,10 +135,10 @@ export default async function KitDetailPage({
             {/* Author row + Rating inline */}
             <div className="flex items-center gap-4 flex-wrap mb-6">
               <Link href={`/authors/${kit.author}`} className="flex items-center gap-2.5 group">
-                <Avatar name={kit.author} size={28} tone="#3b7a3b" />
+                <Avatar name={authorName} size={28} tone={isPrivate ? "#b8860b" : "#3b7a3b"} />
                 <span className="font-sans text-[13px] text-ks-ink group-hover:text-ks-accent">
-                  by <b>{kit.author}</b>{" "}
-                  <span className="text-green-700">&#10003;</span>
+                  by <b>{authorName}</b>{" "}
+                  {!isPrivate && <span className="text-green-700">&#10003;</span>}
                 </span>
               </Link>
               <div className="w-px h-5 bg-ks-hair" />

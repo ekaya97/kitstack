@@ -44,7 +44,7 @@ interface DeployPayload {
   previews?: Array<{ slug: string; content: string }>;
 }
 
-async function authenticateCli(request: NextRequest): Promise<{ userId: string; email: string } | null> {
+async function authenticateCli(request: NextRequest): Promise<{ userId: string; email: string; name: string } | null> {
   const authHeader = request.headers.get("authorization") || "";
   const token = authHeader.replace("Bearer ", "");
   if (!token) return null;
@@ -59,12 +59,12 @@ async function authenticateCli(request: NextRequest): Promise<{ userId: string; 
   if (row.expiresAt && new Date(row.expiresAt) < new Date()) return null;
 
   const [userRow] = await db
-    .select({ email: userTable.email })
+    .select({ email: userTable.email, name: userTable.name })
     .from(userTable)
     .where(eq(userTable.id, row.userId))
     .limit(1);
 
-  return { userId: row.userId, email: userRow?.email || "" };
+  return { userId: row.userId, email: userRow?.email || "", name: userRow?.name || "" };
 }
 
 export async function POST(request: NextRequest) {
