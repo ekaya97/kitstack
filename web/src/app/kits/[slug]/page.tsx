@@ -134,13 +134,22 @@ export default async function KitDetailPage({
 
             {/* Author row + Rating inline */}
             <div className="flex items-center gap-4 flex-wrap mb-6">
-              <Link href={`/authors/${kit.author}`} className="flex items-center gap-2.5 group">
-                <Avatar name={authorName} size={28} tone={isPrivate ? "#b8860b" : "#3b7a3b"} />
-                <span className="font-sans text-[13px] text-ks-ink group-hover:text-ks-accent">
-                  by <b>{authorName}</b>{" "}
-                  {!isPrivate && <span className="text-green-700">&#10003;</span>}
-                </span>
-              </Link>
+              {isPrivate ? (
+                <div className="flex items-center gap-2.5">
+                  <Avatar name={authorName} size={28} tone="#b8860b" />
+                  <span className="font-sans text-[13px] text-ks-ink">
+                    by <b>{authorName}</b>
+                  </span>
+                </div>
+              ) : (
+                <Link href={`/authors/${kit.author}`} className="flex items-center gap-2.5 group">
+                  <Avatar name={authorName} size={28} tone="#3b7a3b" />
+                  <span className="font-sans text-[13px] text-ks-ink group-hover:text-ks-accent">
+                    by <b>{authorName}</b>{" "}
+                    <span className="text-green-700">&#10003;</span>
+                  </span>
+                </Link>
+              )}
               <div className="w-px h-5 bg-ks-hair" />
               <HeaderRating
                 targetType="kit"
