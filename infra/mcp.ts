@@ -208,6 +208,7 @@ export const mcpRouter = new sst.aws.Function("McpRouter", {
   runtime: "nodejs22.x",
   architecture: "arm64",
   logging: { retention: "1 week" },
+  concurrency: { reserved: 25 },
   nodejs: {
     install: ["@libsql/client", "libsql"],
   },
@@ -296,11 +297,12 @@ new aws.sns.TopicSubscription("KillSwitchLambda", {
   endpoint: killSwitchFn.nodes.function.arn,
 });
 
-// Alarm: Kit-* invocations > 500/min
+// Alarm: McpRouter invocations > 300/min
 new aws.cloudwatch.MetricAlarm("KitInvocationAlarm", {
-  alarmDescription: "Kit Lambda invocations exceeded 500/min — kill switch triggered",
+  alarmDescription: "MCP Router invocations exceeded 300/min — kill switch triggered",
   namespace: "AWS/Lambda",
   metricName: "Invocations",
+  dimensions: { FunctionName: mcpRouter.nodes.function.name },
   statistic: "Sum",
   period: 60,
   evaluationPeriods: 1,
@@ -310,13 +312,12 @@ new aws.cloudwatch.MetricAlarm("KitInvocationAlarm", {
   treatMissingData: "notBreaching",
 });
 
-/// Alarm: account-wide concurrent executions > 50
-// Note: no dimension filter — monitors ALL Lambdas including SST/CDK.
-// Threshold must be high enough to not trigger during deploys.
+// Alarm: McpRouter concurrent executions > 50
 new aws.cloudwatch.MetricAlarm("KitConcurrencyAlarm", {
-  alarmDescription: "Account Lambda concurrent executions exceeded 50 — kill switch triggered",
+  alarmDescription: "MCP Router concurrent executions exceeded 50 — kill switch triggered",
   namespace: "AWS/Lambda",
   metricName: "ConcurrentExecutions",
+  dimensions: { FunctionName: mcpRouter.nodes.function.name },
   statistic: "Maximum",
   period: 60,
   evaluationPeriods: 1,

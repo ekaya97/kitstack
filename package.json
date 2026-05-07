@@ -27,7 +27,7 @@
     "aws-sdk-client-mock": "^4.1.0",
     "constructs": "10.4.2",
     "drizzle-kit": "^0.30",
-    "sst": "^3",
+    "sst": "4.12.11",
     "tsx": "^4.21.0",
     "typescript": "^5",
     "vitest": "^2"
