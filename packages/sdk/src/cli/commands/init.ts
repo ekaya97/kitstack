@@ -84,6 +84,7 @@ export async function init(args: string[]) {
     "src/instructions.ts": instructionsTemplate(displayName),
     "drizzle.config.ts": drizzleConfigTemplate(),
     "src/tools/example.ts": exampleToolTemplate(),
+    "src/views/styles.css": viewStylesTemplate(),
     "src/views/dashboard/index.ts": viewIndexTemplate(),
     "src/views/dashboard/loader.ts": viewLoaderTemplate(),
     "src/views/dashboard/View.tsx": viewComponentTemplate(),
@@ -145,7 +146,9 @@ function packageJsonTemplate(name: string) {
     "drizzle-kit": "^0.30.0",
     "@types/react": "^19.0.0",
     "react": "^19.0.0",
-    "react-dom": "^19.0.0"
+    "react-dom": "^19.0.0",
+    "tailwindcss": "^4.0.0",
+    "@tailwindcss/postcss": "^4.0.0"
   },
   "scripts": {
     "dev": "kitstack dev --stdio",
@@ -343,9 +346,35 @@ describe("tools", () => {
 `;
 }
 
+function viewStylesTemplate() {
+  return `@import url("https://fonts.googleapis.com/css2?family=Instrument+Serif:ital@0;1&family=Inter:wght@400;500;600&family=JetBrains+Mono:wght@400;500&display=swap");
+@import "tailwindcss";
+@source "./**/*.tsx";
+
+@theme {
+  --color-ks-paper: #faf7f1;
+  --color-ks-paper-warm: #f4ede0;
+  --color-ks-paper-deep: #ece3d1;
+  --color-ks-ink: #171512;
+  --color-ks-ink2: #2a251f;
+  --color-ks-muted: #6b6357;
+  --color-ks-faint: #b8ae9b;
+  --color-ks-hair: #d9ceb8;
+  --color-ks-accent: #d65a2f;
+  --color-ks-accent-deep: #a8411e;
+  --color-ks-accent-soft: #f7d9c8;
+
+  --font-serif: "Instrument Serif", Georgia, serif;
+  --font-sans: "Inter", system-ui, -apple-system, sans-serif;
+  --font-mono: "JetBrains Mono", ui-monospace, monospace;
+}
+`;
+}
+
 function gitignoreTemplate() {
   return `.kitstack/
 node_modules/
 dist/
+index.html
 `;
 }
