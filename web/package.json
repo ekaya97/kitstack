@@ -37,7 +37,7 @@
     "posthog-node": "^5.21.2",
     "react": "^19",
     "react-dom": "^19",
-    "sst": "^3",
+    "sst": "4.12.11",
     "zod": "^3.22.0",
     "zustand": "^5"
   },

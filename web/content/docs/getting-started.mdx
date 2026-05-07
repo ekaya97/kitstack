@@ -5,7 +5,7 @@ description: Build your first kit and connect it to any MCP-compatible LLM clien
 
 # Getting Started
 
-You'll scaffold a kit, connect it to your LLM client via the relay, and see the full development loop — tool calls, view rendering, and live editing — without touching any infrastructure.
+You'll scaffold a kit, preview it locally with the DevKit, then connect it to your LLM client via the relay — the full development loop without touching any infrastructure.
 
 ## Prerequisites
 
@@ -17,14 +17,11 @@ You'll scaffold a kit, connect it to your LLM client via the relay, and see the 
 
 ```bash filename="Terminal"
 npx kitstack init my-first-kit
-```
-
-This creates a `my-first-kit/` directory with a complete, runnable kit.
-
-```bash filename="Terminal"
 cd my-first-kit
 npm install
 ```
+
+This creates a complete, runnable kit with an example tool, a dashboard view, a database schema, and tests.
 
 ## Step 2: Explore the project structure
 
@@ -53,7 +50,7 @@ my-first-kit/
 The key file is `kit.config.ts`. It ties everything together with [`defineKit()`](/docs/api/define-kit):
 
 ```ts filename="kit.config.ts"
-import { defineKit } from "@kitstack/sdk";
+import { defineKit } from "@kitstackco/sdk";
 import { resolve } from "node:path";
 import { schema } from "./src/schema";
 import { instructions } from "./src/instructions";
@@ -75,15 +72,36 @@ export default defineKit({
 
 ## Step 3: Run tests
 
-The scaffolded kit includes a test that validates everything works:
-
 ```bash filename="Terminal"
 npm test
 ```
 
 This uses [`createTestKit()`](/docs/api/create-test-kit) to spin up an in-memory database, run migrations, and exercise the example tool.
 
-## Step 4: Log in and start the dev server
+## Step 4: Preview with the DevKit
+
+Before connecting an LLM client, use the DevKit to see your views immediately:
+
+```bash filename="Terminal"
+npx kitstack dev --views
+```
+
+This opens a local server at `http://localhost:5174` — a purpose-built development environment for kit views:
+
+- **View sidebar** — lists every view in your kit. Click to preview.
+- **Data inspector** — see the data your loader returns. Edit the JSON and watch the component re-render instantly.
+- **Tool call logger** — see every `callTool` and `useTool` invocation from your components.
+- **Viewport controls** — resize the viewport to test responsive layouts.
+
+Edit `src/views/dashboard/View.tsx`, save, and the DevKit reflects your changes immediately via Vite HMR. This is the fastest way to build and iterate on view UI — no LLM client needed, no relay, no login.
+
+<Note>
+The DevKit is not just a preview tool — it renders your views with the same architecture as production. What you see here is what users see inside their LLM client.
+</Note>
+
+## Step 5: Connect via the relay
+
+When you're ready to test the full loop — tool calls, views, and real LLM interaction — start the relay:
 
 ```bash filename="Terminal"
 npx kitstack login
@@ -98,8 +116,6 @@ The dev server connects to the KitStack relay and prints a public URL:
 
   Add this URL to your LLM client's MCP server list.
 ```
-
-## Step 5: Connect your LLM client
 
 Add the relay URL as an MCP server in your LLM client:
 
@@ -130,7 +146,7 @@ The LLM renders your dashboard view as an interactive React component directly i
 
 This is where the relay shines. Open `src/views/dashboard/View.tsx`, change some text, and save.
 
-Now refresh the page in your LLM client. The view re-renders with your updated code — **no rebuild, no redeploy, no need to ask the LLM to call the tool again**. The modules get hot-replaced on refresh, so you can have the LLM call `kit_view` once and iterate on the component by just refreshing. This is WYSIWYG for MCP apps.
+Now refresh the page in your LLM client. The view re-renders with your updated code — **no rebuild, no redeploy, no need to ask the LLM to call the tool again**. The modules get hot-replaced on refresh, so you can have the LLM call `kit_view` once and iterate on the component by just refreshing.
 
 ## Step 7: Edit a tool
 
@@ -139,7 +155,7 @@ Open `src/tools/example.ts`. Change the tool's response message, save, and resta
 Every tool follows this pattern:
 
 ```ts filename="src/tools/example.ts"
-import { defineTool, kit } from "@kitstack/sdk";
+import { defineTool, kit } from "@kitstackco/sdk";
 import { z } from "zod";
 
 export const exampleTool = defineTool({
@@ -190,6 +206,7 @@ Stdio mode requires the client to support launching local processes. The relay w
 ## Next steps
 
 - [How kits work](/docs/concepts/kits) — understand the architecture
+- [Database](/docs/concepts/database) — per-user databases, schema, and migrations
 - [Defining tools](/docs/guides/defining-tools) — the load/handler pattern, arguments, and result helpers
 - [Defining views](/docs/guides/defining-views) — React views with server-side loaders
 - [Testing your kit](/docs/guides/testing) — the `createTestKit()` harness

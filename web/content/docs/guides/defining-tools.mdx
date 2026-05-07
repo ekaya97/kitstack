@@ -8,7 +8,7 @@ description: Practical guide to defining tools — handler patterns, shared load
 This guide walks through the patterns you'll use when building tools for your kit.
 
 <Note>
-This guide assumes you've completed the [Getting Started](/docs/getting-started) tutorial and understand [how tools work](/docs/concepts/tools).
+This guide assumes you've completed the [Getting Started](/docs/getting-started) tutorial. See [How tools work](/docs/concepts/tools) for the architectural overview.
 </Note>
 
 ## Creating a handler-only tool
@@ -16,7 +16,7 @@ This guide assumes you've completed the [Getting Started](/docs/getting-started)
 The simplest tool has a name, description, args, and a handler:
 
 ```ts filename="src/tools/add-expense.ts"
-import { defineTool, kit } from "@kitstack/sdk";
+import { defineTool, kit } from "@kitstackco/sdk";
 import { z } from "zod";
 import { expenses } from "../schema";
 import { nanoid } from "nanoid";
@@ -54,7 +54,7 @@ export const addExpense = defineTool({
 When a view needs the same data as a tool, extract the query into a `load` function:
 
 ```ts filename="src/tools/list-expenses.ts"
-import { defineTool, kit } from "@kitstack/sdk";
+import { defineTool, kit } from "@kitstackco/sdk";
 import { z } from "zod";
 import { expenses } from "../schema";
 import { desc } from "drizzle-orm";

@@ -8,7 +8,7 @@ description: API reference for kit.text(), kit.json(), kit.error(), kit.notFound
 The `kit` object provides factory functions for creating `KitToolResult` objects — the return type of every tool handler.
 
 ```ts
-import { kit } from "@kitstack/sdk";
+import { kit } from "@kitstackco/sdk";
 ```
 
 ## kit.text()
@@ -84,7 +84,7 @@ return kit.notFound("contact", args.contactId);
 
 **Result:**
 ```json
-{ "content": [{ "type": "text", "text": "contact not found: \"abc123\"" }], "isError": true }
+{ "content": [{ "type": "text", "text": "contact with id \"abc123\" not found" }], "isError": true }
 ```
 
 ## kit.validationError()
@@ -155,10 +155,10 @@ Write tools **must** use `kit.result(kit.created(...))` (or `updated`/`deleted`)
 
 ### KitResultFragment type
 
-`KitResultFragment` is exported from `@kitstack/sdk` for custom operations beyond create/update/delete:
+`KitResultFragment` is exported from `@kitstackco/sdk` for custom operations beyond create/update/delete:
 
 ```ts
-import { KitResultFragment } from "@kitstack/sdk";
+import { KitResultFragment } from "@kitstackco/sdk";
 ```
 
 ## KitToolResult type

@@ -110,10 +110,11 @@ npx kitstack publish
 This uploads your build artifacts (server bundle, views, shell) to the KitStack platform. You'll see:
 
 ```
-  Publishing "CRM Kit" (crm@1.0.0)...
-  12 tools, 5 views
-  Uploaded.
-  Kit ID: crm — Status: in review
+  ✓ Submitted for review.
+    Kit ID: crm
+    Version: 1.0.0
+    Status: in review
+  You'll be notified when the review is complete.
 ```
 
 
@@ -141,20 +142,20 @@ npx kitstack serve
 
 | Environment variable | Description | Default |
 |---------------------|-------------|---------|
-| `KITSTACK_TRANSPORT` | MCP transport type (`stdio` or `sse`) | `stdio` |
-| `KITSTACK_PORT` | Port number for SSE transport | `3001` |
+| `KITSTACK_TRANSPORT` | MCP transport type (`stdio` or `http`) | `stdio` |
+| `KITSTACK_PORT` | Port number for HTTP transport | `3001` |
 | `KITSTACK_DB_URL` | LibSQL database URL | — |
 | `KITSTACK_DB_TOKEN` | LibSQL auth token (for remote databases) | — |
 
-```bash filename="Example: SSE transport with remote Turso database"
-KITSTACK_TRANSPORT=sse \
+```bash filename="Example: HTTP transport with remote Turso database"
+KITSTACK_TRANSPORT=http \
 KITSTACK_PORT=4000 \
 KITSTACK_DB_URL=libsql://my-db.turso.io \
 KITSTACK_DB_TOKEN=eyJ... \
 npx kitstack serve
 ```
 
-Under the hood, `kitstack serve` uses `createProtocolHandler` paired with a `localAdapter`. For advanced setups (custom transports, embedding in existing servers), you can import `createProtocolHandler` directly from `@kitstack/sdk` and pair it with your own adapter.
+Under the hood, `kitstack serve` uses `createProtocolHandler` paired with a `localAdapter`. For advanced setups (custom transports, embedding in existing servers), you can import `createProtocolHandler` directly from `@kitstackco/sdk` and pair it with your own adapter.
 
 ### Security defaults for kit Lambdas
 

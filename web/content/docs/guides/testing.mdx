@@ -15,7 +15,7 @@ This guide uses [Vitest](https://vitest.dev) — the test runner scaffolded by `
 
 ```ts filename="test/tools.test.ts"
 import { describe, it, expect, beforeAll, afterEach, afterAll } from "vitest";
-import { createTestKit } from "@kitstack/sdk/testing";
+import { createTestKit } from "@kitstackco/sdk/testing";
 import kit from "../kit.config";
 
 describe("expense tools", () => {
@@ -229,7 +229,7 @@ it("loads raw expense data", async () => {
 Bad migration SQL is caught when `createTestKit()` is called:
 
 ```ts filename="test/migrations.test.ts"
-import { MigrationError, defineKit } from "@kitstack/sdk";
+import { MigrationError, defineKit } from "@kitstackco/sdk";
 
 it("rejects invalid migration SQL", async () => {
   const badKit = defineKit({

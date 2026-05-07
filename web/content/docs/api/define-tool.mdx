@@ -68,7 +68,7 @@ When `load` is provided, the returned object has a typed `.load()` method that v
 ### Handler-only tool
 
 ```ts filename="src/tools/add-contact.ts"
-import { defineTool, kit } from "@kitstack/sdk";
+import { defineTool, kit } from "@kitstackco/sdk";
 import { z } from "zod";
 import { contacts } from "../schema";
 import { nanoid } from "nanoid";
@@ -97,7 +97,7 @@ export const addContact = defineTool({
 ### Tool with load and handler
 
 ```ts filename="src/tools/list-contacts.ts"
-import { defineTool, kit } from "@kitstack/sdk";
+import { defineTool, kit } from "@kitstackco/sdk";
 import { z } from "zod";
 import { contacts } from "../schema";
 

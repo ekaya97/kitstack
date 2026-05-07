@@ -15,7 +15,7 @@ import {
   MigrationError,
   SchemaError,
   AuthError,
-} from "@kitstack/sdk";
+} from "@kitstackco/sdk";
 ```
 
 ## Two error channels
@@ -114,7 +114,7 @@ CLI authentication failures (e.g., expired token, network error during login).
 ### In build scripts
 
 ```ts
-import { KitStackError } from "@kitstack/sdk";
+import { KitStackError } from "@kitstackco/sdk";
 
 try {
   await buildKit(kitRoot);
@@ -131,7 +131,7 @@ try {
 ### In tests
 
 ```ts
-import { MigrationError, ToolValidationError } from "@kitstack/sdk";
+import { MigrationError, ToolValidationError } from "@kitstackco/sdk";
 
 it("rejects invalid SQL", async () => {
   await expect(createTestKit(badKit)).rejects.toThrow(MigrationError);

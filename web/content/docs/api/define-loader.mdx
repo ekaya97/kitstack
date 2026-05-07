@@ -37,7 +37,7 @@ The same function, typed. The return type `T` flows through to [`defineView()`](
 ### Basic loader
 
 ```ts filename="src/views/dashboard/loader.ts"
-import { defineLoader } from "@kitstack/sdk";
+import { defineLoader } from "@kitstackco/sdk";
 import { items } from "../../schema";
 import { count } from "drizzle-orm";
 
@@ -51,7 +51,7 @@ export const loader = defineLoader(async (db, ctx) => {
 ### Composing tool load functions
 
 ```ts filename="src/views/pipeline/loader.ts"
-import { defineLoader } from "@kitstack/sdk";
+import { defineLoader } from "@kitstackco/sdk";
 import { listContacts } from "../../tools/list-contacts";
 import { listDeals } from "../../tools/list-deals";
 
@@ -69,7 +69,7 @@ export const loader = defineLoader(async (db, ctx) => {
 Extract the return type of a loader for use in component props:
 
 ```ts
-import type { LoaderData } from "@kitstack/sdk";
+import type { LoaderData } from "@kitstackco/sdk";
 import type { loader } from "./loader";
 
 type Props = { data: LoaderData<typeof loader> };
@@ -84,7 +84,7 @@ export function PipelineView({ data }: Props) {
 General-purpose type helper for extracting async return types:
 
 ```ts
-import type { Infer } from "@kitstack/sdk";
+import type { Infer } from "@kitstackco/sdk";
 import { loadContacts } from "./tools/list-contacts";
 
 type ContactData = Infer<typeof loadContacts>;

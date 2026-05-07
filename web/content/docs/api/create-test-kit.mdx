@@ -8,7 +8,7 @@ description: API reference for createTestKit() — spin up an in-memory database
 Creates a test harness with an in-memory SQLite database, runs your kit's migrations, and returns methods for calling tools and loading views.
 
 ```ts
-import { createTestKit } from "@kitstack/sdk/testing";
+import { createTestKit } from "@kitstackco/sdk/testing";
 ```
 
 ## Signature
@@ -99,7 +99,7 @@ Direct Drizzle database access for assertions.
 
 ```ts filename="test/tools.test.ts"
 import { describe, it, expect, beforeAll, afterEach, afterAll } from "vitest";
-import { createTestKit } from "@kitstack/sdk/testing";
+import { createTestKit } from "@kitstackco/sdk/testing";
 import kit from "../kit.config";
 import { contacts } from "../src/schema";
 
@@ -159,7 +159,7 @@ expect(data[0].name).toBe("Alice");
 ### Testing migration errors
 
 ```ts filename="test/migrations.test.ts"
-import { MigrationError } from "@kitstack/sdk";
+import { MigrationError } from "@kitstackco/sdk";
 
 await expect(createTestKit(badKit)).rejects.toThrow(MigrationError);
 ```

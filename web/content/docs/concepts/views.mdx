@@ -28,10 +28,8 @@ There is no second round-trip. The data and the shell arrive together in a singl
 
 A view has three files: a definition, a loader, and a React component.
 
-### The definition
-
 ```ts filename="src/views/contacts/index.ts"
-import { defineView } from "@kitstack/sdk";
+import { defineView } from "@kitstackco/sdk";
 import { loader } from "./loader";
 import { ContactsView } from "./View";
 
@@ -55,89 +53,11 @@ export default defineView({
 | `height` | Optional height in pixels for the iframe. |
 | `permissions` | Optional capabilities like `{ clipboardWrite: true }`. |
 
-<Warning>
-View slugs must be `kebab-case` (e.g., `contact-detail`, not `contact_detail`). The regex is `/^[a-z][a-z0-9]*(?:-[a-z0-9]+)*$/`.
-</Warning>
+## Stateful data flow
 
-### The loader
+Every view component receives `data` as a prop — a snapshot from the initial tool call. Layer `useKit()` on top for live state — it auto-reloads from the loader on mount, so page refreshes always converge on the current database state.
 
-Loaders run on the server and return typed data for the component.
-
-```ts filename="src/views/contacts/loader.ts"
-import { defineLoader } from "@kitstack/sdk";
-import { listContacts } from "../../tools/list-contacts";
-
-export const loader = defineLoader(async (db, ctx) => {
-  return listContacts.load(db, { limit: 100 }, ctx);
-});
-```
-
-Loaders receive the same `db` and `ctx` as tool handlers. The key pattern is **reusing tool `load` functions** — the same query powers both the tool's text response and the view's data.
-
-### The component
-
-```tsx filename="src/views/contacts/View.tsx"
-import type { LoaderData } from "@kitstack/sdk";
-import type { loader } from "./loader";
-
-type Props = { data: LoaderData<typeof loader> };
-
-export function ContactsView({ data }: Props) {
-  return (
-    <div className="p-4">
-      <h2 className="text-lg font-bold">Contacts</h2>
-      <ul>
-        {data.map((contact) => (
-          <li key={contact.id}>{contact.name} — {contact.company}</li>
-        ))}
-      </ul>
-    </div>
-  );
-}
-```
-
-The `LoaderData` type helper extracts the return type of your loader, giving you full type safety from database query to React prop.
-
-## Stateful views
-
-KitStack views are stateful. They aren't just read-only displays — they can collect user input, call tools to persist changes, and refresh their own data. This means you can build forms, editable tables, interactive dashboards — anything where the user acts and the view reflects the result.
-
-### How view data flows
-
-Every view component receives `data` as a prop — this is the snapshot from the initial tool call. On top of that, `useKit()` auto-reloads fresh data from the loader on mount, so page refreshes always converge on the current database state.
-
-The canonical pattern layers both:
-
-```tsx filename="src/views/pipeline/View.tsx"
-import { useKit, useTool } from "@kitstack/sdk/view";
-import type { Infer } from "@kitstack/sdk";
-import type { loader } from "./loader";
-
-type Data = Infer<typeof loader>;
-
-export function PipelineView({ data: initialData }: { data: Data }) {
-  const { data: liveData, loading, reload } = useKit<Data>();
-  const updateDeal = useTool("update_deal", { invalidate: reload });
-
-  // Priority: reloaded (server) → initial (snapshot from tool call)
-  const deals = liveData ?? initialData;
-
-  return (
-    <div>
-      {deals.map((deal) => (
-        <div key={deal.id}>
-          {deal.name} — {deal.stage}
-          <button onClick={() => updateDeal.call({ dealId: deal.id, stage: "won" })}>
-            Mark won
-          </button>
-        </div>
-      ))}
-    </div>
-  );
-}
-```
-
-The flow is:
+The pattern:
 
 1. Component mounts with `initialData` from the tool result (instant first paint)
 2. `useKit` fires `reload()` on mount → fetches fresh data from the loader
@@ -146,137 +66,15 @@ The flow is:
 
 The data lives in the database, not in ephemeral component state. Page refreshes always show the latest state because `useKit` reloads on mount.
 
-### useKit()
+## View hooks
 
-| Property | Type | Description |
-|----------|------|-------------|
-| `data` | `TData` | Current view data. Initialized from the loader, updated by `reload()`. |
-| `loading` | `boolean` | `true` while `reload()` is in progress. |
-| `reload()` | `() => Promise<void>` | Re-run the loader and update `data`. |
-| `callTool(name, params?)` | `(string, object?) => Promise<string>` | Call any tool in the kit. |
-| `capabilities` | `object` | Available capabilities (`downloadFile`, `openLinks`, `clipboardWrite`). |
+| Hook | Purpose |
+|------|---------|
+| `useKit<T>()` | Core hook. Returns `data`, `loading`, `reload`, `callTool`, `capabilities`. Auto-reloads on mount. |
+| `useTool(name, opts?)` | Wraps a single tool call with `loading`, `error`, `reset()`. The `invalidate` option auto-calls reload after success. |
+| `useFile()` | File download, import, and clipboard operations (`download`, `open`, `copy`). |
 
-By default, `useKit` reloads data on mount. This means page refreshes always show the latest database state — even if the tool result that originally rendered the view is cached. Opt out with `useKit(\{ reloadOnMount: false \})` for static views.
-
-### useTool()
-
-For fire-and-forget mutations with built-in loading and error state:
-
-```tsx filename="src/views/contacts/View.tsx"
-import { useTool, useKit } from "@kitstack/sdk/view";
-
-export function ContactsView() {
-  const { data, reload } = useKit<Contact[]>();
-  const deleteTool = useTool("delete_contact", { invalidate: reload });
-
-  return (
-    <ul>
-      {data.map((contact) => (
-        <li key={contact.id}>
-          {contact.name}
-          <button
-            onClick={() => deleteTool.call({ contactId: contact.id })}
-            disabled={deleteTool.loading}
-          >
-            {deleteTool.loading ? "Deleting..." : "Delete"}
-          </button>
-        </li>
-      ))}
-      {deleteTool.error && <p className="text-red-500">{deleteTool.error}</p>}
-    </ul>
-  );
-}
-```
-
-`useTool` wraps a single tool call with `loading`, `error`, and `reset()` state. The `invalidate` option auto-calls `reload` after a successful mutation.
-
-### useFile()
-
-For file download, import, and clipboard operations:
-
-```tsx
-import { useFile } from "@kitstack/sdk/view";
-
-const { download, open, copy, canDownload, feedback } = useFile();
-
-// Export as CSV
-await download("contacts.csv", "text/csv", csvContent);
-
-// Import a file
-open({ accept: ".csv", onFile: async (text) => { /* parse and save */ } });
-
-// Copy to clipboard
-await copy(someText);
-```
-
-## Developing views
-
-There are two ways to develop views, each suited for a different stage of the workflow.
-
-### DevKit — rapid UI iteration
-
-```bash filename="Terminal"
-npx kitstack dev --views
-```
-
-The DevKit is a local Vite-powered server (default port 5174) that renders your views in a browser. Use it when you're focused on layout, styling, and component logic — the tight edit-save-see loop of frontend development.
-
-The DevKit renders views in a **single iframe**, which is slightly different from production where MCP clients use a double-iframe architecture with a sandbox proxy. This means minor layout or timing differences are possible, but for the vast majority of UI work the DevKit is pixel-accurate and much faster to iterate with.
-
-Features:
-- Sidebar listing all views in your kit
-- Data inspector with editable JSON — modify the data and re-render the component instantly
-- Tool call logger — see what `callTool` and `useTool` fire
-- Viewport sizing controls
-- Placeholder support for views that need context parameters (see below)
-
-### Relay — WYSIWYG with your real LLM client
-
-```bash filename="Terminal"
-npx kitstack dev
-```
-
-The relay connects your local dev server to a public MCP URL. Your LLM client talks to the relay, which forwards requests to your localhost and serves view assets from your local Vite dev server.
-
-Use the relay when you need the **real end-to-end experience**: the actual MCP protocol, the double-iframe sandbox, the `postMessage` handshake, and real LLM-driven tool calls. This is what gets deployed — there's no simulator in between.
-
-The workflow: have the LLM call `kit_view` once to render a view. Then edit `View.tsx`, save, and **refresh the page**. The view modules get hot-replaced on refresh — each reload fetches the latest code from your local Vite. No need to re-invoke the tool, no rebuild, no redeploy.
-
-### When to use which
-
-| | DevKit (`--views`) | Relay (default) |
-|---|---|---|
-| **Best for** | Rapid UI iteration, styling, layout | Fine-tuning, troubleshooting, integration testing |
-| **Rendering** | Single iframe | Double iframe (same as production) |
-| **Data source** | Loader against local DB, editable in inspector | Real LLM tool calls against local DB |
-| **View updates** | Vite HMR (instant) | Refresh the page to get updated modules |
-| **Requires** | Nothing — just a browser | `kitstack login` + an MCP client |
-
-In practice, you'll bounce between both: DevKit for fast UI work, relay for verifying the full flow.
-
-## View placeholders
-
-Views that depend on context parameters (like a contact ID from a previous tool call) can define `placeholder` data for the DevKit:
-
-```ts filename="src/views/contact-detail/index.ts"
-export default defineView({
-  slug: "contact-detail",
-  name: "Contact Detail",
-  description: "to view detailed contact info with deals and activity",
-  loader,
-  component: ContactDetailView,
-  placeholder: {
-    contact: { id: "c1", name: "Jane Doe", company: "Acme Corp" },
-    deals: [{ id: "d1", name: "Brand Refresh", value: 18000, stage: "proposal" }],
-  },
-});
-```
-
-Placeholders are typed against the loader's return type — TypeScript errors if the shape doesn't match. When the loader returns empty or null data, the DevKit falls back to the placeholder and tags it in the data inspector.
-
-<Note>
-Placeholders are stripped from the production build. They only appear in the DevKit. Changes to placeholders require restarting `kitstack dev`.
-</Note>
+See the [Defining views guide](/docs/guides/defining-views) for practical examples of each hook.
 
 ## The MCP Apps protocol
 
@@ -287,30 +85,30 @@ Views use the MCP Apps extension to render inside the LLM client. The SDK handle
 3. The shell and proxy exchange `postMessage` events: `sandbox-proxy-ready`, `sandbox-resource-ready`, `ui/initialize`, `tool-result`.
 4. Your React component mounts after the handshake completes and data is delivered.
 
-## React version
-
-<Warning>
-KitStack deploys React and ReactDOM as shared vendor modules through its CDN. Your kit **must** use **React 19** (`react: "^19.0.0"`, `react-dom: "^19.0.0"`) as dev dependencies. Mismatched versions will cause runtime errors because your view code and the shared vendor bundle expect the same React internals.
-</Warning>
-
 ## View bundling
 
 During `kitstack build`, views are bundled with Vite into three layers:
 
-- **vendor.js** — React, ReactDOM, scheduler. Served from the KitStack CDN and shared across all kits — not bundled into your kit.
-- **shared.js** — SDK hooks and shared components from `@kitstack/sdk/view`. Also served from the CDN — not bundled into your kit.
+- **vendor.js** — React, ReactDOM, scheduler. Served from the KitStack CDN and shared across all kits.
+- **shared.js** — SDK hooks and shared components from `@kitstackco/sdk/view`. Also served from the CDN.
 - **`[kitId]/[slug].js`** — your individual view entry modules. This is the only code that ships with your kit.
 
 Tailwind CSS is compiled per-kit from `src/views/styles.css` using your kit's `tailwind.config.ts`.
 
-### External component libraries
+## React version
 
-You can use third-party component libraries (shadcn, Radix, Headless UI, etc.) in your views — they get bundled into your per-kit view module alongside your own code. React and ReactDOM are **not** included in your bundle (they're loaded once from the shared vendor.js), but everything else ships with your view entry file.
+<Warning>
+KitStack deploys React and ReactDOM as shared vendor modules through its CDN. Your kit **must** use **React 19** (`react: "^19.0.0"`, `react-dom: "^19.0.0"`) as dev dependencies. Mismatched versions will cause runtime errors.
+</Warning>
 
-Keep view modules lightweight. The build emits a warning when a single view module exceeds **500 KB**. During development, the relay forwards view modules over a WebSocket connection with a **128 KB message limit** — a view that exceeds this will fail to load in relay mode. Heavy libraries like MUI or Ant Design can easily push a single view past both thresholds. Prefer Tailwind CSS with small, focused component libraries (Radix primitives, Headless UI) over full design systems.
+## External component libraries
+
+You can use third-party component libraries (shadcn, Radix, Headless UI, etc.) — they get bundled into your per-kit view module. React and ReactDOM are **not** included (loaded from shared vendor.js), but everything else ships with your view entry file.
+
+Keep view modules lightweight. The build warns when a single module exceeds **500 KB**. The relay has a **128 KB message limit** in dev mode — heavy libraries like MUI or Ant Design can easily exceed both. Prefer Tailwind with small component libraries.
 
 ## Next steps
 
-- [Defining views guide](/docs/guides/defining-views) — step-by-step with styling and hooks
+- [Defining views guide](/docs/guides/defining-views) — step-by-step with styling, hooks, DevKit, and placeholders
 - [`defineView()` API reference](/docs/api/define-view) — full parameter documentation
 - [`defineLoader()` API reference](/docs/api/define-loader) — loader type helpers

@@ -8,7 +8,7 @@ description: Step-by-step guide to creating views — loaders, React components,
 This guide walks through creating a view from scratch — the loader, the React component, styling with Tailwind, wiring up interactivity with hooks, and live-editing during development.
 
 <Note>
-This guide assumes you've completed the [Getting Started](/docs/getting-started) tutorial and understand [how views work](/docs/concepts/views).
+This guide assumes you've completed the [Getting Started](/docs/getting-started) tutorial. See [How views work](/docs/concepts/views) for the architectural overview.
 </Note>
 
 ## Creating a view
@@ -21,7 +21,7 @@ Each view lives in its own directory under `src/views/` with three files.
 The loader runs on the server and fetches data for the component. Reuse your tool's `load` function when possible:
 
 ```ts filename="src/views/expenses/loader.ts"
-import { defineLoader } from "@kitstack/sdk";
+import { defineLoader } from "@kitstackco/sdk";
 import { listExpenses } from "../../tools/list-expenses";
 
 export const loader = defineLoader(async (db, ctx) => {
@@ -36,7 +36,7 @@ The loader can compose multiple tool queries, compute derived values, and shape 
 ### Build the React component
 
 ```tsx filename="src/views/expenses/View.tsx"
-import type { LoaderData } from "@kitstack/sdk";
+import type { LoaderData } from "@kitstackco/sdk";
 import type { loader } from "./loader";
 
 type Props = { data: LoaderData<typeof loader> };
@@ -78,7 +78,7 @@ export function ExpensesView({ data }: Props) {
 ### Register the view
 
 ```ts filename="src/views/expenses/index.ts"
-import { defineView } from "@kitstack/sdk";
+import { defineView } from "@kitstackco/sdk";
 import { loader } from "./loader";
 import { ExpensesView } from "./View";
 
@@ -119,7 +119,7 @@ During `kitstack build`, Tailwind processes this file using your kit's config an
 The KitStack SDK provides a Tailwind preset with sensible defaults. Import it in your config:
 
 ```ts filename="tailwind.config.ts"
-import kitstack from "@kitstack/sdk/tailwind-preset";
+import kitstack from "@kitstackco/sdk/tailwind-preset";
 
 export default {
   presets: [kitstack],
@@ -134,8 +134,8 @@ KitStack views are stateful. They can collect user input, persist changes via to
 Every component receives `data` as a prop (the snapshot from the tool call). Layer `useKit()` on top for live state — it auto-reloads from the loader on mount, so page refreshes always show current database state.
 
 ```tsx filename="src/views/expenses/View.tsx"
-import { useKit, useTool } from "@kitstack/sdk/view";
-import type { LoaderData } from "@kitstack/sdk";
+import { useKit, useTool } from "@kitstackco/sdk/view";
+import type { LoaderData } from "@kitstackco/sdk";
 import type { loader } from "./loader";
 
 type Data = LoaderData<typeof loader>;
