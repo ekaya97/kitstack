@@ -1,0 +1,427 @@
+<!DOCTYPE html>
+<html lang="{{LANG}}">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>{{INVOICE_TITLE}} {{INVOICE_NUMBER}}</title>
+  <style>
+    /* ── KitStack Design Tokens ──────────────────────────── */
+    :root {
+      --ks-paper: #faf7f1;
+      --ks-ink: #171512;
+      --ks-ink2: #2a251f;
+      --ks-accent: #d65a2f;
+      --ks-accent-deep: #a8411e;
+      --ks-muted: #6b6357;
+      --ks-faint: #b8ae9b;
+      --ks-hair: #d9ceb8;
+      --ks-paper-warm: #f4ede0;
+      --ks-paper-deep: #ece3d1;
+
+      --font-serif: 'Georgia', 'Times New Roman', serif;
+      --font-sans: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+      --font-mono: 'JetBrains Mono', 'Fira Code', monospace;
+    }
+
+    /* ── Reset & Base ────────────────────────────────────── */
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+    body {
+      font-family: var(--font-sans);
+      font-size: 13px;
+      line-height: 1.5;
+      color: var(--ks-ink);
+      background: var(--ks-paper);
+    }
+
+    /* ── Invoice Container ───────────────────────────────── */
+    .invoice {
+      max-width: 800px;
+      margin: 0 auto;
+      padding: 48px;
+      background: white;
+    }
+
+    /* ── Header ──────────────────────────────────────────── */
+    .invoice-header {
+      display: flex;
+      justify-content: space-between;
+      align-items: flex-start;
+      margin-bottom: 48px;
+      padding-bottom: 24px;
+      border-bottom: 2px solid var(--ks-ink);
+    }
+
+    .sender-block h1 {
+      font-family: var(--font-serif);
+      font-size: 24px;
+      font-weight: 400;
+      color: var(--ks-ink);
+      letter-spacing: -0.01em;
+      margin-bottom: 4px;
+    }
+
+    .sender-block p {
+      color: var(--ks-muted);
+      font-size: 12px;
+      line-height: 1.6;
+    }
+
+    .invoice-meta {
+      text-align: right;
+    }
+
+    .invoice-meta .invoice-label {
+      font-family: var(--font-serif);
+      font-size: 28px;
+      font-weight: 400;
+      color: var(--ks-ink);
+      letter-spacing: -0.01em;
+      margin-bottom: 12px;
+    }
+
+    .invoice-meta table {
+      margin-left: auto;
+    }
+
+    .invoice-meta td {
+      padding: 2px 0;
+      font-size: 12px;
+    }
+
+    .invoice-meta td:first-child {
+      color: var(--ks-muted);
+      padding-right: 16px;
+      text-transform: uppercase;
+      font-size: 10px;
+      letter-spacing: 0.05em;
+    }
+
+    .invoice-meta td:last-child {
+      text-align: right;
+      font-weight: 500;
+    }
+
+    /* ── Addresses ────────────────────────────────────────── */
+    .addresses {
+      display: flex;
+      gap: 48px;
+      margin-bottom: 40px;
+    }
+
+    .address-block {
+      flex: 1;
+    }
+
+    .address-label {
+      font-size: 10px;
+      text-transform: uppercase;
+      letter-spacing: 0.08em;
+      color: var(--ks-muted);
+      margin-bottom: 6px;
+    }
+
+    .address-block .name {
+      font-weight: 600;
+      font-size: 14px;
+      margin-bottom: 2px;
+    }
+
+    .address-block p {
+      font-size: 12px;
+      color: var(--ks-ink2);
+      line-height: 1.6;
+    }
+
+    /* ── Line Items Table ────────────────────────────────── */
+    .items-table {
+      width: 100%;
+      border-collapse: collapse;
+      margin-bottom: 24px;
+    }
+
+    .items-table thead th {
+      font-size: 10px;
+      text-transform: uppercase;
+      letter-spacing: 0.08em;
+      color: var(--ks-muted);
+      padding: 10px 0;
+      border-bottom: 1px solid var(--ks-hair);
+      text-align: left;
+    }
+
+    .items-table thead th.align-right {
+      text-align: right;
+    }
+
+    .items-table tbody td {
+      padding: 12px 0;
+      font-size: 13px;
+      border-bottom: 1px solid var(--ks-paper-warm);
+      vertical-align: top;
+    }
+
+    .items-table tbody td.align-right {
+      text-align: right;
+      font-variant-numeric: tabular-nums;
+    }
+
+    .items-table .item-description {
+      font-weight: 500;
+    }
+
+    .items-table .item-detail {
+      font-size: 11px;
+      color: var(--ks-muted);
+      margin-top: 2px;
+    }
+
+    /* ── Totals ──────────────────────────────────────────── */
+    .totals {
+      display: flex;
+      justify-content: flex-end;
+      margin-bottom: 48px;
+    }
+
+    .totals-table {
+      width: 280px;
+      border-collapse: collapse;
+    }
+
+    .totals-table td {
+      padding: 6px 0;
+      font-size: 13px;
+    }
+
+    .totals-table td:first-child {
+      color: var(--ks-muted);
+    }
+
+    .totals-table td:last-child {
+      text-align: right;
+      font-variant-numeric: tabular-nums;
+    }
+
+    .totals-table .subtotal-row td {
+      padding-top: 12px;
+    }
+
+    .totals-table .total-row td {
+      padding-top: 12px;
+      border-top: 2px solid var(--ks-ink);
+      font-weight: 600;
+      font-size: 16px;
+      color: var(--ks-ink);
+    }
+
+    .totals-table .tax-row td {
+      font-size: 12px;
+    }
+
+    /* ── Payment Details ─────────────────────────────────── */
+    .payment-section {
+      display: flex;
+      gap: 48px;
+      padding: 24px;
+      background: var(--ks-paper);
+      border-radius: 8px;
+      margin-bottom: 40px;
+    }
+
+    .payment-block {
+      flex: 1;
+    }
+
+    .payment-block h3 {
+      font-size: 10px;
+      text-transform: uppercase;
+      letter-spacing: 0.08em;
+      color: var(--ks-muted);
+      margin-bottom: 8px;
+    }
+
+    .payment-block p {
+      font-size: 12px;
+      line-height: 1.7;
+      color: var(--ks-ink2);
+    }
+
+    .payment-block .highlight {
+      font-weight: 600;
+      color: var(--ks-ink);
+    }
+
+    /* ── Footer ──────────────────────────────────────────── */
+    .invoice-footer {
+      padding-top: 24px;
+      border-top: 1px solid var(--ks-hair);
+      display: flex;
+      justify-content: space-between;
+      align-items: flex-start;
+    }
+
+    .footer-legal {
+      font-size: 10px;
+      color: var(--ks-faint);
+      line-height: 1.6;
+      max-width: 400px;
+    }
+
+    .footer-thanks {
+      font-family: var(--font-serif);
+      font-size: 14px;
+      color: var(--ks-muted);
+      font-style: italic;
+    }
+
+    /* ── Accent Bar ──────────────────────────────────────── */
+    .accent-bar {
+      height: 3px;
+      background: var(--ks-accent);
+      margin-bottom: 0;
+    }
+
+    /* ── Status Badge ────────────────────────────────────── */
+    .status-badge {
+      display: inline-block;
+      font-size: 10px;
+      text-transform: uppercase;
+      letter-spacing: 0.08em;
+      padding: 3px 10px;
+      border-radius: 100px;
+      font-weight: 600;
+    }
+
+    .status-badge.draft {
+      background: var(--ks-paper-warm);
+      color: var(--ks-muted);
+    }
+
+    .status-badge.due {
+      background: var(--ks-accent-deep);
+      color: white;
+    }
+
+    .status-badge.paid {
+      background: #2d6a4f;
+      color: white;
+    }
+
+    /* ── Print Styles ────────────────────────────────────── */
+    @media print {
+      body { background: white; }
+      .invoice {
+        max-width: 100%;
+        padding: 0;
+        margin: 0;
+      }
+      .accent-bar { print-color-adjust: exact; -webkit-print-color-adjust: exact; }
+      .payment-section { print-color-adjust: exact; -webkit-print-color-adjust: exact; }
+      .status-badge { print-color-adjust: exact; -webkit-print-color-adjust: exact; }
+    }
+  </style>
+</head>
+<body>
+  <div class="accent-bar"></div>
+  <div class="invoice">
+
+    <!-- Header -->
+    <div class="invoice-header">
+      <div class="sender-block">
+        <h1>{{SENDER_NAME}}</h1>
+        <p>
+          {{SENDER_ADDRESS_LINE1}}<br>
+          {{SENDER_ADDRESS_LINE2}}<br>
+          {{SENDER_CONTACT}}
+        </p>
+      </div>
+      <div class="invoice-meta">
+        <div class="invoice-label">{{INVOICE_TITLE}}</div>
+        <table>
+          <tr><td>{{LABEL_INVOICE_NR}}</td><td>{{INVOICE_NUMBER}}</td></tr>
+          <tr><td>{{LABEL_DATE}}</td><td>{{INVOICE_DATE}}</td></tr>
+          <tr><td>{{LABEL_DUE}}</td><td>{{DUE_DATE}}</td></tr>
+          <tr><td>{{LABEL_SERVICE_DATE}}</td><td>{{SERVICE_DATE}}</td></tr>
+        </table>
+      </div>
+    </div>
+
+    <!-- Addresses -->
+    <div class="addresses">
+      <div class="address-block">
+        <div class="address-label">{{LABEL_BILL_TO}}</div>
+        <div class="name">{{CLIENT_NAME}}</div>
+        <p>
+          {{CLIENT_ADDRESS_LINE1}}<br>
+          {{CLIENT_ADDRESS_LINE2}}
+        </p>
+      </div>
+      <div class="address-block">
+        <div class="address-label">{{LABEL_FROM}}</div>
+        <div class="name">{{SENDER_NAME}}</div>
+        <p>
+          {{SENDER_ADDRESS_LINE1}}<br>
+          {{SENDER_ADDRESS_LINE2}}
+        </p>
+      </div>
+    </div>
+
+    <!-- Line Items -->
+    <table class="items-table">
+      <thead>
+        <tr>
+          <th style="width: 50%">{{LABEL_DESCRIPTION}}</th>
+          <th class="align-right" style="width: 12%">{{LABEL_QTY}}</th>
+          <th class="align-right" style="width: 18%">{{LABEL_UNIT_PRICE}}</th>
+          <th class="align-right" style="width: 20%">{{LABEL_AMOUNT}}</th>
+        </tr>
+      </thead>
+      <tbody>
+        {{LINE_ITEMS}}
+      </tbody>
+    </table>
+
+    <!-- Totals -->
+    <div class="totals">
+      <table class="totals-table">
+        <tr class="subtotal-row">
+          <td>{{LABEL_SUBTOTAL}}</td>
+          <td>{{SUBTOTAL}}</td>
+        </tr>
+        {{TAX_ROWS}}
+        <tr class="total-row">
+          <td>{{LABEL_TOTAL}}</td>
+          <td>{{TOTAL}}</td>
+        </tr>
+      </table>
+    </div>
+
+    <!-- Payment Details -->
+    <div class="payment-section">
+      <div class="payment-block">
+        <h3>{{LABEL_PAYMENT_DETAILS}}</h3>
+        <p>
+          {{BANK_DETAILS}}
+        </p>
+      </div>
+      <div class="payment-block">
+        <h3>{{LABEL_PAYMENT_TERMS}}</h3>
+        <p>{{PAYMENT_TERMS}}</p>
+      </div>
+    </div>
+
+    <!-- Notes -->
+    {{NOTES_SECTION}}
+
+    <!-- Footer -->
+    <div class="invoice-footer">
+      <div class="footer-legal">
+        {{LEGAL_NOTICE}}
+        <br>{{TAX_ID_LINE}}
+      </div>
+      <div class="footer-thanks">{{THANK_YOU}}</div>
+    </div>
+
+  </div>
+</body>
+</html>
