@@ -8,7 +8,7 @@ import { PipelineKanban } from "@/components/mcp-apps/pipeline-kanban";
 import { ExpenseTable } from "@/components/mcp-apps/expense-table";
 import { SequenceBuilder } from "@/components/mcp-apps/sequence-builder";
 import { ActionTracker } from "@/components/mcp-apps/action-tracker";
-import { getAllKitCards } from "@/services/kit.service";
+import { getKitCardsForUser } from "@/services/kit.service";
 import { auth } from "@/lib/auth";
 import { headers } from "next/headers";
 import { db } from "@/lib/db";
@@ -24,22 +24,23 @@ const demos: Record<string, React.ReactNode> = {
 };
 
 export default async function KitsPage() {
-  const kits = await getAllKitCards();
+  let userId: string | null = null;
+  try {
+    const session = await auth.api.getSession({ headers: await headers() });
+    if (session) userId = session.user.id;
+  } catch {}
+
+  const kits = await getKitCardsForUser(userId);
   const totalReplacesValue = kits.reduce((sum, k) => sum + k.replacesValue, 0);
 
   // Get user's kit activation statuses
   let kitStatuses = new Map<string, string>();
-  try {
-    const session = await auth.api.getSession({ headers: await headers() });
-    if (session) {
-      const activations = await db
-        .select({ slug: kitActivations.kitSlug, status: kitActivations.status })
-        .from(kitActivations)
-        .where(eq(kitActivations.userId, session.user.id));
-      kitStatuses = new Map(activations.map((a) => [a.slug, a.status]));
-    }
-  } catch {
-    // Not logged in — no activated kits
+  if (userId) {
+    const activations = await db
+      .select({ slug: kitActivations.kitSlug, status: kitActivations.status })
+      .from(kitActivations)
+      .where(eq(kitActivations.userId, userId));
+    kitStatuses = new Map(activations.map((a) => [a.slug, a.status]));
   }
   return (
     <div className="bg-ks-paper min-h-screen flex flex-col">

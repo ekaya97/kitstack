@@ -609,6 +609,15 @@ function DeveloperTab() {
                     </div>
                   </div>
                 )}
+
+                <div className="mt-3 pt-3 border-t border-ks-hair flex justify-end">
+                  <Link
+                    href={`/kits/${kit.kitId}-kit`}
+                    className="font-sans text-[12px] text-ks-accent hover:underline"
+                  >
+                    View kit &rarr;
+                  </Link>
+                </div>
               </div>
             ))}
           </div>

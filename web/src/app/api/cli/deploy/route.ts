@@ -4,7 +4,7 @@ import { eq, and } from "drizzle-orm";
 import { Resource } from "sst";
 import { db } from "@/lib/db";
 import { session as sessionTable, user as userTable } from "@/db/auth-schema";
-import { kitRegistryTable, kitViewsTable } from "@/db/schema";
+import { kitRegistryTable, kitViewsTable, kits } from "@/db/schema";
 import { log } from "@/lib/logger";
 import { nanoid } from "nanoid";
 import {
@@ -177,6 +177,32 @@ export async function POST(request: NextRequest) {
         },
       });
     }
+
+    // Seed kits catalog (so the kit appears on /kits/[slug] for activation)
+    await db.insert(kits).values({
+      id: nanoid(),
+      slug: kitSlug,
+      name: manifest.kitName,
+      category: "Operations" as const,
+      description: manifest.kitDescription ?? manifest.kitName,
+      replaces: "",
+      savingsPerMonth: 0,
+      mcpTools: manifest.tools,
+      mcpApps: manifest.views.map((v) => ({ name: v.name, description: v.description })),
+      tagline: manifest.kitDescription ?? null,
+      author: auth.userId,
+      status: "live" as const,
+    }).onConflictDoUpdate({
+      target: kits.slug,
+      set: {
+        name: manifest.kitName,
+        description: manifest.kitDescription ?? manifest.kitName,
+        mcpTools: manifest.tools,
+        mcpApps: manifest.views.map((v) => ({ name: v.name, description: v.description })),
+        tagline: manifest.kitDescription ?? null,
+        updatedAt: new Date(),
+      },
+    });
 
     log.info("Registry seeded", { kitId, tools: manifest.tools.length, views: manifest.views.length });
 
