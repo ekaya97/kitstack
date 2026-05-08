@@ -56,6 +56,9 @@ export interface KitServerAdapter {
 
   /** Get the HTML shell for rendering embedded views. */
   getShellHtml(kitId: string): Promise<string>;
+
+  /** Get the CDN URL for kit assets (optional, for CSP declarations). */
+  getCdnUrl?(): string;
 }
 
 /**

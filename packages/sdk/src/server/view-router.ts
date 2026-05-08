@@ -85,6 +85,13 @@ async function handleRenderView(
     data: loaderData,
   });
 
+  const cdnUrl = adapter.getCdnUrl?.() || "";
+  const cspDomains = [
+    ...(cdnUrl ? [cdnUrl] : []),
+    "https://fonts.googleapis.com",
+    "https://fonts.gstatic.com",
+  ];
+
   const content: KitToolContentBlock[] = [
     { type: "text", text: dataPayload },
     {
@@ -93,6 +100,15 @@ async function handleRenderView(
         uri: APP_SHELL_URI,
         mimeType: "text/html;profile=mcp-app",
         text: shellHtml,
+        _meta: {
+          ui: {
+            csp: {
+              resourceDomains: cspDomains,
+              connectDomains: cdnUrl ? [cdnUrl] : [],
+            },
+            permissions: { clipboardWrite: {} },
+          },
+        },
       },
     } as any,
   ];

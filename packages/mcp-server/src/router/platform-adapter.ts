@@ -15,6 +15,7 @@ import type {
 import type { KitRegistryItem, UserKitDbItem, KitToolResult } from "./types";
 import { dispatchToolCall } from "./tool-dispatcher";
 import { getKitApps, getKitShellS3Key, readAppResource } from "./app-resources";
+import { kitCdnUrl } from "../config";
 
 const APP_SHELL_URI = "ui://kitstack/app";
 
@@ -131,6 +132,10 @@ export function platformAdapter(deps: PlatformAdapterDeps): KitServerAdapter {
       const shellS3Key = await getKitShellS3Key(kitId);
       const resource = await readAppResource(APP_SHELL_URI, "system", new Set([kitId]), shellS3Key);
       return resource?.text || "";
+    },
+
+    getCdnUrl(): string {
+      return kitCdnUrl();
     },
   };
 }

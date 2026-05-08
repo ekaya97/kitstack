@@ -6,6 +6,23 @@ import { handleKitViewCall } from "./view-router";
 const PROTOCOL_VERSION = "2025-11-25";
 const APP_SHELL_URI = "ui://kitstack/app";
 
+function buildUiMeta(cdnUrl: string) {
+  const domains = [
+    ...(cdnUrl ? [cdnUrl] : []),
+    "https://fonts.googleapis.com",
+    "https://fonts.gstatic.com",
+  ];
+  return {
+    ui: {
+      csp: {
+        resourceDomains: domains,
+        connectDomains: cdnUrl ? [cdnUrl] : [],
+      },
+      permissions: { clipboardWrite: {} },
+    },
+  };
+}
+
 /** Static parts of the kit tool definition (schema never changes). */
 const KIT_INPUT_SCHEMA = {
   type: "object" as const,
@@ -106,11 +123,13 @@ export function createProtocolHandler(options: ProtocolHandlerOptions): Protocol
             const hasViews = kits.some((k) => k.views.length > 0);
             if (!hasViews) return rpcResult(id, { resources: [] });
 
+            const cdnUrl = adapter.getCdnUrl?.() || "";
             return rpcResult(id, {
               resources: [{
                 uri: APP_SHELL_URI,
                 name: "KitStack App",
                 mimeType: "text/html;profile=mcp-app",
+                _meta: buildUiMeta(cdnUrl),
               }],
             });
           }
@@ -133,11 +152,13 @@ export function createProtocolHandler(options: ProtocolHandlerOptions): Protocol
               return rpcError(id, -32603, "Shell HTML not available");
             }
 
+            const readCdnUrl = adapter.getCdnUrl?.() || "";
             return rpcResult(id, {
               contents: [{
                 uri,
                 mimeType: "text/html;profile=mcp-app",
                 text: html,
+                _meta: buildUiMeta(readCdnUrl),
               }],
             });
           }
