@@ -218,8 +218,8 @@ export async function buildKit(kitRoot: string) {
   // Auto-generate a generic Lambda handler that dispatches tools and loaders
   const generatedHandlerPath = resolve(entriesDir, "_handler.ts");
   writeFileSync(generatedHandlerPath, `
-import { createClient } from "@libsql/client";
-import { drizzle } from "drizzle-orm/libsql";
+import { createClient } from "@libsql/client/http";
+import { drizzle } from "drizzle-orm/libsql/web";
 import kit from ${JSON.stringify(configPath)};
 
 interface KitInvocation {
@@ -273,6 +273,7 @@ export const handler = async (event: KitInvocation) => {
       outfile: resolve(outputDir, "kit.mjs"),
       external: [
         "@libsql/client",
+        "@libsql/client/*",
         "drizzle-orm",
         "drizzle-orm/*",
         "zod",

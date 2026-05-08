@@ -101,6 +101,47 @@ export function createProtocolHandler(options: ProtocolHandlerOptions): Protocol
             return rpcResult(id, { tools });
           }
 
+          case "resources/list": {
+            const kits = await adapter.resolveUserKits(userId);
+            const hasViews = kits.some((k) => k.views.length > 0);
+            if (!hasViews) return rpcResult(id, { resources: [] });
+
+            return rpcResult(id, {
+              resources: [{
+                uri: APP_SHELL_URI,
+                name: "KitStack App",
+                mimeType: "text/html;profile=mcp-app",
+              }],
+            });
+          }
+
+          case "resources/read": {
+            const readParams = params as { uri?: string } | undefined;
+            const uri = readParams?.uri;
+            if (uri !== APP_SHELL_URI) {
+              return rpcError(id, -32602, `Unknown resource: ${uri}`);
+            }
+
+            const kits = await adapter.resolveUserKits(userId);
+            const kitWithViews = kits.find((k) => k.views.length > 0);
+            if (!kitWithViews) {
+              return rpcError(id, -32602, "No kits with views activated");
+            }
+
+            const html = await adapter.getShellHtml(kitWithViews.id);
+            if (!html) {
+              return rpcError(id, -32603, "Shell HTML not available");
+            }
+
+            return rpcResult(id, {
+              contents: [{
+                uri,
+                mimeType: "text/html;profile=mcp-app",
+                text: html,
+              }],
+            });
+          }
+
           case "tools/call": {
             const toolParams = params as { name?: string; arguments?: Record<string, unknown> } | undefined;
             const toolName = toolParams?.name;
