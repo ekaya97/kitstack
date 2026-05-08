@@ -1,6 +1,6 @@
 export function AuthorCTA() {
   return (
-    <div className="bg-ks-ink rounded-xl p-7 flex items-center justify-between gap-8">
+    <div className="bg-ks-ink rounded-xl p-7 flex flex-col sm:flex-row sm:items-center justify-between gap-5 sm:gap-8">
       <div>
         <div className="font-serif text-[24px] text-ks-paper tracking-tight">
           Build kits. Earn revenue.

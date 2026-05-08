@@ -10,6 +10,7 @@ import { getAuthorByHandle } from "@/services/author.service";
 import { getAllKitCards } from "@/services/kit.service";
 import { getAllSkillCards } from "@/services/skill.service";
 import { AuthorCTA } from "@/components/shared/author-cta";
+import { ExpandableSkillList } from "@/components/shared/expandable-skill-list";
 
 
 export async function generateMetadata({
@@ -61,10 +62,10 @@ export default async function AuthorProfilePage({
   const pinnedKits = authorKits.slice(0, 3);
 
   return (
-    <div className="bg-ks-paper min-h-screen flex flex-col">
+    <div className="bg-ks-paper min-h-screen flex flex-col overflow-x-hidden">
       <Nav />
 
-      <div className="px-4 sm:px-8 lg:px-12 pt-10 pb-16 grid grid-cols-1 md:grid-cols-[300px_1fr] gap-12 items-start">
+      <div className="px-4 sm:px-8 lg:px-12 pt-10 pb-16 grid grid-cols-1 md:grid-cols-[260px_1fr] lg:grid-cols-[300px_1fr] gap-8 lg:gap-12 items-start min-w-0">
         {/* LEFT SIDEBAR */}
         <aside className="md:sticky md:top-24">
           {/* Avatar */}
@@ -177,7 +178,7 @@ export default async function AuthorProfilePage({
         </aside>
 
         {/* RIGHT MAIN */}
-        <main>
+        <main className="min-w-0">
           {/* Author CTA */}
           <div className="mb-10">
             <AuthorCTA />
@@ -260,46 +261,9 @@ export default async function AuthorProfilePage({
             </div>
           )}
 
-          {/* Free skills */}
-          {authorSkills.length > 0 && (
-            <div className="mb-10">
-              <h2 className="font-serif text-[22px] tracking-tight mb-4">
-                Free skills
-              </h2>
-              <div className="ks-card divide-y divide-ks-hair">
-                {authorSkills.map((skill) => (
-                  <Link
-                    key={skill.slug}
-                    href={`/skills/${skill.slug}`}
-                    className="flex items-center gap-4 px-5 py-4 hover:bg-ks-paper-warm transition-colors"
-                  >
-                    <CatMark cat={skill.cat} size={24} />
-                    <div className="flex-1 min-w-0">
-                      <div className="font-sans text-[14px] font-medium text-ks-ink">
-                        {skill.name}
-                      </div>
-                      <div className="font-sans text-[12px] text-ks-muted truncate">
-                        {skill.desc}
-                      </div>
-                    </div>
-                    <span className="ks-chip !text-[10px] shrink-0">
-                      {skill.cat}
-                    </span>
-                    <span className="font-sans text-[12px] text-ks-muted shrink-0">
-                      {skill.downloads.toLocaleString()} downloads
-                    </span>
-                    <span className="font-serif text-[14px] italic text-ks-accent shrink-0">
-                      Free
-                    </span>
-                  </Link>
-                ))}
-              </div>
-            </div>
-          )}
-
           {/* Subscription kits */}
           {authorKits.length > 0 && (
-            <div>
+            <div className="mb-10">
               <h2 className="font-serif text-[22px] tracking-tight mb-4">
                 Subscription kits
               </h2>
@@ -308,10 +272,10 @@ export default async function AuthorProfilePage({
                   <Link
                     key={kit.slug}
                     href={`/kits/${kit.slug}`}
-                    className="flex items-center gap-4 px-5 py-4 hover:bg-ks-paper-warm transition-colors"
+                    className="flex flex-wrap items-center gap-x-4 gap-y-1 px-5 py-4 hover:bg-ks-paper-warm transition-colors"
                   >
                     <CatMark cat={kit.cat} size={24} />
-                    <div className="flex-1 min-w-0">
+                    <div className="flex-1 min-w-0 basis-[180px]">
                       <div className="font-sans text-[14px] font-medium text-ks-ink">
                         {kit.name}
                       </div>
@@ -331,6 +295,16 @@ export default async function AuthorProfilePage({
                   </Link>
                 ))}
               </div>
+            </div>
+          )}
+
+          {/* Free skills */}
+          {authorSkills.length > 0 && (
+            <div>
+              <h2 className="font-serif text-[22px] tracking-tight mb-4">
+                Free skills
+              </h2>
+              <ExpandableSkillList skills={authorSkills} />
             </div>
           )}
 
