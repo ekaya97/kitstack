@@ -68,8 +68,6 @@ export function generateShell(config: ShellConfig): string {
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <style>
-  * { box-sizing: border-box; margin: 0; padding: 0; }
-  body { font-family: system-ui, -apple-system, sans-serif; font-size: 14px; color: #171512; background: #faf7f1; }
   .ks-loading { display: flex; align-items: center; justify-content: center; min-height: 200px; color: #6b6357; }
   .ks-error { padding: 16px; color: #b91c1c; background: #fef2f2; border: 1px solid #fecaca; border-radius: 6px; }
   .ks-empty { padding: 24px; text-align: center; color: #6b6357; }
@@ -223,10 +221,8 @@ async function loadView(data) {
       copyToClipboard: (text) => navigator.clipboard.writeText(text),
     };
 
-    // Debug: show data status BEFORE loading scripts
     const key = KIT_ID + "/" + data.view;
-    const debugInfo = "key=" + key + " hasData=" + (data.data != null) + " type=" + typeof data.data + " isArr=" + Array.isArray(data.data) + (Array.isArray(data.data) ? " len=" + data.data.length : "");
-    root.innerHTML = '<div style="font-size:11px;color:#999;padding:4px;border-bottom:1px solid #eee;margin-bottom:4px">' + debugInfo + '</div><div id="ks-content"><div class="ks-loading">Loading view...</div></div>';
+    root.innerHTML = '<div id="ks-content"><div class="ks-loading">Loading view...</div></div>';
 
     // Load assets
     loadCSS(CDN + "/style.css");
@@ -241,13 +237,15 @@ async function loadView(data) {
       const container = document.getElementById("ks-content");
       views[key].mount(container, data.data);
 
-      requestAnimationFrame(() => {
-        const viewCfg = VIEWS[data.view] || {};
+      // Report size after mount + observe for dynamic changes
+      const reportSize = () => {
         sendNotification("ui/notifications/size-changed", {
           width: document.body.scrollWidth,
-          height: Math.max(document.body.scrollHeight, viewCfg.height || 400),
+          height: document.body.scrollHeight,
         });
-      });
+      };
+      requestAnimationFrame(reportSize);
+      new ResizeObserver(reportSize).observe(document.body);
     }
   } catch (err) {
     console.error("[KitStack] View load failed:", err);
