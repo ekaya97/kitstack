@@ -4,7 +4,7 @@ export const dynamic = "force-dynamic";
 import { useState, useEffect, useCallback } from "react";
 import type { Kit } from "@/db/schema";
 
-const CATEGORIES = ["Revenue", "Legal", "Finance", "Sales", "Marketing", "Operations"];
+const CATEGORIES = ["Revenue", "Legal", "Finance", "Sales", "Marketing", "Operations", "Developer"];
 const STATUSES = ["live", "coming_soon", "beta"];
 
 interface KitFormData {

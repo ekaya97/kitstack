@@ -7,6 +7,8 @@ const marks: Record<string, string> = {
   Ops: "\u25ca",
   Operations: "\u25ca",
   Career: "\u219f",
+  Developer: "\u2318",
+  Dev: "\u2318",
 };
 
 const tones: Record<string, string> = {
@@ -18,6 +20,8 @@ const tones: Record<string, string> = {
   Ops: "#7a6a3b",
   Operations: "#7a6a3b",
   Career: "#3b8a8a",
+  Developer: "#1a8a6e",
+  Dev: "#1a8a6e",
 };
 
 export function CatMark({

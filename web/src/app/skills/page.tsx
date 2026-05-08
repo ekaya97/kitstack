@@ -16,12 +16,46 @@ const categories = [
   "Sales",
   "Marketing",
   "Ops",
+  "Dev",
 ];
+
+type SortOption = "recommended" | "downloads" | "rating" | "newest" | "name";
+
+const sortLabels: Record<SortOption, string> = {
+  recommended: "Recommended",
+  downloads: "Most downloaded",
+  rating: "Best rated",
+  newest: "Newest",
+  name: "A–Z",
+};
+
+function sortSkills(skills: SkillCardData[], sort: SortOption): SkillCardData[] {
+  const list = [...skills];
+  switch (sort) {
+    case "recommended":
+      return list.sort((a, b) => {
+        // Featured first, then by downloads
+        if (a.featured !== b.featured) return a.featured ? -1 : 1;
+        return b.downloads - a.downloads;
+      });
+    case "downloads":
+      return list.sort((a, b) => b.downloads - a.downloads);
+    case "rating":
+      return list.sort((a, b) => b.rating - a.rating || b.reviews - a.reviews);
+    case "newest":
+      return list.sort((a, b) => a.name.localeCompare(b.name)).reverse();
+    case "name":
+      return list.sort((a, b) => a.name.localeCompare(b.name));
+    default:
+      return list;
+  }
+}
 
 export default function SkillsPage() {
   const [skills, setSkills] = useState<SkillCardData[]>([]);
   const [loading, setLoading] = useState(true);
   const [activeCat, setActiveCat] = useState("All");
+  const [sort, setSort] = useState<SortOption>("recommended");
   const [searchOpen, setSearchOpen] = useState(false);
   const [query, setQuery] = useState("");
   const [downloadedSlugs, setDownloadedSlugs] = useState<Set<string>>(new Set());
@@ -52,8 +86,8 @@ export default function SkillsPage() {
           s.cat.toLowerCase().includes(q)
       );
     }
-    return list;
-  }, [skills, activeCat, query]);
+    return sortSkills(list, sort);
+  }, [skills, activeCat, query, sort]);
 
   return (
     <div className="bg-ks-paper min-h-screen flex flex-col">
@@ -103,7 +137,7 @@ export default function SkillsPage() {
         </div>
       </section>
 
-      {/* CATEGORY FILTER + SEARCH */}
+      {/* CATEGORY FILTER + SORT + SEARCH */}
       <div className="px-4 sm:px-8 lg:px-16 pb-8 flex flex-wrap items-center gap-2 overflow-hidden">
         {/* Search icon — always on left */}
         <button
@@ -138,19 +172,50 @@ export default function SkillsPage() {
             className="font-sans text-sm bg-white border border-ks-hair max-h-8 max-w-3xl rounded-full px-4 py-2 flex-1 outline-none focus:border-ks-accent transition-colors animate-[slideIn_0.2s_ease-out]"
           />
         ) : (
-          categories.map((cat) => (
-            <button
-              key={cat}
-              onClick={() => {
-                setActiveCat(cat);
-                setQuery("");
-              }}
-              className={`ks-chip ${activeCat === cat ? "ks-chip-solid" : ""} cursor-pointer transition-colors`}
-            >
-              {cat !== "All" && <CatMark cat={cat} size={12} />}
-              {cat}
-            </button>
-          ))
+          <>
+            {categories.map((cat) => (
+              <button
+                key={cat}
+                onClick={() => {
+                  setActiveCat(cat);
+                  setQuery("");
+                }}
+                className={`ks-chip ${activeCat === cat ? "ks-chip-solid" : ""} cursor-pointer transition-colors`}
+              >
+                {cat !== "All" && <CatMark cat={cat} size={12} />}
+                {cat}
+              </button>
+            ))}
+
+            {/* Sort dropdown — right-aligned */}
+            <div className="ml-auto relative">
+              <select
+                value={sort}
+                onChange={(e) => setSort(e.target.value as SortOption)}
+                className="appearance-none font-mono text-[11px] text-ks-muted bg-white border border-ks-hair rounded-full px-3.5 py-1.5 pr-7 cursor-pointer hover:border-ks-accent transition-colors outline-none focus:border-ks-accent"
+              >
+                {(Object.entries(sortLabels) as [SortOption, string][]).map(
+                  ([value, label]) => (
+                    <option key={value} value={value}>
+                      {label}
+                    </option>
+                  )
+                )}
+              </select>
+              <svg
+                className="absolute right-2.5 top-1/2 -translate-y-1/2 pointer-events-none text-ks-muted"
+                width="10"
+                height="10"
+                viewBox="0 0 10 10"
+                fill="none"
+                stroke="currentColor"
+                strokeWidth="1.5"
+                strokeLinecap="round"
+              >
+                <path d="M2 4l3 3 3-3" />
+              </svg>
+            </div>
+          </>
         )}
       </div>
 
@@ -188,13 +253,18 @@ export default function SkillsPage() {
           <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-[18px]">
             {filtered.map((skill) => (
               <div key={skill.slug} className="ks-card p-5 flex flex-col">
-                {/* Top row: category + FREE chip */}
+                {/* Top row: category + badges */}
                 <div className="flex justify-between items-center mb-3">
                   <div className="flex items-center gap-2">
                     <CatMark cat={skill.cat} />
                     <span className="ks-chip !text-[10px]">
                       {skill.cat}
                     </span>
+                    {skill.featured && (
+                      <span className="ks-chip !text-[10px] !border-ks-accent !text-ks-accent !bg-ks-accent-soft">
+                        Team Pick
+                      </span>
+                    )}
                   </div>
                   <span className="ks-chip !text-[10px] !border-ks-ink !text-ks-ink">
                     FREE

@@ -4,6 +4,7 @@ export interface SkillCardData {
   slug: string;
   name: string;
   cat: string;
+  featured: boolean;
   desc: string;
   files: number;
   size: string;
@@ -35,7 +36,9 @@ export interface KitCardData {
 }
 
 function mapCategory(category: string): string {
-  return category === "Operations" ? "Ops" : category;
+  if (category === "Operations") return "Ops";
+  if (category === "Developer") return "Dev";
+  return category;
 }
 
 export function toSkillCard(skill: Skill): SkillCardData {
@@ -43,6 +46,7 @@ export function toSkillCard(skill: Skill): SkillCardData {
     slug: skill.slug,
     name: skill.name,
     cat: mapCategory(skill.category),
+    featured: skill.featured ?? false,
     desc: skill.description,
     files: skill.whatsInside?.length || 0,
     size: skill.fileSize || "",

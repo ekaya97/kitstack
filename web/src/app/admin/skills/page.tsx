@@ -4,7 +4,7 @@ export const dynamic = "force-dynamic";
 import { useState, useEffect, useCallback } from "react";
 import type { Skill } from "@/db/schema";
 
-const CATEGORIES = ["Revenue", "Legal", "Finance", "Sales", "Marketing", "Operations"];
+const CATEGORIES = ["Revenue", "Legal", "Finance", "Sales", "Marketing", "Operations", "Developer"];
 const DEFAULT_COMPATIBILITY = ["claude.ai", "Claude Desktop", "Cowork", "Claude Code"];
 
 interface SkillFormData {

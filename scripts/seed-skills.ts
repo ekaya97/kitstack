@@ -81,6 +81,7 @@ async function seedSkillsTable() {
         set: {
           name: skill.name,
           category: skill.category,
+          featured: skill.featured,
           description: skill.description,
           upgradeHook: skill.upgradeHook,
           tags: skill.tags,

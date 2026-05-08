@@ -6,8 +6,9 @@ export const skills = sqliteTable("skills", {
   slug: text("slug").notNull().unique(),
   name: text("name").notNull(),
   category: text("category", {
-    enum: ["Revenue", "Legal", "Finance", "Sales", "Marketing", "Operations"],
+    enum: ["Revenue", "Legal", "Finance", "Sales", "Marketing", "Operations", "Developer"],
   }).notNull(),
+  featured: integer("featured", { mode: "boolean" }).default(false),
   description: text("description").notNull(),
   upgradeHook: text("upgrade_hook"),
   tags: text("tags", { mode: "json" }).$type<string[]>().notNull(),
@@ -45,7 +46,7 @@ export const kits = sqliteTable("kits", {
   slug: text("slug").notNull().unique(),
   name: text("name").notNull(),
   category: text("category", {
-    enum: ["Revenue", "Legal", "Finance", "Sales", "Marketing", "Operations"],
+    enum: ["Revenue", "Legal", "Finance", "Sales", "Marketing", "Operations", "Developer"],
   }).notNull(),
   description: text("description").notNull(),
   correspondingSkillSlug: text("corresponding_skill_slug"),
