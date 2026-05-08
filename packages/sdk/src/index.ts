@@ -23,9 +23,6 @@ export { defineLoader } from "./define-loader";
 // Result helpers
 export { kit, type KitResultFragment } from "./result";
 
-// Build
-export { buildKit } from "./build";
-
 // Errors
 export {
   KitStackError,
