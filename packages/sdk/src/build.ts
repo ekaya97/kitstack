@@ -17,6 +17,7 @@ import type { KitDefinition } from "./types";
 import { KitStackError, MigrationError } from "./errors";
 import { generateShell } from "./shell-template";
 import { generatePreview } from "./preview-template";
+import { zodToJsonSchema } from "./runtime/zod-to-json-schema";
 
 // Resolve the SDK package root — works both in monorepo (symlink) and from node_modules
 const _require = createRequire(import.meta.url);
@@ -495,6 +496,7 @@ export default defineConfig({
     tools: kit.tools.map((t) => ({
       name: t.name,
       description: t.description,
+      inputSchema: t.args ? zodToJsonSchema(t.args) : {},
     })),
     views: (kit.views ?? []).map((v) => ({
       slug: v.slug,

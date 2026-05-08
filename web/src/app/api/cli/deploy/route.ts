@@ -35,7 +35,7 @@ interface DeployPayload {
     version: string;
     sdkVersion?: string;
     migrationSql?: string;
-    tools: Array<{ name: string; description: string }>;
+    tools: Array<{ name: string; description: string; inputSchema?: Record<string, unknown> }>;
     views: Array<{ slug: string; name: string; description: string }>;
   };
   bundle: string;
@@ -129,7 +129,7 @@ export async function POST(request: NextRequest) {
         kitId,
         toolName: tool.name,
         toolDescription: tool.description,
-        inputSchema: "{}",
+        inputSchema: JSON.stringify(tool.inputSchema ?? {}),
         kitName: manifest.kitName,
         kitDescription: manifest.kitDescription ?? manifest.kitName,
         kitTriggers: JSON.stringify(manifest.kitTriggers ?? []),
@@ -142,7 +142,7 @@ export async function POST(request: NextRequest) {
         target: [kitRegistryTable.kitId, kitRegistryTable.toolName],
         set: {
           toolDescription: tool.description,
-          inputSchema: "{}",
+          inputSchema: JSON.stringify(tool.inputSchema ?? {}),
           kitName: manifest.kitName,
           kitDescription: manifest.kitDescription ?? manifest.kitName,
           kitTriggers: JSON.stringify(manifest.kitTriggers ?? []),
