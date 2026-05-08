@@ -448,8 +448,9 @@ export default defineConfig({
 
     // ── 8. GENERATE SHELL ──────────────────────────────────────
 
-    const platformCdn = process.env.KITSTACK_CDN || "";
-    const kitCdn = process.env.KITSTACK_KIT_CDN || "";
+    const cdnBase = process.env.KITSTACK_CDN || "https://cdn.kitstack.co";
+    const platformCdn = `${cdnBase}/apps/kits/${kit.id}`;
+    const kitCdn = `${cdnBase}/apps/kits/${kit.id}/${kit.id}`;
 
     const shellHtml = generateShell({
       kitId: kit.id,
