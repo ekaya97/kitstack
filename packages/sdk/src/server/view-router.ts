@@ -1,6 +1,8 @@
 import type { KitToolResult, KitToolContentBlock } from "../types";
 import type { KitServerAdapter, ResolvedKit } from "./types";
 
+const APP_SHELL_URI = "ui://kitstack/app";
+
 /**
  * Route a kit_view() call through the adapter.
  *
@@ -83,14 +85,12 @@ async function handleRenderView(
     data: loaderData,
   });
 
-  const viewUri = `ui://kitstack/${kit.id}/${view.slug}`;
-
   const content: KitToolContentBlock[] = [
     { type: "text", text: dataPayload },
     {
       type: "resource" as any,
       resource: {
-        uri: viewUri,
+        uri: APP_SHELL_URI,
         mimeType: "text/html;profile=mcp-app",
         text: shellHtml,
       },
