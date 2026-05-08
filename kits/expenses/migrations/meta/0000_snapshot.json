@@ -1,0 +1,90 @@
+{
+  "version": "6",
+  "dialect": "sqlite",
+  "id": "expenses-initial",
+  "prevId": "0000000000000",
+  "tables": {
+    "expenses": {
+      "name": "expenses",
+      "columns": {
+        "id": { "name": "id", "type": "text", "primaryKey": true, "notNull": true, "autoincrement": false },
+        "amount_cents": { "name": "amount_cents", "type": "integer", "primaryKey": false, "notNull": true, "autoincrement": false },
+        "currency": { "name": "currency", "type": "text", "primaryKey": false, "notNull": false, "autoincrement": false, "default": "'EUR'" },
+        "vat_rate": { "name": "vat_rate", "type": "integer", "primaryKey": false, "notNull": false, "autoincrement": false },
+        "net_cents": { "name": "net_cents", "type": "integer", "primaryKey": false, "notNull": false, "autoincrement": false },
+        "vat_cents": { "name": "vat_cents", "type": "integer", "primaryKey": false, "notNull": false, "autoincrement": false },
+        "category": { "name": "category", "type": "text", "primaryKey": false, "notNull": true, "autoincrement": false },
+        "subcategory": { "name": "subcategory", "type": "text", "primaryKey": false, "notNull": false, "autoincrement": false },
+        "description": { "name": "description", "type": "text", "primaryKey": false, "notNull": true, "autoincrement": false },
+        "vendor": { "name": "vendor", "type": "text", "primaryKey": false, "notNull": false, "autoincrement": false },
+        "payment_method": { "name": "payment_method", "type": "text", "primaryKey": false, "notNull": false, "autoincrement": false },
+        "is_deductible": { "name": "is_deductible", "type": "integer", "primaryKey": false, "notNull": false, "autoincrement": false, "default": 1 },
+        "receipt_note": { "name": "receipt_note", "type": "text", "primaryKey": false, "notNull": false, "autoincrement": false },
+        "tags": { "name": "tags", "type": "text", "primaryKey": false, "notNull": false, "autoincrement": false },
+        "expense_date": { "name": "expense_date", "type": "text", "primaryKey": false, "notNull": true, "autoincrement": false },
+        "archived_at": { "name": "archived_at", "type": "text", "primaryKey": false, "notNull": false, "autoincrement": false },
+        "created_at": { "name": "created_at", "type": "text", "primaryKey": false, "notNull": true, "autoincrement": false },
+        "updated_at": { "name": "updated_at", "type": "text", "primaryKey": false, "notNull": true, "autoincrement": false }
+      },
+      "indexes": {
+        "idx_expenses_date": { "name": "idx_expenses_date", "columns": ["expense_date"], "isUnique": false },
+        "idx_expenses_category": { "name": "idx_expenses_category", "columns": ["category"], "isUnique": false }
+      },
+      "foreignKeys": {},
+      "compositePrimaryKeys": {},
+      "uniqueConstraints": {}
+    },
+    "income": {
+      "name": "income",
+      "columns": {
+        "id": { "name": "id", "type": "text", "primaryKey": true, "notNull": true, "autoincrement": false },
+        "amount_cents": { "name": "amount_cents", "type": "integer", "primaryKey": false, "notNull": true, "autoincrement": false },
+        "currency": { "name": "currency", "type": "text", "primaryKey": false, "notNull": false, "autoincrement": false, "default": "'EUR'" },
+        "source": { "name": "source", "type": "text", "primaryKey": false, "notNull": true, "autoincrement": false },
+        "description": { "name": "description", "type": "text", "primaryKey": false, "notNull": false, "autoincrement": false },
+        "invoice_ref": { "name": "invoice_ref", "type": "text", "primaryKey": false, "notNull": false, "autoincrement": false },
+        "payment_method": { "name": "payment_method", "type": "text", "primaryKey": false, "notNull": false, "autoincrement": false },
+        "received_date": { "name": "received_date", "type": "text", "primaryKey": false, "notNull": true, "autoincrement": false },
+        "created_at": { "name": "created_at", "type": "text", "primaryKey": false, "notNull": true, "autoincrement": false },
+        "updated_at": { "name": "updated_at", "type": "text", "primaryKey": false, "notNull": true, "autoincrement": false }
+      },
+      "indexes": {
+        "idx_income_date": { "name": "idx_income_date", "columns": ["received_date"], "isUnique": false }
+      },
+      "foreignKeys": {},
+      "compositePrimaryKeys": {},
+      "uniqueConstraints": {}
+    },
+    "categories": {
+      "name": "categories",
+      "columns": {
+        "id": { "name": "id", "type": "text", "primaryKey": true, "notNull": true, "autoincrement": false },
+        "name": { "name": "name", "type": "text", "primaryKey": false, "notNull": true, "autoincrement": false },
+        "skr03_account": { "name": "skr03_account", "type": "text", "primaryKey": false, "notNull": false, "autoincrement": false },
+        "parent_category": { "name": "parent_category", "type": "text", "primaryKey": false, "notNull": false, "autoincrement": false },
+        "is_default": { "name": "is_default", "type": "integer", "primaryKey": false, "notNull": false, "autoincrement": false, "default": 0 }
+      },
+      "indexes": {},
+      "foreignKeys": {},
+      "compositePrimaryKeys": {},
+      "uniqueConstraints": {}
+    },
+    "settings": {
+      "name": "settings",
+      "columns": {
+        "key": { "name": "key", "type": "text", "primaryKey": true, "notNull": true, "autoincrement": false },
+        "value": { "name": "value", "type": "text", "primaryKey": false, "notNull": true, "autoincrement": false }
+      },
+      "indexes": {},
+      "foreignKeys": {},
+      "compositePrimaryKeys": {},
+      "uniqueConstraints": {}
+    }
+  },
+  "enums": {},
+  "_meta": {
+    "schemas": {},
+    "tables": {},
+    "columns": {}
+  }
+}
