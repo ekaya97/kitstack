@@ -654,6 +654,76 @@ export const seedSkills: NewSkill[] = [
     reviewCount: 0,
     downloadCount: 0,
   },
+
+  // --- Developer Skills ---
+
+  {
+    id: "skill-tool-iterator",
+    slug: "tool-iterator-skill",
+    name: "Tool Iterator",
+    category: "Operations",
+    description: "Test, evaluate, and iteratively improve KitStack kit tools — checks chaining, response format, discoverability, and error handling",
+    upgradeHook: "Great for testing, but you need the Kit Builder skill to create the kit in the first place",
+    tags: ["developer", "kitstack", "testing"],
+    compatibility: baseCompatibility,
+    exampleInput:
+      "Test my kit — I just finished building a CRM with add_contact, add_deal, and list_contacts.",
+    exampleOutput:
+      "## Tool Iterator Report: crm\n\n### Summary\n- Actions discovered: 8 (3 write, 5 read)\n- Issues found: 3 (critical: 1, warning: 2)\n\n### Issues\n1. [critical] add_contact returns plain text without entity ID — breaks chaining\n   Fix: Use kit.result(kit.created(id, 'contact', msg))",
+    whatsInside: [
+      { file: "SKILL.md", description: "Quality engineer persona, 7-step iteration loop, evaluation dimensions" },
+      { file: "references/evaluation-checklist.md", description: "Full checklist: write format, descriptions, discoverability, gaps, instructions, errors" },
+      { file: "references/common-fixes.md", description: "15 most common issues with before/after code examples" },
+      { file: "references/workflow-patterns.md", description: "Standard test chains by kit type (CRM, expenses, projects)" },
+      { file: "references/test-data-bank.md", description: "Realistic test fixtures: contacts, deals, expenses, edge cases" },
+      { file: "examples/crm-kit-iteration.md", description: "Full 2-round CRM kit iteration with fixes" },
+      { file: "examples/expense-kit-iteration.md", description: "Expense kit iteration with VAT and validation fixes" },
+      { file: "scripts/quick-validate.py", description: "Static analysis pre-check for common issues" },
+      { file: "templates/iteration-report.md", description: "Structured report template" },
+      { file: "agents/workflow-designer.md", description: "Designs test chains from tool surface area" },
+    ],
+    composition: { skillMd: true, references: 4, examples: 2, templates: 1, scripts: 1, agents: 1 },
+    s3Key: "skills/tool-iterator-skill.zip",
+    author: "kitstack",
+    fileSize: "28 KB",
+    correspondingKitSlug: null,
+    avgRating: 0,
+    reviewCount: 0,
+    downloadCount: 0,
+  },
+  {
+    id: "skill-kit-builder",
+    slug: "kit-builder-skill",
+    name: "Kit Builder",
+    category: "Operations",
+    description: "Build complete KitStack kits from a conversation — schema design, tool implementation, view creation, and deployment using the @kitstackco/sdk",
+    upgradeHook: "Built your kit? Now iterate on the tools with the Tool Iterator skill",
+    tags: ["developer", "kitstack", "sdk"],
+    compatibility: baseCompatibility,
+    exampleInput:
+      "Build me a kit that tracks my freelance projects, tasks, and time spent. I juggle 3-5 clients.",
+    exampleOutput:
+      "Let's build this step by step. First, let me understand your requirements.\n\n**What's the most common thing you'd tell this kit on a typical day?**\n\n[After interview → Kit Spec → Schema → Tools → Instructions → Tests → Deploy]",
+    whatsInside: [
+      { file: "SKILL.md", description: "SDK engineer persona, 6-phase build process, anti-patterns" },
+      { file: "references/schema-patterns.md", description: "Drizzle schema patterns, field types, relationships, indexes" },
+      { file: "references/tool-patterns.md", description: "Complete tool handler patterns: write, read, search, aggregate" },
+      { file: "references/view-patterns.md", description: "View definition, loader, React component patterns" },
+      { file: "references/instructions-patterns.md", description: "System prompt patterns with behavioral triggers" },
+      { file: "examples/expense-kit-build.md", description: "Full expense tracker build from spec to deployment" },
+      { file: "examples/project-tracker-build.md", description: "Full project tracker build with views" },
+      { file: "templates/kit-spec.md", description: "Requirements spec template" },
+      { file: "agents/spec-interviewer.md", description: "Guided requirements gathering interview" },
+    ],
+    composition: { skillMd: true, references: 4, examples: 2, templates: 1, scripts: 0, agents: 1 },
+    s3Key: "skills/kit-builder-skill.zip",
+    author: "kitstack",
+    fileSize: "32 KB",
+    correspondingKitSlug: null,
+    avgRating: 0,
+    reviewCount: 0,
+    downloadCount: 0,
+  },
 ];
 
 // --- 4 Subscription Kits ---
