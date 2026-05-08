@@ -109,7 +109,6 @@ export async function init(args: string[]) {
 
 function kitConfigTemplate(id: string, displayName: string) {
   return `import { defineKit } from "@kitstackco/sdk";
-import { resolve } from "node:path";
 import * as schema from "./src/schema";
 import { instructions } from "./src/instructions";
 import { listItems } from "./src/tools/example";
@@ -121,7 +120,7 @@ export default defineKit({
   name: "${displayName}",
   description: "TODO: describe what this kit does",
   schema,
-  migrationsDir: resolve(import.meta.dirname, "migrations"),
+  migrationsDir: "./migrations",
   instructions,
   tools: [listItems],
   views: [dashboard],

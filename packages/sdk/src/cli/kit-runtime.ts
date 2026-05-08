@@ -62,8 +62,11 @@ export async function createLocalRuntime(options: LocalRuntimeOptions = {}): Pro
   const client = createClient({ url: dbUrl, authToken: options.dbToken });
 
   // Run migrations (handles both migrationSql and migrationsDir)
-  const { resolveMigrationSql } = await import("../migrations.js");
-  const migrationSql = resolveMigrationSql(kit);
+  const { resolveMigrationSql, resolveMigrationsPath } = await import("../migrations.js");
+  const resolvedKit = kit.migrationsDir
+    ? { ...kit, migrationsDir: resolveMigrationsPath(kit.migrationsDir, kitRoot) }
+    : kit;
+  const migrationSql = resolveMigrationSql(resolvedKit);
   if (migrationSql) {
     const statements = migrationSql.split(";").filter((s: string) => s.trim());
     for (const sql of statements) {

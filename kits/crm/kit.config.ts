@@ -1,5 +1,4 @@
 import { defineKit } from "@kitstackco/sdk";
-import { resolve } from "node:path";
 import * as schema from "./src/schema";
 import { instructions } from "./src/instructions";
 
@@ -30,7 +29,7 @@ export default defineKit({
   name: "CRM",
   description: "Personal CRM for tracking contacts, companies, deals, and interactions",
   schema,
-  migrationsDir: resolve(import.meta.dirname, "migrations"),
+  migrationsDir: "./migrations",
   instructions,
   triggers: [
     "contact", "company", "deal", "pipeline", "follow-up",

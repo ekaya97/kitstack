@@ -10,7 +10,15 @@
  */
 
 import { readdirSync, readFileSync, existsSync } from "node:fs";
-import { resolve } from "node:path";
+import { resolve, isAbsolute } from "node:path";
+
+/**
+ * Resolve a `migrationsDir` value (relative or absolute) against a kit root.
+ * Absolute paths are returned as-is for backward compatibility.
+ */
+export function resolveMigrationsPath(migrationsDir: string, kitRoot: string): string {
+  return isAbsolute(migrationsDir) ? migrationsDir : resolve(kitRoot, migrationsDir);
+}
 
 /**
  * Read all `.sql` files from a migrations directory in alphabetical order

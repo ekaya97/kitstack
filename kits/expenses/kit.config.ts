@@ -1,5 +1,4 @@
 import { defineKit } from "@kitstackco/sdk";
-import { resolve } from "node:path";
 import * as schema from "./src/schema";
 import { instructions } from "./src/instructions";
 
@@ -28,7 +27,7 @@ export default defineKit({
   name: "Expenses",
   description: "Personal expense tracker for freelancers with German tax categories (SKR03), VAT handling, and Kleinunternehmer support",
   schema,
-  migrationsDir: resolve(import.meta.dirname, "migrations"),
+  migrationsDir: "./migrations",
   instructions,
   triggers: [
     "expense", "income", "vat", "tax", "receipt",

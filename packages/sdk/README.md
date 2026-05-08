@@ -42,7 +42,7 @@ export default defineKit({
   name: "My Kit",
   description: "A simple item tracker",
   schema: {},
-  migrationsDir: resolve(import.meta.dirname, "migrations"),
+  migrationsDir: "./migrations",
   instructions: "Help the user manage their items.",
   triggers: ["item", "tracker"],
   tools: [addItem],

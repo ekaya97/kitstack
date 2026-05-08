@@ -136,8 +136,9 @@ export async function buildKit(kitRoot: string) {
   // ── 2b. RESOLVE MIGRATIONS ─────────────────────────────────
   // If the kit uses migrationsDir (drizzle-kit output), resolve it into migrationSql
   if (!kit.migrationSql && kit.migrationsDir) {
-    const { resolveMigrationSql } = await import("./migrations.js");
-    kit.migrationSql = resolveMigrationSql({ migrationsDir: kit.migrationsDir });
+    const { resolveMigrationSql, resolveMigrationsPath } = await import("./migrations.js");
+    const dir = resolveMigrationsPath(kit.migrationsDir, kitRoot);
+    kit.migrationSql = resolveMigrationSql({ migrationsDir: dir });
   }
 
   // ── 3. VALIDATE ────────────────────────────────────────────
