@@ -10,7 +10,9 @@
  */
 import { resolve } from "node:path";
 import { existsSync, readFileSync, readdirSync, statSync } from "node:fs";
+import { execSync } from "node:child_process";
 import { loadCredentials } from "../credentials";
+import { buildKit } from "../../build";
 
 const KITSTACK_API_URL = process.env.KITSTACK_API_URL || "https://kitstack.co";
 
@@ -62,13 +64,25 @@ export async function deploy(args: string[]) {
     process.exit(1);
   }
 
-  // Check build output exists
-  const buildDir = resolve(kitRoot, ".kitstack/build");
-  const manifestPath = resolve(buildDir, "manifest.json");
-  if (!existsSync(manifestPath)) {
-    console.error(`No build output found at ${buildDir}. Run: kitstack build`);
+  // Always build before deploying to ensure artifacts are up to date
+  console.log("  Building kit...\n");
+  const drizzleConfig = resolve(kitRoot, "drizzle.config.ts");
+  if (existsSync(drizzleConfig)) {
+    try {
+      execSync("npx drizzle-kit generate", { cwd: kitRoot, stdio: "inherit" });
+    } catch {
+      console.warn("  Warning: drizzle-kit generate failed. Continuing with existing migrations.\n");
+    }
+  }
+  try {
+    await buildKit(kitRoot);
+  } catch (err: any) {
+    console.error(`\n  Build failed: ${err.message}\n`);
     process.exit(1);
   }
+
+  const buildDir = resolve(kitRoot, ".kitstack/build");
+  const manifestPath = resolve(buildDir, "manifest.json");
 
   const manifest = JSON.parse(readFileSync(manifestPath, "utf-8"));
   const kitId = manifest.kitId;

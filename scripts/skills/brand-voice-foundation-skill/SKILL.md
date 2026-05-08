@@ -1,5 +1,5 @@
 ---
-name: Brand Voice Foundation
+name: brand-voice-foundation-skill
 description: Define your unique brand voice through a guided interview — tone, vocabulary, communication principles, and writing style distilled into a reusable voice guide. Use this skill when the user wants to define their voice, writing style, tone of voice, brand personality, or asks how they should sound in their content — even if they just say "help me write better."
 trigger: User mentions "brand voice," "tone of voice," "writing style," "how should I sound," "voice guide," or wants to define their communication personality.
 ---

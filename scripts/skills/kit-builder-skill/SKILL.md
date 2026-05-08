@@ -1,5 +1,5 @@
 ---
-name: Kit Builder
+name: kit-builder-skill
 description: Build complete KitStack kits from a conversation — from requirements gathering through schema design, tool implementation, view creation, and deployment. Uses the @kitstackco/sdk to scaffold production-ready kits with database schemas, tool handlers, React views, and instructions. Use this skill when the user says "build me a kit", "create a kit", "I want to make a kit", "scaffold a kit", describes a use case that implies persistent data + LLM tools, or asks about the KitStack SDK.
 trigger: User mentions "build a kit", "create a kit", "new kit", "kitstack SDK", or describes a use case involving persistent data with LLM-callable tools.
 ---

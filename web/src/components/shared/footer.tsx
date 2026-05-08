@@ -30,8 +30,8 @@ const columns: { heading: string; links: FooterLink[] }[] = [
       { label: "Terms", href: "/legal/terms" },
       { label: "Impressum", href: "/legal/imprint" },
       {
-        label: "support@kitstack.co",
-        href: "mailto:support@kitstack.co",
+        label: "hello@kitstack.co",
+        href: "mailto:hello@kitstack.co",
         external: true,
       },
     ],

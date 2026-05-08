@@ -1,5 +1,5 @@
 ---
-name: Tool Iterator
+name: tool-iterator-skill
 description: Test, evaluate, and iteratively improve KitStack kit tools by running multi-step workflows locally via `kitstack call`. Checks workflow chaining, response format, LLM discoverability, description quality, error handling, and schema completeness. Use this skill when the user says "test my kit", "iterate on my tools", "check my kit", "run the tool iterator", "evaluate my tools", or wants to assess whether their kit works well when an LLM orchestrates it. Also trigger when they mention tool quality, workflow gaps, chaining issues, or want to improve their kit's LLM-friendliness.
 ---
 

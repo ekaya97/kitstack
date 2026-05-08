@@ -1,5 +1,5 @@
 ---
-name: Invoice Generator
+name: invoice-generator-skill
 description: Generate professional, legally compliant invoices as HTML artifacts from minimal input — client name, services, hours, rate. Supports German (§14 UStG), US, and UK invoice requirements. Use this skill whenever the user mentions invoices, billing, Rechnung, or asks to bill a client, create an invoice, generate a receipt, or prepare billing documents — even if they don't explicitly say "invoice."
 trigger: User mentions "invoice," "Rechnung," "bill," "billing," "receipt," or asks to charge a client for work.
 ---

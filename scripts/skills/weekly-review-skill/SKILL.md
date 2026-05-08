@@ -1,5 +1,5 @@
 ---
-name: Weekly Review Framework
+name: weekly-review-skill
 description: Facilitate a structured weekly review session — guided reflection on wins, challenges, energy levels, lessons learned, and priorities for next week. Adapts to freelancers, founders, and team leads.
 trigger: User mentions "weekly review," "reflection," "end of week," "what went well," "priorities," "retrospective," "weekly retro," "week in review," "review my week," or asks to reflect on their week.
 ---

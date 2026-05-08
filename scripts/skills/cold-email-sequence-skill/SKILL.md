@@ -1,5 +1,5 @@
 ---
-name: Cold Email Sequence Skill
+name: cold-email-sequence-skill
 description: Generate personalized cold email sequences (3-5 emails) for outbound sales, consulting outreach, and business development. Includes subject line optimization, personalization frameworks, and CTA calibration.
 trigger: User mentions "cold email," "outreach," "email sequence," "outbound," "prospecting," "lead generation," or asks to write emails to reach potential clients or customers.
 ---

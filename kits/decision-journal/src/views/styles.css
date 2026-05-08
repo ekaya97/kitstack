@@ -1,0 +1,22 @@
+@import url("https://fonts.googleapis.com/css2?family=Instrument+Serif:ital@0;1&family=Inter:wght@400;500;600&family=JetBrains+Mono:wght@400;500&display=swap");
+@import "tailwindcss";
+@source "./**/*.tsx";
+
+@theme {
+  /* KitStack design tokens */
+  --color-ks-paper: #faf7f1;
+  --color-ks-paper-warm: #f4ede0;
+  --color-ks-paper-deep: #ece3d1;
+  --color-ks-ink: #171512;
+  --color-ks-ink2: #2a251f;
+  --color-ks-muted: #6b6357;
+  --color-ks-faint: #b8ae9b;
+  --color-ks-hair: #d9ceb8;
+  --color-ks-accent: #d65a2f;
+  --color-ks-accent-deep: #a8411e;
+  --color-ks-accent-soft: #f7d9c8;
+
+  --font-serif: "Instrument Serif", Georgia, serif;
+  --font-sans: "Inter", system-ui, -apple-system, sans-serif;
+  --font-mono: "JetBrains Mono", ui-monospace, monospace;
+}

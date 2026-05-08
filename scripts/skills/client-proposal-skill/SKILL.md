@@ -1,5 +1,5 @@
 ---
-name: Client Proposal Skill
+name: client-proposal-skill
 description: Generate complete, professional client proposals with executive summaries, phased scopes, pricing tables, and terms — calibrated by industry, project type, and budget.
 trigger: User mentions "proposal," "quote," "SOW," "scope," "bid," "pitch deck," "project estimate," or asks to write a proposal for a client.
 ---

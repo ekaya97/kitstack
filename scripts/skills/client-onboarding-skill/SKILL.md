@@ -1,5 +1,5 @@
 ---
-name: Client Onboarding Checklist
+name: client-onboarding-skill
 description: Generate a complete, phase-by-phase client onboarding plan with welcome materials, account setup, kickoff agenda, first delivery milestones, and check-in cadence — calibrated by industry, service type, and engagement model.
 trigger: User mentions "onboarding," "new client," "welcome," "kickoff," "client setup," "intake," "client checklist," or asks to create an onboarding process for a new client.
 ---

@@ -50,33 +50,30 @@ export default async function OnboardingConnectPage() {
           {steps.map((step) => (
             <div
               key={step.n}
-              className={`rounded-xl px-4 py-3.5 ${
-                step.status === "done"
+              className={`rounded-xl px-4 py-3.5 ${step.status === "done"
                   ? "bg-ks-accent-soft"
                   : step.status === "active"
                     ? "bg-ks-ink text-ks-paper"
                     : "bg-ks-paper-warm"
-              }`}
+                }`}
             >
               <div
-                className={`font-serif text-[28px] italic leading-none mb-1 ${
-                  step.status === "done"
+                className={`font-serif text-[28px] italic leading-none mb-1 ${step.status === "done"
                     ? "text-ks-accent"
                     : step.status === "active"
                       ? "text-ks-accent"
                       : "text-ks-faint"
-                }`}
+                  }`}
               >
                 {step.n}
               </div>
               <div
-                className={`font-sans text-[13px] font-semibold ${
-                  step.status === "done"
+                className={`font-sans text-[13px] font-semibold ${step.status === "done"
                     ? "text-ks-ink"
                     : step.status === "active"
                       ? "text-ks-paper"
                       : "text-ks-muted"
-                }`}
+                  }`}
               >
                 {step.label}
               </div>
@@ -223,8 +220,8 @@ export default async function OnboardingConnectPage() {
               Make sure you&apos;re using a Claude client that supports
               connectors. If you see &quot;invalid URL,&quot; check for trailing
               spaces. Still stuck?{" "}
-              <a href="mailto:support@kitstack.co" className="text-ks-accent hover:underline">
-                support@kitstack.co
+              <a href="mailto:hello@kitstack.co" className="text-ks-accent hover:underline">
+                hello@kitstack.co
               </a>
             </div>
           </div>

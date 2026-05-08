@@ -1,5 +1,5 @@
 ---
-name: Meeting Action Extractor Skill
+name: meeting-action-extractor-skill
 description: Extract action items, decisions, and open questions from meeting notes or transcripts. Assigns owners, infers deadlines, and outputs in Slack-ready, email-ready, or Notion-ready formats.
 trigger: User uploads meeting notes, a transcript, or mentions "meeting notes," "action items," "transcript," "call notes," "meeting summary," or asks to process notes from a meeting.
 ---

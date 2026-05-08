@@ -95,7 +95,7 @@ export function PricingClient({ kits }: PricingClientProps) {
               &euro;{price(5)}
             </div>
             <div className="font-sans text-xs text-ks-muted mt-1 mb-6">
-              {yearly ? "/year per kit" : "/mo per kit"}
+              {yearly ? "/year" : "/mo"}
             </div>
             <ul className="m-0 p-0 list-none font-sans text-[13px] text-ks-ink2 leading-[2]">
               <li>&#10003; 2 kits of your choice</li>

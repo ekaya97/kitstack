@@ -185,9 +185,10 @@ export function KitActivateCard({
               href={`https://claude.ai/new?q=${encodeURIComponent(`Load my ${kitName} and show me what's inside.`)}`}
               target="_blank"
               rel="noopener noreferrer"
-              className="ks-btn ks-btn-primary w-full justify-center !py-3 !text-[13px] mb-2.5"
+              className="group ks-btn ks-btn-primary w-full justify-center !py-3 !text-[13px] mb-2.5"
             >
-              Open in Claude &nearr;
+              Open in Claude
+              <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="inline-block ml-1 transition-transform duration-200 group-hover:-translate-y-0.5 group-hover:translate-x-0.5"><path d="M7 17 17 7"/><path d="M7 7h10v10"/></svg>
             </a>
           </>
         )}

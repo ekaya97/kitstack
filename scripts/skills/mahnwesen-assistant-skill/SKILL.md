@@ -1,5 +1,5 @@
 ---
-name: Mahnwesen Assistant
+name: mahnwesen-assistant-skill
 description: Generate the correct German dunning letter sequence (Zahlungserinnerung, 1. Mahnung, 2. Mahnung, letzte Mahnung) with legally correct language, deadlines, and Verzugszinsen calculation per §§286-288 BGB. Use this skill when the user mentions late payment, overdue invoice, Mahnung, dunning, Zahlungserinnerung, Verzug, or a client who hasn't paid.
 trigger: User mentions "Mahnung," "late payment," "overdue," "hasn't paid," "Zahlungserinnerung," "Verzug," "dunning," or a client who owes money.
 ---

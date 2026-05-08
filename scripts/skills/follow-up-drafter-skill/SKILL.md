@@ -1,5 +1,5 @@
 ---
-name: Follow-Up Drafter
+name: follow-up-drafter-skill
 description: Draft professional follow-up emails from meeting notes — extracts key decisions, action items, and next steps into a polished email ready to send. Use this skill when the user mentions meeting follow-up, post-meeting email, debrief, recap email, or wants to summarize a meeting into an actionable email.
 trigger: User mentions "follow-up," "meeting recap," "debrief email," "post-meeting," or pastes meeting notes expecting an email.
 ---

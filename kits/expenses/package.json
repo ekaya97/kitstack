@@ -4,7 +4,7 @@
   "private": true,
   "type": "module",
   "dependencies": {
-    "@kitstackco/sdk": "*",
+    "@kitstackco/sdk": "^0.1.4",
     "@libsql/client": "^0.14.0",
     "drizzle-orm": "^0.38.0",
     "nanoid": "^5.0.0",

@@ -1,5 +1,5 @@
 ---
-name: Expense Categorizer Skill
+name: expense-categorizer-skill
 description: Categorize business expenses according to SKR03/SKR04, determine correct VAT rates (0%/7%/19%), flag ambiguous items, and generate Steuerberater-ready summaries. Designed for German freelancers and Kleinunternehmer.
 trigger: User uploads a CSV, bank statement, or expense list, or mentions "expenses," "Betriebsausgaben," "Steuerberater," "VAT," "Umsatzsteuer," "Vorsteuer," "SKR03," "Buchhaltung," or asks to categorize or sort business expenses.
 ---

@@ -211,7 +211,7 @@ export default function DashboardPage() {
         <div className="flex gap-4">
           <a href="/legal/privacy" className="hover:text-ks-ink">Privacy</a>
           <a href="/legal/terms" className="hover:text-ks-ink">Terms</a>
-          <a href="mailto:support@kitstack.co" className="hover:text-ks-ink">Support</a>
+          <a href="mailto:hello@kitstack.co" className="hover:text-ks-ink">Support</a>
         </div>
       </footer>
     </div>

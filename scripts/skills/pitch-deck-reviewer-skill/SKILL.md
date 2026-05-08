@@ -1,5 +1,5 @@
 ---
-name: Pitch Deck Reviewer
+name: pitch-deck-reviewer-skill
 description: Review and improve pitch decks — investor decks, agency pitches, conference talks, and sales presentations. Slide-by-slide feedback with scoring, narrative assessment, and specific rewrite suggestions.
 trigger: User mentions "pitch deck," "presentation review," "slide deck," "investor deck," "pitch feedback," "review my deck," "presentation feedback," "slide feedback," or asks for help improving a presentation.
 ---

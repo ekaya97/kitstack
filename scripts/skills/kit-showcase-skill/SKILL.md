@@ -1,5 +1,5 @@
 ---
-name: Kit Showcase
+name: kit-showcase-skill
 description: Experience what a KitStack kit does through a guided mini-session. Try adding data, querying it, and see why persistence matters — with CRM, Expenses, or Decision Journal demos.
 trigger: User mentions "try a kit," "demo," "playground," "what can kits do," "show me how it works," "kit showcase," "kitstack demo," or asks about kits, MCP tools, or persistent AI tools.
 ---

@@ -1,5 +1,5 @@
 ---
-name: Competitive Teardown
+name: competitive-teardown-skill
 description: Conduct a structured competitive analysis — product positioning, pricing intelligence, feature comparison, differentiation mapping, and strategic opportunities. For startups, freelancers, agencies, and consultants.
 trigger: User mentions "competitor analysis," "competitive teardown," "market comparison," "who else does this," "positioning," "competitive landscape," "compare against," "market map," "what makes us different," or asks to analyze competitors.
 ---

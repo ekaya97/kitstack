@@ -1,5 +1,5 @@
 ---
-name: Scope of Work Generator
+name: scope-of-work-skill
 description: Generate detailed, enforceable Scope of Work documents with precise deliverables, milestones, acceptance criteria, and protective clauses — for any project type including web development, brand strategy, consulting, and technology implementations.
 trigger: User mentions "scope of work," "SOW," "project scope," "deliverables," "work breakdown," "statement of work," "scope document," or asks to define what's in/out of scope for an engagement.
 ---

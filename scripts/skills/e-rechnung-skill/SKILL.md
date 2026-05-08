@@ -1,5 +1,5 @@
 ---
-name: E-Rechnung / XRechnung
+name: e-rechnung-skill
 description: Guide users through German electronic invoicing (XRechnung, ZUGFeRD) — generate compliant XML, validate mandatory fields, and explain §14 UStG requirements. Use this skill when the user mentions e-Rechnung, XRechnung, ZUGFeRD, electronic invoice, Leitweg-ID, UBL, B2G invoicing, or asks about German e-invoicing compliance — even if they just say "I need to send an invoice to a government agency."
 trigger: User mentions "XRechnung," "e-Rechnung," "ZUGFeRD," "Leitweg-ID," "UBL," "B2G invoice," or asks about German electronic invoicing requirements.
 ---

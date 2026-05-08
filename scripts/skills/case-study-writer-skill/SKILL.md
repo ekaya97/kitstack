@@ -1,5 +1,5 @@
 ---
-name: Case Study Writer
+name: case-study-writer-skill
 description: Generate complete, client-approved case studies with compelling narratives, quantified results, and strategic framing — calibrated for B2B marketing, portfolio pages, and sales enablement.
 trigger: User mentions "case study," "success story," "client story," "portfolio piece," "client results," "testimonial," or asks to write up results from a client engagement.
 ---

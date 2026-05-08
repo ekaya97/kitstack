@@ -1,5 +1,7 @@
 #!/usr/bin/env node
 
+import { readFileSync } from "node:fs";
+
 /**
  * KitStack CLI entry point.
  *
@@ -75,7 +77,9 @@
  * 0.0.1
  * ```
  */
-const VERSION = "0.0.1";
+const { version: VERSION } = JSON.parse(
+  readFileSync(new URL("../../package.json", import.meta.url), "utf-8")
+);
 
 /**
  * Help text printed when no command is given or when `--help` / `-h`

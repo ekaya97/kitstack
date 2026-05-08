@@ -1,5 +1,5 @@
 ---
-name: Contract Red Flag Skill
+name: contract-red-flag-skill
 description: Scan contracts clause-by-clause, identify problematic terms, score risk levels (green/yellow/red), and provide plain-language explanations with recommended actions. Supports German (BGB/AGB) and US/UK contract law basics.
 trigger: User uploads a contract, mentions "review," "red flags," "sign," "NDA," "terms," "agreement," "contract review," or asks to check contract terms.
 ---

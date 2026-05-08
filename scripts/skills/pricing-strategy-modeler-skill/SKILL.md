@@ -1,5 +1,5 @@
 ---
-name: Pricing Strategy Modeler
+name: pricing-strategy-modeler-skill
 description: Analyze and model pricing strategies for freelancers and agencies — compare hourly vs. project vs. retainer vs. value-based pricing, run break-even analysis, calculate effective rates, and build pricing tables calibrated by role, market, and business goals.
 trigger: User mentions "pricing," "rates," "hourly vs project," "break even," "how much to charge," "rate card," "pricing model," "value-based pricing," "retainer pricing," or asks for help setting or evaluating their prices.
 ---

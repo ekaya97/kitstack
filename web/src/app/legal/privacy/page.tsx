@@ -26,7 +26,7 @@ export default function PrivacyPage() {
 
       <h2>2. Data Controller</h2>
       <p>
-        enka Consulting, Enes Kaya
+        Enes Kaya
         <br />
         E-Mail:{" "}
         <a href="mailto:hello@kitstack.co">hello@kitstack.co</a>

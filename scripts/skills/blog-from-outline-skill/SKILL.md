@@ -1,5 +1,5 @@
 ---
-name: Blog Post from Outline
+name: blog-from-outline-skill
 description: Transform rough outlines, bullet points, or topic ideas into complete, publish-ready blog posts with SEO optimization, proper structure, compelling introductions, and clear calls to action — calibrated by audience, tone, and content type.
 trigger: User mentions "blog," "blog post," "article," "write a post," "SEO," "draft," "content," "write about," or provides an outline they want expanded into a full blog post.
 ---

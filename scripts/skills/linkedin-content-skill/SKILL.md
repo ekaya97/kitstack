@@ -1,5 +1,5 @@
 ---
-name: LinkedIn Content Skill
+name: linkedin-content-skill
 description: Write authentic, high-performing LinkedIn posts that build authority and attract opportunities — without sounding like AI, engagement bait, or corporate content marketing. Includes voice calibration, 8 post frameworks, and anti-pattern detection.
 trigger: User mentions "LinkedIn," "post," "content," "personal brand," "thought leadership," or asks to write or improve a LinkedIn post.
 ---

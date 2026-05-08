@@ -16,13 +16,11 @@ export default function ImprintPage() {
 
       <h2>Angaben gem&auml;&szlig; &sect; 5 TMG</h2>
       <p>
-        enka Consulting
-        <br />
         Enes Kaya
         <br />
-        [Stra&szlig;e und Hausnummer]
+        Vagedesstr. 21
         <br />
-        [PLZ Ort]
+        40479 Düsseldorf
         <br />
         Deutschland
       </p>

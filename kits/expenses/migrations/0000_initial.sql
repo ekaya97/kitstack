@@ -49,7 +49,7 @@ CREATE TABLE `settings` (
 );
 --> statement-breakpoint
 -- Seed default categories (SKR03 mapping)
-INSERT INTO `categories` (`id`, `name`, `skr03_account`, `is_default`) VALUES
+INSERT OR IGNORE INTO `categories` (`id`, `name`, `skr03_account`, `is_default`) VALUES
 	('cat_office_supplies', 'office_supplies', '4930', 1),
 	('cat_software', 'software', '4964', 1),
 	('cat_hardware', 'hardware', '0410', 1),
@@ -66,7 +66,7 @@ INSERT INTO `categories` (`id`, `name`, `skr03_account`, `is_default`) VALUES
 	('cat_misc', 'misc', '4900', 1);
 --> statement-breakpoint
 -- Seed default settings
-INSERT INTO `settings` (`key`, `value`) VALUES
+INSERT OR IGNORE INTO `settings` (`key`, `value`) VALUES
 	('vat_mode', 'standard'),
 	('default_currency', 'EUR'),
 	('fiscal_year_start', '01');
