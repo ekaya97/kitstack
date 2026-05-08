@@ -37,8 +37,9 @@ export function KitActivateCard({
   linkedSkillSlug,
 }: Props) {
   const { data: session, isPending: sessionPending } = authClient.useSession();
-  const { data: subData, isLoading: subLoading } = useSubscription();
-  const { data: kitsData, isLoading: kitsLoading } = useMyKits();
+  const isLoggedIn = !!session?.user;
+  const { data: subData, isLoading: subLoading } = useSubscription({ enabled: isLoggedIn });
+  const { data: kitsData, isLoading: kitsLoading } = useMyKits({ enabled: isLoggedIn });
   const subscribeMut = useSubscribe();
   const activateMut = useActivateKit();
 

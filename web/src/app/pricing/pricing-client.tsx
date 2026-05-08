@@ -1,6 +1,7 @@
 "use client";
 
 import { useState } from "react";
+import Link from "next/link";
 import { Nav } from "@/components/shared/nav";
 import { Footer } from "@/components/shared/footer";
 import { FAQ } from "@/components/shared/faq";
@@ -81,9 +82,9 @@ export function PricingClient({ kits }: PricingClientProps) {
               <li>&#10003; 1 free kit trial per day <span className="text-xs italic text-ks-faint">coming soon</span></li>
               <li>&#10003; Email updates</li>
             </ul>
-            <button className="ks-btn mt-6 w-full !text-[13px]">
+            <Link href="/skills" className="ks-btn mt-6 w-full !text-[13px] text-center block">
               Browse skills
-            </button>
+            </Link>
           </div>
 
           {/* STARTER */}
@@ -103,9 +104,9 @@ export function PricingClient({ kits }: PricingClientProps) {
               <li>&#10003; Multi-client (Claude, ChatGPT, Gemini)</li>
               <li>&#10003; Cancel anytime</li>
             </ul>
-            <button className="ks-btn ks-btn-primary mt-6 w-full !text-[13px]">
+            <Link href="/kits" className="ks-btn ks-btn-primary mt-6 w-full !text-[13px] text-center block">
               Pick a kit &rarr;
-            </button>
+            </Link>
           </div>
 
           {/* PRO — HIGHLIGHTED */}
@@ -140,9 +141,9 @@ export function PricingClient({ kits }: PricingClientProps) {
                   of SaaS
                 </li>
               </ul>
-              <button className="ks-btn ks-btn-accent mt-6 w-full !text-[13px]">
+              <Link href="/kits" className="ks-btn ks-btn-accent mt-6 w-full !text-[13px] text-center block">
                 Go Pro &rarr;
-              </button>
+              </Link>
             </div>
           </div>
 

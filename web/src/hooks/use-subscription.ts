@@ -13,7 +13,7 @@ interface SubscriptionResponse {
   subscription: SubscriptionData | null;
 }
 
-export function useSubscription() {
+export function useSubscription(options?: { enabled?: boolean }) {
   return useQuery<SubscriptionResponse>({
     queryKey: ["subscription"],
     queryFn: async () => {
@@ -22,6 +22,7 @@ export function useSubscription() {
       return res.json();
     },
     staleTime: 5 * 60 * 1000,
+    enabled: options?.enabled,
   });
 }
 

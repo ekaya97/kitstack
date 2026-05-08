@@ -34,7 +34,7 @@ interface MyKitsResponse {
   limit: number | null;
 }
 
-export function useMyKits() {
+export function useMyKits(options?: { enabled?: boolean }) {
   return useQuery<MyKitsResponse>({
     queryKey: ["myKits"],
     queryFn: async () => {
@@ -43,6 +43,7 @@ export function useMyKits() {
       return res.json();
     },
     staleTime: 2 * 60 * 1000,
+    enabled: options?.enabled,
   });
 }
 
