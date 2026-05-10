@@ -64,10 +64,10 @@ export function McpConnectModal({
       />
 
       {/* Modal */}
-      <div className="relative bg-ks-paper border border-ks-hair rounded-2xl shadow-xl w-full max-w-lg p-8">
+      <div className="relative bg-ks-paper border border-ks-hair rounded-2xl shadow-xl w-full max-w-lg p-4 sm:p-6 md:p-8">
         <button
           onClick={onClose}
-          className="absolute top-4 right-4 text-ks-muted hover:text-ks-ink text-lg"
+          className="absolute top-4 right-4 text-ks-muted hover:text-ks-ink text-lg w-8 h-8 flex items-center justify-center"
         >
           &times;
         </button>

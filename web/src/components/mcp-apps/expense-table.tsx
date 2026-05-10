@@ -51,8 +51,8 @@ const vatColor: Record<number, string> = {
 export function ExpenseTable({ rows = 5 }: { rows?: number }) {
   const items = data.slice(0, rows);
   return (
-    <div className="origin-top-left scale-[0.78] sm:scale-100 -mb-[22%] sm:mb-0">
-      <div className="grid grid-cols-[60px_1fr_70px_60px_120px] gap-2 px-1 py-1.5 border-b-[1.5px] border-ks-ink">
+    <div className="overflow-x-auto">
+      <div className="grid grid-cols-[60px_1fr_70px_60px_120px] gap-2 px-1 py-1.5 border-b-[1.5px] border-ks-ink min-w-[430px]">
         {["Date", "Description", "Amount", "VAT", "Category"].map((h) => (
           <div
             key={h}
@@ -65,7 +65,7 @@ export function ExpenseTable({ rows = 5 }: { rows?: number }) {
       {items.map((r, i) => (
         <div
           key={i}
-          className="grid grid-cols-[60px_1fr_70px_60px_120px] gap-2 px-1 py-[7px] border-b border-dashed border-ks-hair items-center"
+          className="grid grid-cols-[60px_1fr_70px_60px_120px] gap-2 px-1 py-[7px] border-b border-dashed border-ks-hair items-center min-w-[430px]"
         >
           <div className="font-mono text-[10px] text-ks-muted">{r.date}</div>
           <div className="font-sans text-[11px]">

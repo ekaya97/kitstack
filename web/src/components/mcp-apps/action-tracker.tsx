@@ -35,7 +35,7 @@ const actions = [
 
 export function ActionTracker() {
   return (
-    <div>
+    <div className="overflow-x-auto">
       <div className="flex gap-2 mb-2.5">
         <span className="ks-chip ks-chip-solid !text-[10px]">
           All &middot; 4
@@ -48,7 +48,7 @@ export function ActionTracker() {
       {actions.map((a, i) => (
         <div
           key={i}
-          className="grid grid-cols-[18px_1fr_70px_70px] gap-2.5 px-1.5 py-2 border-b border-dashed border-ks-hair items-center"
+          className="grid grid-cols-[18px_1fr_60px_60px] sm:grid-cols-[18px_1fr_70px_70px] gap-2.5 px-1.5 py-2 border-b border-dashed border-ks-hair items-center"
         >
           <div
             className="w-3.5 h-3.5 rounded-[3px] grid place-items-center text-[10px] text-white"

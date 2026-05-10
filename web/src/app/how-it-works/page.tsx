@@ -34,7 +34,7 @@ function Step({
 }) {
   return (
     <div className="flex gap-5">
-      <div className="font-serif text-[40px] text-ks-accent italic leading-none pt-1 shrink-0 w-10">
+      <div className="font-serif text-[24px] sm:text-[32px] lg:text-[40px] text-ks-accent italic leading-none pt-1 shrink-0 w-10">
         {n}
       </div>
       <div className="flex-1">
@@ -53,11 +53,11 @@ export default function HowItWorksPage() {
       <Nav active="How it works" />
 
       {/* HERO */}
-      <section className="px-16 pt-14 pb-10 max-w-4xl mx-auto text-center">
+      <section className="px-4 sm:px-8 lg:px-16 pt-14 pb-10 max-w-4xl mx-auto text-center">
         <div className="font-mono text-[11px] text-ks-muted tracking-[1px] mb-3">
           HOW IT WORKS
         </div>
-        <h1 className="font-serif text-[56px] leading-[1.02] tracking-tight text-ks-ink">
+        <h1 className="font-serif text-[28px] sm:text-[40px] lg:text-[56px] leading-[1.02] tracking-tight text-ks-ink">
           Skills are free.{" "}
           <span className="italic text-ks-accent">Kits remember.</span>
         </h1>
@@ -68,14 +68,14 @@ export default function HowItWorksPage() {
       </section>
 
       {/* WHAT ARE SKILLS */}
-      <section className="px-16 py-14 bg-ks-paper-warm border-y border-ks-hair">
+      <section className="px-4 sm:px-8 lg:px-16 py-14 bg-ks-paper-warm border-y border-ks-hair">
         <div className="max-w-4xl mx-auto">
-          <div className="grid grid-cols-[1fr_1fr] gap-12 items-start">
+          <div className="grid grid-cols-1 md:grid-cols-[1fr_1fr] gap-6 md:gap-12 items-start">
             <div>
               <div className="font-mono text-[10px] text-ks-muted tracking-wider mb-2">
                 TIER 1 &middot; FREE
               </div>
-              <h2 className="font-serif text-[40px] tracking-tight mb-4">
+              <h2 className="font-serif text-[24px] sm:text-[32px] lg:text-[40px] tracking-tight mb-4">
                 What are Skills?
               </h2>
               <p className="font-sans text-[15px] text-ks-ink2 leading-relaxed mb-4">
@@ -129,9 +129,9 @@ export default function HowItWorksPage() {
       </section>
 
       {/* WHAT ARE KITS */}
-      <section className="px-16 py-14">
+      <section className="px-4 sm:px-8 lg:px-16 py-14">
         <div className="max-w-4xl mx-auto">
-          <div className="grid grid-cols-[1fr_1fr] gap-12 items-start">
+          <div className="grid grid-cols-1 md:grid-cols-[1fr_1fr] gap-6 md:gap-12 items-start">
             <div className="flex flex-col gap-4">
               <KitPipelineMock />
               <KitPersistenceMock />
@@ -141,7 +141,7 @@ export default function HowItWorksPage() {
               <div className="font-mono text-[10px] text-ks-accent tracking-wider mb-2">
                 TIER 2 &middot; &euro;5/MO
               </div>
-              <h2 className="font-serif text-[40px] tracking-tight mb-4">
+              <h2 className="font-serif text-[24px] sm:text-[32px] lg:text-[40px] tracking-tight mb-4">
                 What are Kits?
               </h2>
               <p className="font-sans text-[15px] text-ks-ink2 leading-relaxed mb-4">
@@ -187,9 +187,9 @@ export default function HowItWorksPage() {
       </section>
 
       {/* THE UPGRADE PATH */}
-      <section className="px-16 py-10 bg-ks-ink text-ks-paper">
+      <section className="px-4 sm:px-8 lg:px-16 py-10 bg-ks-ink text-ks-paper">
         <div className="max-w-3xl mx-auto text-center">
-          <h2 className="font-serif text-[36px] tracking-tight mb-3">
+          <h2 className="font-serif text-[24px] sm:text-[30px] lg:text-[36px] tracking-tight mb-3">
             The upgrade path is natural.
           </h2>
           <p className="font-sans text-[16px] text-ks-paper-deep leading-relaxed max-w-xl mx-auto mb-6">
@@ -197,13 +197,13 @@ export default function HowItWorksPage() {
             week, you can&apos;t recall what you quoted that client. The CRM Kit
             remembers everything &mdash; proposals, contacts, deals, pipeline.
           </p>
-          <div className="flex justify-center items-center gap-4 font-sans text-sm text-ks-paper-deep">
+          <div className="flex flex-wrap justify-center items-center gap-4 font-sans text-sm text-ks-paper-deep">
             <span>Download free skill</span>
-            <span className="font-serif text-[28px] text-ks-accent italic">
+            <span className="font-serif text-[20px] sm:text-[24px] lg:text-[28px] text-ks-accent italic">
               &rarr;
             </span>
             <span>Love it? Upgrade to the kit</span>
-            <span className="font-serif text-[28px] text-ks-accent italic">
+            <span className="font-serif text-[20px] sm:text-[24px] lg:text-[28px] text-ks-accent italic">
               &rarr;
             </span>
             <span>Keep your data forever</span>
@@ -212,15 +212,15 @@ export default function HowItWorksPage() {
       </section>
 
       {/* SETUP GUIDES */}
-      <section className="px-16 pt-16 pb-6">
+      <section className="px-4 sm:px-8 lg:px-16 pt-16 pb-6">
         <div className="max-w-4xl mx-auto text-center mb-8">
           <div className="font-mono text-[11px] text-ks-muted tracking-[1px] mb-3">
             SETUP GUIDES
           </div>
-          <h2 className="font-serif text-[48px] tracking-tight mb-8">
+          <h2 className="font-serif text-[28px] sm:text-[36px] lg:text-[48px] tracking-tight mb-8">
             Step-by-step for every platform.
           </h2>
-          <div className="flex justify-center gap-3">
+          <div className="flex flex-wrap justify-center gap-3">
             <a
               href="#claude"
               className="ks-btn !py-2.5 !px-5 !text-[13px] !gap-2.5"
@@ -253,14 +253,14 @@ export default function HowItWorksPage() {
       </section>
 
       {/* CLAUDE GUIDE */}
-      <section className="px-16 pb-14" id="claude">
+      <section className="px-4 sm:px-8 lg:px-16 pb-14" id="claude">
         <div className="max-w-4xl mx-auto">
           <div className="flex items-center gap-3 mb-8">
             <div className="w-10 h-10 rounded-lg bg-[#d97757] flex items-center justify-center">
               <span className="text-white font-serif text-lg font-bold">C</span>
             </div>
             <div>
-              <h3 className="font-serif text-[28px] tracking-tight">Claude</h3>
+              <h3 className="font-serif text-[20px] sm:text-[24px] lg:text-[28px] tracking-tight">Claude</h3>
               <span className="font-mono text-[11px] text-ks-muted">
                 claude.ai &middot; Desktop &middot; iOS &middot; Cowork
               </span>
@@ -272,7 +272,7 @@ export default function HowItWorksPage() {
             <h4 className="font-serif text-[20px] text-ks-ink mb-5 pb-2 border-b border-ks-hair">
               Adding a skill to Claude
             </h4>
-            <div className="grid grid-cols-[1fr_1fr] gap-8">
+            <div className="grid grid-cols-1 md:grid-cols-[1fr_1fr] gap-4 md:gap-8">
               <div className="flex flex-col gap-6">
                 <Step n="01" title="Download the skill">
                   Find a skill on KitStack and click the download button. You&apos;ll
@@ -303,7 +303,7 @@ export default function HowItWorksPage() {
             <h4 className="font-serif text-[20px] text-ks-ink mb-5 pb-2 border-b border-ks-hair">
               Connecting KitStack kits to Claude
             </h4>
-            <div className="grid grid-cols-[1fr_1fr] gap-8">
+            <div className="grid grid-cols-1 md:grid-cols-[1fr_1fr] gap-4 md:gap-8">
               <div className="flex flex-col gap-6">
                 <Step n="01" title="Subscribe on KitStack">
                   Sign up at kitstack.co and choose the Starter plan (&euro;5/mo).
@@ -347,14 +347,14 @@ export default function HowItWorksPage() {
       </section>
 
       {/* CHATGPT GUIDE */}
-      <section className="px-16 py-14 bg-ks-paper-warm border-y border-ks-hair" id="chatgpt">
+      <section className="px-4 sm:px-8 lg:px-16 py-14 bg-ks-paper-warm border-y border-ks-hair" id="chatgpt">
         <div className="max-w-4xl mx-auto">
           <div className="flex items-center gap-3 mb-8">
             <div className="w-10 h-10 rounded-lg bg-[#10a37f] flex items-center justify-center">
               <span className="text-white font-serif text-lg font-bold">G</span>
             </div>
             <div>
-              <h3 className="font-serif text-[28px] tracking-tight">ChatGPT</h3>
+              <h3 className="font-serif text-[20px] sm:text-[24px] lg:text-[28px] tracking-tight">ChatGPT</h3>
               <span className="font-mono text-[11px] text-ks-muted">
                 chatgpt.com &middot; Desktop &middot; Mobile
               </span>
@@ -365,7 +365,7 @@ export default function HowItWorksPage() {
             <h4 className="font-serif text-[20px] text-ks-ink mb-5 pb-2 border-b border-ks-hair">
               Adding a skill to ChatGPT
             </h4>
-            <div className="grid grid-cols-[1fr_1fr] gap-8">
+            <div className="grid grid-cols-1 md:grid-cols-[1fr_1fr] gap-4 md:gap-8">
               <div className="flex flex-col gap-6">
                 <Step n="01" title="Download the skill">
                   Download the .zip from KitStack. Unzip it to access the files.
@@ -398,7 +398,7 @@ export default function HowItWorksPage() {
             <h4 className="font-serif text-[20px] text-ks-ink mb-5 pb-2 border-b border-ks-hair">
               Connecting KitStack kits to ChatGPT
             </h4>
-            <div className="grid grid-cols-[1fr_1fr] gap-8">
+            <div className="grid grid-cols-1 md:grid-cols-[1fr_1fr] gap-4 md:gap-8">
               <div className="flex flex-col gap-6">
                 <Step n="01" title="Subscribe on KitStack">
                   Same as Claude &mdash; sign up and activate your kits.
@@ -440,14 +440,14 @@ export default function HowItWorksPage() {
       </section>
 
       {/* GEMINI GUIDE */}
-      <section className="px-16 py-14" id="gemini">
+      <section className="px-4 sm:px-8 lg:px-16 py-14" id="gemini">
         <div className="max-w-4xl mx-auto">
           <div className="flex items-center gap-3 mb-8">
             <div className="w-10 h-10 rounded-lg bg-[#4285f4] flex items-center justify-center">
               <span className="text-white font-serif text-lg font-bold">G</span>
             </div>
             <div>
-              <h3 className="font-serif text-[28px] tracking-tight">Gemini</h3>
+              <h3 className="font-serif text-[20px] sm:text-[24px] lg:text-[28px] tracking-tight">Gemini</h3>
               <span className="font-mono text-[11px] text-ks-muted">
                 gemini.google.com &middot; Google AI Studio
               </span>
@@ -458,7 +458,7 @@ export default function HowItWorksPage() {
             <h4 className="font-serif text-[20px] text-ks-ink mb-5 pb-2 border-b border-ks-hair">
               Adding a skill to Gemini
             </h4>
-            <div className="grid grid-cols-[1fr_1fr] gap-8">
+            <div className="grid grid-cols-1 md:grid-cols-[1fr_1fr] gap-4 md:gap-8">
               <div className="flex flex-col gap-6">
                 <Step n="01" title="Download and unzip">
                   Download the skill .zip from KitStack and unzip it.
@@ -495,7 +495,7 @@ export default function HowItWorksPage() {
             <h4 className="font-serif text-[20px] text-ks-ink mb-5 pb-2 border-b border-ks-hair">
               Connecting KitStack kits to Gemini
             </h4>
-            <div className="grid grid-cols-[1fr_1fr] gap-8">
+            <div className="grid grid-cols-1 md:grid-cols-[1fr_1fr] gap-4 md:gap-8">
               <div className="flex flex-col gap-6">
                 <Step n="01" title="MCP support coming soon">
                   Gemini is adding MCP connector support. Once available,
@@ -521,16 +521,16 @@ export default function HowItWorksPage() {
       </section>
 
       {/* OTHER CLIENTS */}
-      <section className="px-16 py-14 bg-ks-paper-warm border-t border-ks-hair">
+      <section className="px-4 sm:px-8 lg:px-16 py-14 bg-ks-paper-warm border-t border-ks-hair">
         <div className="max-w-4xl mx-auto">
-          <h2 className="font-serif text-[32px] tracking-tight mb-6">
+          <h2 className="font-serif text-[24px] sm:text-[28px] lg:text-[32px] tracking-tight mb-6">
             Other compatible clients
           </h2>
           <p className="font-sans text-[15px] text-ks-muted leading-relaxed mb-6 max-w-xl">
             KitStack kits work with any client that supports the MCP protocol.
             Skills work with any AI that accepts uploaded files.
           </p>
-          <div className="grid grid-cols-4 gap-4">
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
             {[
               { name: "VS Code", desc: "Copilot + MCP connectors", status: "Kits + Skills" },
               { name: "Cursor", desc: "MCP connector support", status: "Kits + Skills" },
@@ -554,8 +554,8 @@ export default function HowItWorksPage() {
       </section>
 
       {/* CTA */}
-      <section className="px-16 py-14 text-center">
-        <h2 className="font-serif text-[40px] tracking-tight mb-4">
+      <section className="px-4 sm:px-8 lg:px-16 py-14 text-center">
+        <h2 className="font-serif text-[24px] sm:text-[32px] lg:text-[40px] tracking-tight mb-4">
           Ready to start?
         </h2>
         <p className="font-sans text-[16px] text-ks-muted mb-6">

@@ -68,7 +68,7 @@ export function ToolCall({
   args?: string;
 }) {
   return (
-    <div className="ml-[34px] py-2 px-3 bg-ks-paper-warm border-l-2 border-ks-accent rounded-r-md font-mono text-[11px] text-ks-muted">
+    <div className="ml-6 sm:ml-[34px] py-2 px-3 bg-ks-paper-warm border-l-2 border-ks-accent rounded-r-md font-mono text-[11px] text-ks-muted">
       <span className="text-ks-accent font-semibold">&#9674; {tool}</span>
       {args && <span>({args})</span>}
     </div>
@@ -84,7 +84,7 @@ export function MCPApp({
   height?: number;
 }) {
   return (
-    <div className="ml-[34px] border-[1.5px] border-ks-hair rounded-[10px] bg-ks-paper overflow-hidden">
+    <div className="ml-6 sm:ml-[34px] border-[1.5px] border-ks-hair rounded-[10px] bg-ks-paper overflow-hidden">
       <div className="px-3 py-2 bg-ks-paper-deep border-b border-ks-hair flex items-center gap-1.5 font-mono text-[10px] text-ks-muted tracking-wide">
         <span className="text-ks-accent">&#9635;</span>
         <span>LIVE PREVIEW &middot; {title}</span>

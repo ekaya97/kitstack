@@ -3,7 +3,7 @@ export function ChatGPTAppsSettings() {
     <div className="rounded-xl border border-ks-hair overflow-hidden bg-[#2a2a2a]">
       <div className="flex">
         {/* Left: Settings nav */}
-        <div className="w-[130px] border-r border-[#3d3d3d] px-2 py-3 space-y-0.5 shrink-0">
+        <div className="hidden sm:block w-[130px] border-r border-[#3d3d3d] px-2 py-3 space-y-0.5 shrink-0">
           {[
             { label: "General", icon: "gear", active: false },
             { label: "Notifications", icon: "bell", active: false },

@@ -53,7 +53,7 @@ export function Nav({ active }: { active?: string }) {
         <button
           type="button"
           onClick={() => setMenuOpen((v) => !v)}
-          className="md:hidden flex flex-col justify-center gap-[5px] w-8 h-8 cursor-pointer"
+          className="md:hidden flex flex-col justify-center gap-[5px] w-11 h-11 cursor-pointer"
           aria-label="Toggle menu"
         >
           <span

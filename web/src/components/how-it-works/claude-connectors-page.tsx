@@ -3,7 +3,7 @@ export function ClaudeConnectorsPage() {
     <div className="rounded-xl border border-ks-hair overflow-hidden bg-[#2a2a2a]">
       <div className="flex">
         {/* Left: Customize nav */}
-        <div className="w-[120px] border-r border-[#3d3d3d] px-3 py-3 space-y-0.5 shrink-0">
+        <div className="hidden sm:block w-[120px] border-r border-[#3d3d3d] px-3 py-3 space-y-0.5 shrink-0">
           <div className="flex items-center gap-2 mb-3">
             <svg width="12" height="12" viewBox="0 0 16 16" fill="none" className="text-[#999]">
               <path d="M10 2L4 8l6 6" stroke="currentColor" strokeWidth="1.5" />
@@ -59,7 +59,7 @@ export function ClaudeConnectorsPage() {
                   </svg>
                 </button>
                 {/* Dropdown */}
-                <div className="absolute right-0 top-8 w-[160px] bg-[#363636] border border-[#4d4d4d] rounded-lg py-1 shadow-lg z-10">
+                <div className="absolute right-0 top-8 w-[160px] max-w-[90vw] bg-[#363636] border border-[#4d4d4d] rounded-lg py-1 shadow-lg z-10">
                   <div className="px-3 py-1.5 flex items-center gap-2">
                     <svg width="11" height="11" viewBox="0 0 16 16" fill="none" className="text-[#999]">
                       <rect x="2" y="2" width="5" height="5" rx="1" stroke="currentColor" strokeWidth="1.2" />

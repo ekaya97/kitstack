@@ -29,8 +29,8 @@ const cols = [
 
 export function PipelineKanban({ compact = false }: { compact?: boolean }) {
   return (
-    <div className="origin-top-left scale-[0.78] sm:scale-100 -mb-[22%] sm:mb-0">
-      <div className="grid grid-cols-4 gap-2">
+    <div className="overflow-x-auto">
+      <div className="grid grid-cols-4 gap-2 min-w-[480px]">
         {cols.map((c) => (
           <div
             key={c.stage}

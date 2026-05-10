@@ -71,7 +71,7 @@ export default function AdminReviewsPage() {
   }
 
   return (
-    <div className="p-8">
+    <div className="p-4 sm:p-6 md:p-8">
       <div className="flex items-center justify-between mb-6">
         <div>
           <h1 className="font-serif text-[28px] tracking-tight text-ks-ink">
@@ -144,7 +144,7 @@ export default function AdminReviewsPage() {
           </p>
         </div>
       ) : (
-        <div className="ks-card overflow-hidden">
+        <div className="ks-card overflow-x-auto">
           <table className="w-full text-left">
             <thead>
               <tr className="bg-ks-paper-warm border-b border-ks-hair">

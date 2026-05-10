@@ -88,7 +88,7 @@ export default function DashboardPage() {
   const firstName = user.name?.split(" ")[0] || "there";
 
   return (
-    <div className="bg-ks-paper h-screen flex flex-col overflow-hidden">
+    <div className="bg-ks-paper min-h-screen flex flex-col overflow-hidden">
       <Nav />
 
       {/* Header */}
@@ -110,7 +110,7 @@ export default function DashboardPage() {
               </h1>
             </div>
           </div>
-          <div className="flex gap-2">
+          <div className="flex flex-wrap gap-2">
             {isAdmin && (
               <Link
                 href="/admin"
@@ -137,9 +137,9 @@ export default function DashboardPage() {
       </section>
 
       {/* Sidebar + content */}
-      <div className="max-w-5xl mx-auto px-4 sm:px-8 py-8 flex gap-10 flex-1 min-h-0 w-full">
+      <div className="max-w-5xl mx-auto px-4 sm:px-8 py-8 flex gap-4 md:gap-10 flex-1 min-h-0 w-full">
         {/* Sidebar */}
-        <aside className="w-44 shrink-0">
+        <aside className="hidden md:block w-44 shrink-0">
           {/* Nav tabs */}
           <nav className="flex flex-col gap-0.5">
             {TABS.map((tab) => (
@@ -208,7 +208,7 @@ export default function DashboardPage() {
 
       <footer className="shrink-0 px-4 sm:px-8 lg:px-16 py-3 border-t border-ks-hair flex items-center justify-between font-mono text-[11px] text-ks-muted">
         <span>&copy; 2026 kitstack</span>
-        <div className="flex gap-4">
+        <div className="flex flex-wrap gap-4">
           <a href="/legal/privacy" className="hover:text-ks-ink">Privacy</a>
           <a href="/legal/terms" className="hover:text-ks-ink">Terms</a>
           <a href="mailto:hello@kitstack.co" className="hover:text-ks-ink">Support</a>
@@ -325,7 +325,7 @@ function MyKitsTab() {
                   <span className="text-[8px]">&#9679;</span> Active
                 </span>
               </div>
-              <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 mb-4">
+              <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-3 mb-4">
                 {[
                   { label: "ACTIONS", value: toolCount },
                   { label: "VIEWS", value: appCount },
@@ -1080,7 +1080,7 @@ function SettingsTab({ user, onSignOut }: { user: { id: string; name: string; em
       </div>
       <div className="ks-card p-6 mb-6">
         {/* Avatar */}
-        <div className="flex items-center gap-5 mb-5">
+        <div className="flex flex-col sm:flex-row items-start sm:items-center gap-3 sm:gap-5 mb-5">
           <div className="relative">
             {avatarUrl ? (
               <img
@@ -1225,7 +1225,7 @@ function Modal({
         className="absolute inset-0 bg-ks-ink/40 backdrop-blur-sm"
         onClick={onClose}
       />
-      <div className="relative bg-ks-paper border border-ks-hair rounded-2xl shadow-xl w-full max-w-md p-8">
+      <div className="relative bg-ks-paper border border-ks-hair rounded-2xl shadow-xl w-full max-w-md p-4 sm:p-6 md:p-8">
         {children}
       </div>
     </div>

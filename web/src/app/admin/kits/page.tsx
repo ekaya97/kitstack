@@ -160,7 +160,7 @@ export default function AdminKitsPage() {
   // ── List view ─────────────────────────────────────────
   if (view === "list") {
     return (
-      <div className="p-8">
+      <div className="p-4 sm:p-6 md:p-8">
         <div className="flex items-center justify-between mb-6">
           <div>
             <h1 className="font-serif text-[28px] tracking-tight text-ks-ink">
@@ -198,7 +198,7 @@ export default function AdminKitsPage() {
             </button>
           </div>
         ) : (
-          <div className="ks-card overflow-hidden">
+          <div className="ks-card overflow-x-auto">
             <table className="w-full text-left">
               <thead>
                 <tr className="bg-ks-paper-warm border-b border-ks-hair">
@@ -313,7 +313,7 @@ export default function AdminKitsPage() {
 
   // ── Create / Edit form ────────────────────────────────
   return (
-    <div className="p-8 max-w-3xl">
+    <div className="p-4 sm:p-6 md:p-8 max-w-3xl">
       <button
         onClick={() => setView("list")}
         className="font-sans text-[13px] text-ks-muted hover:text-ks-ink mb-4 inline-flex items-center gap-1"

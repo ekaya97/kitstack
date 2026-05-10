@@ -104,11 +104,11 @@ export function KitActivateCard({
         }}
       />
 
-      <div className="ks-card p-6 sticky top-8">
+      <div className="ks-card p-4 sm:p-6 sticky top-8">
         <div className="font-mono text-[10px] text-ks-muted tracking-wider mb-2">
           SUBSCRIPTION KIT
         </div>
-        <div className="font-serif text-[44px] text-ks-ink italic leading-none mb-1">
+        <div className="font-serif text-[32px] sm:text-[44px] text-ks-ink italic leading-none mb-1">
           &euro;5<span className="text-lg">/mo</span>
         </div>
         <div className="font-sans text-[13px] text-ks-muted mb-5">

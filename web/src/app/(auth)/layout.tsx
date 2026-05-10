@@ -9,7 +9,7 @@ export default function AuthLayout({
   return (
     <div className="min-h-screen bg-ks-paper flex flex-col">
       {/* Minimal nav — just logo */}
-      <div className="px-12 py-5 border-b border-ks-hair">
+      <div className="px-4 sm:px-8 lg:px-12 py-5 border-b border-ks-hair">
         <Link href="/" className="inline-flex items-center gap-3">
           <Logo />
           <span className="font-serif text-[22px] tracking-tight">
@@ -24,7 +24,7 @@ export default function AuthLayout({
       </div>
 
       {/* Minimal footer */}
-      <div className="px-12 py-4 border-t border-ks-hair text-center font-mono text-[11px] text-ks-muted">
+      <div className="px-4 sm:px-8 lg:px-12 py-4 border-t border-ks-hair text-center font-mono text-[11px] text-ks-muted">
         &copy; 2026 kitstack &mdash; shipped from Germany
       </div>
     </div>

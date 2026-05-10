@@ -48,7 +48,6 @@ export function AppPreviewTabs({ views }: { views: AppPreviewView[] }) {
           key={views[active].previewUrl}
           src={views[active].previewUrl}
           className="w-full border-0 bg-white min-h-[280px] sm:min-h-[380px] md:min-h-[480px]"
-          style={{ height: 480 }}
           title={views[active].name}
           sandbox="allow-scripts allow-same-origin"
         />

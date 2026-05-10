@@ -44,7 +44,7 @@ export function ShareButton({
             onClick={() => setOpen(false)}
           >
             <div
-              className="bg-ks-paper rounded-xl border border-ks-hair shadow-xl w-full max-w-md p-6"
+              className="bg-ks-paper rounded-xl border border-ks-hair shadow-xl w-full max-w-md p-4 sm:p-6"
               onClick={(e) => e.stopPropagation()}
             >
               <div className="flex justify-between items-center mb-4">

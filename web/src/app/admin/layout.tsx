@@ -72,9 +72,9 @@ export default function AdminLayout({
   }
 
   return (
-    <div className="min-h-screen bg-ks-paper flex">
+    <div className="min-h-screen bg-ks-paper flex flex-col lg:flex-row">
       {/* Sidebar */}
-      <aside className="w-56 shrink-0 border-r border-ks-hair bg-white flex flex-col">
+      <aside className="w-56 shrink-0 border-r border-ks-hair bg-white hidden lg:flex flex-col">
         <div className="px-5 py-4 border-b border-ks-hair">
           <Link href="/" className="flex items-center gap-2">
             <Logo size={20} />

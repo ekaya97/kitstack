@@ -49,7 +49,7 @@ export default function AdminDashboardPage() {
 
   if (loading) {
     return (
-      <div className="p-8 flex items-center justify-center py-32">
+      <div className="p-4 sm:p-6 md:p-8 flex items-center justify-center py-32">
         <div className="w-6 h-6 border-2 border-ks-hair border-t-ks-accent rounded-full animate-spin" />
       </div>
     );
@@ -59,7 +59,7 @@ export default function AdminDashboardPage() {
   const { counts } = data;
 
   return (
-    <div className="p-8">
+    <div className="p-4 sm:p-6 md:p-8">
       <div className="mb-8">
         <h1 className="font-serif text-[28px] tracking-tight text-ks-ink">
           Dashboard
@@ -70,7 +70,7 @@ export default function AdminDashboardPage() {
       </div>
 
       {/* ── Summary cards ──────────────────────────────── */}
-      <div className="grid grid-cols-2 lg:grid-cols-4 gap-4 mb-8">
+      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 mb-8">
         <StatCard
           label="Users"
           value={counts.users}
@@ -93,7 +93,7 @@ export default function AdminDashboardPage() {
         />
       </div>
 
-      <div className="grid grid-cols-2 lg:grid-cols-4 gap-4 mb-8">
+      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 mb-8">
         <StatCard
           label="Skills"
           value={counts.skills}
@@ -122,7 +122,7 @@ export default function AdminDashboardPage() {
       {data.subscriptionBreakdown.length > 0 && (
         <div className="mb-8">
           <SectionHeader label="Subscriptions by Plan" />
-          <div className="ks-card overflow-hidden">
+          <div className="ks-card overflow-x-auto">
             <table className="w-full text-left">
               <thead>
                 <tr className="bg-ks-paper-warm border-b border-ks-hair">
@@ -146,7 +146,7 @@ export default function AdminDashboardPage() {
       )}
 
       {/* ── Top content + Category breakdown ────────────── */}
-      <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 mb-8">
+      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6 mb-8">
         {/* Top skills */}
         <div>
           <SectionHeader label="Top Skills by Downloads" href="/admin/skills" />
@@ -220,11 +220,11 @@ export default function AdminDashboardPage() {
       </div>
 
       {/* ── Activity feeds ─────────────────────────────── */}
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 mb-8">
+      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-2 gap-6 mb-8">
         {/* Recent users */}
         <div>
           <SectionHeader label="Recent Users" href="/admin/users" />
-          <div className="ks-card overflow-hidden">
+          <div className="ks-card overflow-x-auto">
             <table className="w-full text-left">
               <thead>
                 <tr className="bg-ks-paper-warm border-b border-ks-hair">
@@ -253,7 +253,7 @@ export default function AdminDashboardPage() {
         {/* Recent reviews */}
         <div>
           <SectionHeader label="Recent Reviews" href="/admin/reviews" />
-          <div className="ks-card overflow-hidden">
+          <div className="ks-card overflow-x-auto">
             <table className="w-full text-left">
               <thead>
                 <tr className="bg-ks-paper-warm border-b border-ks-hair">
@@ -294,10 +294,10 @@ export default function AdminDashboardPage() {
       </div>
 
       {/* Recent activations + downloads */}
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-2 gap-6">
         <div>
           <SectionHeader label="Recent Kit Activations" />
-          <div className="ks-card overflow-hidden">
+          <div className="ks-card overflow-x-auto">
             <table className="w-full text-left">
               <thead>
                 <tr className="bg-ks-paper-warm border-b border-ks-hair">
@@ -327,7 +327,7 @@ export default function AdminDashboardPage() {
 
         <div>
           <SectionHeader label="Recent Skill Downloads" />
-          <div className="ks-card overflow-hidden">
+          <div className="ks-card overflow-x-auto">
             <table className="w-full text-left">
               <thead>
                 <tr className="bg-ks-paper-warm border-b border-ks-hair">

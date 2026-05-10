@@ -1,4 +1,4 @@
-import type { Metadata } from "next";
+import type { Metadata, Viewport } from "next";
 import {
   Inter,
   JetBrains_Mono,
@@ -34,6 +34,12 @@ const caveat = Caveat({
   variable: "--font-hand",
   display: "swap",
 });
+
+export const viewport: Viewport = {
+  width: 'device-width',
+  initialScale: 1,
+  maximumScale: 5,
+};
 
 export const metadata: Metadata = {
   title: {
