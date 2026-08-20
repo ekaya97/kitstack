@@ -1,31 +1,37 @@
-import { BatchLogRecordProcessor, LoggerProvider } from "@opentelemetry/sdk-logs";
-import { OTLPLogExporter } from "@opentelemetry/exporter-logs-otlp-http";
-import { logs } from "@opentelemetry/api-logs";
-import { resourceFromAttributes } from "@opentelemetry/resources";
-import { Resource } from "sst";
+export async function register() {
+  if (process.env.NEXT_RUNTIME === "nodejs") {
+    const { Resource } = await import("sst");
+    const { BatchLogRecordProcessor, LoggerProvider } = await import(
+      "@opentelemetry/sdk-logs"
+    );
+    const { OTLPLogExporter } = await import(
+      "@opentelemetry/exporter-logs-otlp-http"
+    );
+    const { logs } = await import("@opentelemetry/api-logs");
+    const { resourceFromAttributes } = await import(
+      "@opentelemetry/resources"
+    );
 
-const posthogKey = Resource.PosthogKey.value;
-const posthogHost = Resource.PosthogHost.value ?? "https://eu.i.posthog.com";
+    const posthogKey = Resource.PosthogKey.value;
+    const posthogHost =
+      Resource.PosthogHost.value ?? "https://eu.i.posthog.com";
 
-export const loggerProvider = posthogKey
-  ? new LoggerProvider({
-      resource: resourceFromAttributes({ "service.name": "kitstack-web" }),
-      processors: [
-        new BatchLogRecordProcessor(
-          new OTLPLogExporter({
-            url: `${posthogHost}/i/v1/logs`,
-            headers: {
-              Authorization: `Bearer ${posthogKey}`,
-              "Content-Type": "application/json",
-            },
-          })
-        ),
-      ],
-    })
-  : null;
-
-export function register() {
-  if (process.env.NEXT_RUNTIME === "nodejs" && loggerProvider) {
-    logs.setGlobalLoggerProvider(loggerProvider);
+    if (posthogKey) {
+      const loggerProvider = new LoggerProvider({
+        resource: resourceFromAttributes({ "service.name": "kitstack-web" }),
+        processors: [
+          new BatchLogRecordProcessor(
+            new OTLPLogExporter({
+              url: `${posthogHost}/i/v1/logs`,
+              headers: {
+                Authorization: `Bearer ${posthogKey}`,
+                "Content-Type": "application/json",
+              },
+            })
+          ),
+        ],
+      });
+      logs.setGlobalLoggerProvider(loggerProvider);
+    }
   }
 }

@@ -16,8 +16,7 @@
  *   after(() => flushLogs());
  */
 
-import { SeverityNumber } from "@opentelemetry/api-logs";
-import { loggerProvider } from "@/instrumentation";
+import { SeverityNumber, logs } from "@opentelemetry/api-logs";
 
 type Attrs = Record<string, string | number | boolean | undefined>;
 
@@ -32,8 +31,10 @@ function emit(
   process.stdout.write(JSON.stringify(entry) + "\n");
 
   // Send to PostHog via OTel if available
-  if (!loggerProvider) return;
-  const logger = loggerProvider.getLogger("kitstack-web");
+  const provider = logs.getLoggerProvider();
+  // The no-op provider has no getLogger, skip if not registered
+  if (!("getLogger" in provider)) return;
+  const logger = provider.getLogger("kitstack-web");
   const cleanAttrs: Record<string, string | number | boolean> = {};
   if (attrs) {
     for (const [k, v] of Object.entries(attrs)) {
@@ -55,7 +56,8 @@ export const log = {
 };
 
 export async function flushLogs() {
-  if (loggerProvider) {
-    await loggerProvider.forceFlush();
+  const provider = logs.getLoggerProvider();
+  if ("forceFlush" in provider) {
+    await (provider as { forceFlush: () => Promise<void> }).forceFlush();
   }
 }
