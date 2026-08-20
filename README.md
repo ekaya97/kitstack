@@ -11,47 +11,56 @@
 
 ## Why KitStack
 
-Enterprises want their LLM assistants to *act* across internal systems — read the CRM, file
-an expense, open a ticket, query the warehouse. The obvious approach — one MCP tool per
-operation — falls apart at enterprise scale:
+The expensive part of an enterprise agent isn't picking a tool — it's the **agent loop**.
+Over a long task, every tool result stays in the conversation and is re-sent on every
+following turn, and a CRUD-shaped surface forces the agent to make many round-trips and
+pull raw records into context to reason over.
 
-- **Tool sprawl breaks the model.** LLM tool-selection accuracy degrades badly past
-  ~30–40 tools. Ten systems with a dozen operations each, and the model can no longer
-  reliably pick the right one.
-- **Every change churns the client.** Adding or removing capabilities fires
-  `tools/list_changed`, which most MCP clients handle poorly or not at all.
-- **Every integration is a bespoke service** to build, secure, deploy, and operate.
+Point an agent at your systems the usual way — auto-generate one MCP tool per API
+endpoint — and it inherits all of that:
 
-KitStack answers all three with **one pattern**, **one SDK**, and **one router you control**.
+- **Raw results compound.** A `list_deals` call returns dozens of full records; the model
+  aggregates them itself, and those records then weigh on *every* later turn.
+- **CRUD forces round-trips.** list → get → filter → join-by-hand; each hop is another
+  call and another raw payload left in history.
+- **The model becomes the query engine.** Work that belongs in a `GROUP BY` or a join
+  happens in the context window instead.
+
+KitStack's SDK is built to design the surface the other way: **workflow-level actions with
+curated results**, so the loop stays cheap however long the task runs.
 
 ---
 
-## The onion pattern — token-efficient by design
+## Design tools for the agent, not the API
 
-`tools/list` always returns **exactly one tool**: `kit`. Capabilities are disclosed
-progressively, like a CLI — the LLM discovers systems and actions on demand instead of
-carrying hundreds of tool schemas in every prompt.
+A KitStack tool is `defineTool({ args, handler })`, where the handler is arbitrary
+server-side code over arbitrary context — a database, an API client, or both. So you shape
+each action around what the agent is trying to *do*, and do the heavy lifting server-side:
 
-```
-kit()                                          → list available kits (crm, erp, …)
-kit(id="crm")                                  → discover a kit's actions
-kit(id="crm", cmd="add_contact")               → describe one action's parameters
-kit(id="crm", cmd="add_contact", params={…})   → run it
-```
+- **Compose server-side** — `GROUP BY`, joins, and multi-step logic run in the handler;
+  the model never sees raw rows.
+- **Return decisions, not records** — a curated summary plus the structured IDs to chain
+  on, not dozens of 40-field objects.
+- **Collapse round-trips** — one action replaces a list → get → filter → join chain.
 
-| | Tool-per-operation | KitStack onion pattern |
-|---|---|---|
-| Tools in `tools/list` | grows with every system | **always 1** |
-| Prompt token cost | scales with total operations | **flat**, regardless of catalog size |
-| Adding a system | fires `tools/list_changed` | no protocol churn — reflected at the app layer |
-| Model tool-selection | degrades past ~30–40 tools | unaffected — one tool, progressive disclosure |
+It shows up in the loop. For a routine "pipeline overview + who to follow up with" against
+the CRM kit:
 
-**Minimum path is 2 calls** (`kit(id, cmd, params)` when the model already knows the kit);
-the full discover → describe → run path is 4.
+| | Round-trips | Result footprint | Aggregation / join by |
+|---|---|---|---|
+| 1:1 CRUD / OpenAPI | several | tens of thousands of raw tokens | the model, in-context |
+| KitStack workflow tools | one or two | a few hundred curated tokens | the handler |
 
-→ Read [**Five Hard Problems in MCP (and How We Solve Them)**](web/src/content/blog/mcp-shortcomings-and-how-kits-fix-them.mdx)
-for the full argument, or [packages/mcp-server/README.md](packages/mcp-server/README.md)
-for the routing internals.
+Because results persist in the conversation and are re-sent each turn, that gap isn't paid
+once — it compounds across the whole task. Over a long session, curated actions keep the
+loop cheap by roughly an order of magnitude while a raw-CRUD surface balloons.
+
+> **Discovery stays clean, too.** `tools/list` never grows: a single `kit` tool
+> progressively discloses kits and actions, so activating one never fires
+> `tools/list_changed`. Lazy discovery is common now — KitStack just gets it for free,
+> without protocol churn. See [packages/mcp-server/README.md](packages/mcp-server/README.md)
+> for the mechanics, or [Five Hard Problems in MCP](web/src/content/blog/mcp-shortcomings-and-how-kits-fix-them.mdx)
+> for the full argument.
 
 ---
 
