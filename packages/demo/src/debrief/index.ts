@@ -74,6 +74,14 @@ export class DebriefService {
   async markCalling(sessionId: string): Promise<DebriefSession> { return this.transition(sessionId, "calling"); }
   async awaitConfirmation(sessionId: string): Promise<DebriefSession> { return this.transition(sessionId, "awaiting_confirmation"); }
   async confirmDebrief(sessionId: string): Promise<DebriefSession> { return this.transition(sessionId, "confirmed"); }
+  async markFailed(sessionId: string, error: unknown): Promise<DebriefSession> {
+    const session = this.require(sessionId);
+    session.state = "failed";
+    session.error = error instanceof Error ? error.message : String(error);
+    session.updatedAt = this.now();
+    await this.emit(session, "provider_error", "error");
+    return this.getSession(sessionId);
+  }
 
   async teachFromCorrection(sessionId: string, correction: string): Promise<MemoryRecord> {
     const session = this.require(sessionId);
@@ -89,13 +97,13 @@ export class DebriefService {
   async approve(sessionId: string, memoryId: string): Promise<MemoryRecord> { return this.memory.approveCandidate(memoryId, this.memoryContext(sessionId)); }
   async publish(sessionId: string, memoryId: string): Promise<MemoryRecord> { return this.memory.publishCandidate(memoryId, this.memoryContext(sessionId)); }
 
-  getSession(sessionId: string): DebriefSession { return { ...this.require(sessionId), memoryIds: [...this.require(sessionId).memoryIds] }; }
+  getSession(sessionId: string): DebriefSession { const session = this.require(sessionId); return { ...session, memoryIds: [...session.memoryIds] }; }
   getDebrief(sessionId: string): DebriefSummary { const s = this.getSession(sessionId); return { sessionId: s.sessionId, state: s.state, goal: s.goal, instructionVersion: s.instructionVersion, memoryIds: s.memoryIds }; }
 
   private get kitId(): string { return this.context.kitId ?? "kit:debrief"; }
   private require(id: string): DebriefSession { const session = this.sessions.get(id); if (!session) throw new Error(`Debrief session "${id}" was not found`); return session; }
-  private async transition(id: string, state: DebriefState): Promise<DebriefSession> { const s = this.require(id); const allowed = s.state === "prepared" && state === "calling" || s.state === "calling" && state === "awaiting_confirmation" || (s.state === "awaiting_confirmation" || s.state === "partial") && state === "confirmed"; if (!allowed) throw new Error(`Invalid debrief transition ${s.state} -> ${state}`); s.state = state; s.updatedAt = this.now(); await this.emit(s, "state", "success"); return this.getSession(id); }
+  private async transition(id: string, state: DebriefState): Promise<DebriefSession> { const s = this.require(id); const allowed = s.state === "prepared" && state === "calling" || s.state === "calling" && state === "awaiting_confirmation" || (s.state === "awaiting_confirmation" || s.state === "partial") && state === "confirmed"; if (!allowed) throw new Error(`Invalid debrief transition ${s.state} -> ${state}`); s.state = state; s.updatedAt = this.now(); await this.emit(s, state === "confirmed" ? "complete" : "state", "success"); return this.getSession(id); }
   private memoryContext(sessionId: string) { return { orgId: this.context.orgId, appId: this.context.appId, sessionId, traceId: sessionId, parentId: null, kitId: this.kitId }; }
   private pluginContext(sessionId: string) { return { ...this.memoryContext(sessionId), telemetry: this.telemetry, lookupPlugin: () => undefined }; }
-  private async emit(s: DebriefSession, operation: string, outcome: "success" | "partial" | "error") { const event: TelemetryEventInput = { id: this.id(), timestamp: this.now(), orgId: s.orgId, appId: this.context.appId, sessionId: s.sessionId, traceId: s.sessionId, channel: "voice", pluginId: "kit:debrief", kitId: s.kitId, type: "voice.call", operation, outcome }; await this.telemetry.append(event); }
+  private async emit(s: DebriefSession, operation: string, outcome: "success" | "partial" | "error") { const event: TelemetryEventInput = { id: this.id(), timestamp: this.now(), orgId: s.orgId, appId: this.context.appId, sessionId: s.sessionId, traceId: s.sessionId, channel: "voice", pluginId: "kit:debrief", kitId: s.kitId, type: operation === "complete" ? "session.completed" : "voice.call", operation, outcome }; await this.telemetry.append(event); }
 }
