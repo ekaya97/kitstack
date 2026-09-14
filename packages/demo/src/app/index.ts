@@ -17,6 +17,7 @@ export interface DemoApp {
   readonly voice: VoiceSimulator;
   readonly plugins: PluginRegistry;
   reset(): Promise<void>;
+  close(): Promise<void>;
 }
 
 export interface CreateDemoAppOptions {
@@ -41,8 +42,13 @@ export async function createDemoApp(options: CreateDemoAppOptions = {}): Promise
   return {
     client, telemetry, apps, memory, instructions, debrief, voice, plugins,
     async reset() {
+      debrief.clearSessions();
       await memory.reset({ orgId, appId, sessionId: "demo-reset", traceId: "demo-reset", parentId: null, kitId: "kit:debrief" });
       await telemetry.reset();
+    },
+    async close() {
+      await telemetry.close();
+      client.close();
     },
   };
 }

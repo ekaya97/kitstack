@@ -31,8 +31,11 @@ describe("DemoApp", () => {
 
     await app.reset();
     expect(app.apps.get(registered.id)?.id).toBe(registered.id);
+    expect((await app.apps.verify(token)).sub).toBe(registered.id);
+    expect(() => app.debrief.getSession(first.sessionId)).toThrow(`Debrief session "${first.sessionId}" was not found`);
     expect(await app.telemetry.query({ orgId: "org-demo" })).toHaveLength(0);
     const repeat = await app.debrief.prepareDebrief("Sell a better workflow");
     expect(repeat.memoryIds).toEqual([]);
+    await app.close();
   });
 });
