@@ -9,6 +9,8 @@ import { VoiceSimulator } from "../voice/index.js";
 
 export interface DemoApp {
   readonly client: Client;
+  readonly orgId: string;
+  readonly appId: string | null;
   readonly telemetry: TelemetryStore;
   readonly apps: AppRegistry;
   readonly memory: MemoryStore;
@@ -40,7 +42,7 @@ export async function createDemoApp(options: CreateDemoAppOptions = {}): Promise
   const voice = new VoiceSimulator({ debrief, telemetry, orgId, appId });
 
   return {
-    client, telemetry, apps, memory, instructions, debrief, voice, plugins,
+    client, orgId, appId, telemetry, apps, memory, instructions, debrief, voice, plugins,
     async reset() {
       debrief.clearSessions();
       await memory.reset({ orgId, appId, sessionId: "demo-reset", traceId: "demo-reset", parentId: null, kitId: "kit:debrief" });
