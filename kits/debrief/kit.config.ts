@@ -1,112 +1,99 @@
-import { defineKit, defineTool, kit } from "@kitstackco/sdk";
-import type { KitContext, KitToolResult } from "@kitstackco/sdk";
+import { defineKit, defineTool, kit, type KitContext, type KitToolResult } from "@kitstackco/sdk";
 import { z } from "zod";
 
 /**
- * The canonical kit deliberately contains no debrief implementation or
- * transcript/audio storage. The demo runtime injects these operations at its
- * composition boundary, while the SDK-facing tool contract stays stable.
+ * The SDK kit is intentionally transport-neutral. The demo runtime binds
+ * these handlers to the specialized DebriefService; the fallback makes an
+ * unbound kit fail visibly instead of pretending to complete a call.
  */
-export interface DebriefToolHandlers {
-  prepare_debrief: (input: { goal: string }, ctx: KitContext) => Promise<unknown>;
-  get_session: (input: { session_id: string }, ctx: KitContext) => Promise<unknown>;
-  get_debrief: (input: { session_id: string }, ctx: KitContext) => Promise<unknown>;
-  confirm_debrief: (input: { session_id: string }, ctx: KitContext) => Promise<unknown>;
-  teach_from_correction: (
-    input: { session_id: string; correction: string },
-    ctx: KitContext,
-  ) => Promise<unknown>;
-}
+export type DebriefToolName =
+  | "prepare_debrief"
+  | "get_session"
+  | "get_debrief"
+  | "confirm_debrief"
+  | "teach_from_correction";
 
-let injectedHandlers: DebriefToolHandlers | undefined;
-
-/** Install the runtime-owned implementation used by the exported tools. */
-export function configureDebriefHandlers(handlers: DebriefToolHandlers): void {
-  injectedHandlers = handlers;
-}
-
-/** Clear the process-local seam between isolated demo runs or tests. */
-export function resetDebriefHandlers(): void {
-  injectedHandlers = undefined;
-}
-
-function invoke<K extends keyof DebriefToolHandlers>(
-  name: K,
-  input: Parameters<DebriefToolHandlers[K]>[0],
+export type DebriefToolHandler = (
+  db: unknown,
+  args: Record<string, unknown>,
   ctx: KitContext,
-): Promise<KitToolResult> {
-  const handler = injectedHandlers?.[name] as
-    | ((input: Parameters<DebriefToolHandlers[K]>[0], ctx: KitContext) => Promise<unknown>)
-    | undefined;
-  if (!handler) {
-    return Promise.resolve(
-      kit.error(`Debrief handler "${name}" has not been injected by the runtime.`),
-    );
-  }
-  return handler(input, ctx).then((result) => kit.json(result));
+) => Promise<KitToolResult>;
+
+const fallback = async (
+  _db: unknown,
+  _args: Record<string, unknown>,
+  _ctx: KitContext,
+): Promise<KitToolResult> => kit.error("Debrief service is not bound to this kit runtime");
+
+function tool(
+  name: DebriefToolName,
+  description: string,
+  args: z.ZodType,
+  handlers: Partial<Record<DebriefToolName, DebriefToolHandler>>,
+) {
+  return defineTool({
+    name,
+    description,
+    args,
+    handler: handlers[name] ?? fallback,
+  });
 }
 
-export const prepareDebrief = defineTool({
-  name: "prepare_debrief",
-  description: "Prepare a sales debrief session with a goal before the voice call.",
-  args: z.object({
-    goal: z.string().min(1).describe("The sales outcome or question this debrief should address."),
-  }),
-  handler: async (_db, args, ctx) => invoke("prepare_debrief", args, ctx),
-});
+export function createDebriefKit(
+  handlers: Partial<Record<DebriefToolName, DebriefToolHandler>> = {},
+) {
+  const tools = [
+    tool(
+      "prepare_debrief",
+      "Prepare a sales debrief session and earmark the outbound voice call.",
+      z.object({ goal: z.string().min(1).describe("The outcome to achieve in the sales debrief") }),
+      handlers,
+    ),
+    tool(
+      "get_session",
+      "Read the current state and identity of one sales debrief session.",
+      z.object({ session_id: z.string().min(1).describe("The shared debrief session ID") }),
+      handlers,
+    ),
+    tool(
+      "get_debrief",
+      "Read the structured result of a completed or partial sales debrief.",
+      z.object({ session_id: z.string().min(1).describe("The shared debrief session ID") }),
+      handlers,
+    ),
+    tool(
+      "confirm_debrief",
+      "Confirm a read-back or mark the debrief partial when details remain uncertain.",
+      z.object({
+        session_id: z.string().min(1).describe("The shared debrief session ID"),
+        outcome: z.enum(["confirmed", "partial"]).describe("Whether the read-back is complete"),
+      }),
+      handlers,
+    ),
+    tool(
+      "teach_from_correction",
+      "Record an operator-entered correction as structured feedback for the next run.",
+      z.object({
+        session_id: z.string().min(1).describe("The shared debrief session ID"),
+        correction: z.string().min(1).describe("The operator-entered correction, not a transcript"),
+      }),
+      handlers,
+    ),
+  ];
 
-export const getSession = defineTool({
-  name: "get_session",
-  description: "Retrieve the current state and metadata for a debrief session.",
-  args: z.object({
-    session_id: z.string().min(1).describe("The identifier of the debrief session to retrieve."),
-  }),
-  handler: async (_db, args, ctx) => invoke("get_session", args, ctx),
-});
+  return defineKit({
+    id: "debrief",
+    version: "0.1.0",
+    name: "Sales Debrief",
+    description: "Prepare, conduct, confirm, and teach a short sales voice debrief.",
+    schema: {},
+    migrationSql: "SELECT 1;",
+    instructions: "Use the injected demo debrief service; never retain call transcripts or audio.",
+    triggers: ["sales", "debrief", "voice", "customer", "follow-up"],
+    tools,
+  });
+}
 
-export const getDebrief = defineTool({
-  name: "get_debrief",
-  description: "Retrieve the concise debrief result without conversation content.",
-  args: z.object({
-    session_id: z.string().min(1).describe("The identifier of the completed or active debrief session."),
-  }),
-  handler: async (_db, args, ctx) => invoke("get_debrief", args, ctx),
-});
-
-export const confirmDebrief = defineTool({
-  name: "confirm_debrief",
-  description: "Confirm a debrief after reviewing its result and recorded learning.",
-  args: z.object({
-    session_id: z.string().min(1).describe("The identifier of the debrief session to confirm."),
-  }),
-  handler: async (_db, args, ctx) => invoke("confirm_debrief", args, ctx),
-});
-
-export const teachFromCorrection = defineTool({
-  name: "teach_from_correction",
-  description: "Record an operator correction as a candidate learning for later approval.",
-  args: z.object({
-    session_id: z.string().min(1).describe("The identifier of the debrief session being corrected."),
-    correction: z.string().min(1).describe("The operator-entered correction to learn from; do not provide a transcript."),
-  }),
-  handler: async (_db, args, ctx) => invoke("teach_from_correction", args, ctx),
-});
-
-export const tools = [
-  prepareDebrief,
-  getSession,
-  getDebrief,
-  confirmDebrief,
-  teachFromCorrection,
-];
-
-export default defineKit({
-  id: "debrief",
-  version: "0.1.0",
-  name: "Sales Debrief",
-  description: "A sales voice debrief workflow that records metadata and operator corrections, never transcript or audio content.",
-  schema: {},
-  migrationSql: "SELECT 1;",
-  instructions: "Use the injected debrief runtime. Do not store or request transcript or audio payloads.",
-  tools,
-});
+const defaultKit = createDebriefKit();
+export const tools = defaultKit.tools;
+export default defaultKit;
