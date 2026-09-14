@@ -5,7 +5,7 @@ import {
   type Server,
   type ServerResponse,
 } from "node:http";
-import { URL } from "node:url";
+import { pathToFileURL, URL } from "node:url";
 import { createDemoApp, type DemoApp } from "./app/index.js";
 import { handleDemoAppRequest } from "./http/app.js";
 
@@ -179,3 +179,12 @@ function address(server: Server): DemoServerAddress {
 }
 
 class BodyTooLargeError extends Error {}
+
+if (process.argv[1] && pathToFileURL(process.argv[1]).href === import.meta.url) {
+  const demoServer = await createDemoServer();
+  const address = await demoServer.listen();
+  console.log(`KitStack demo listening at http://${address.host}:${address.port}`);
+  const shutdown = () => { void demoServer.close().finally(() => process.exit(0)); };
+  process.once("SIGINT", shutdown);
+  process.once("SIGTERM", shutdown);
+}

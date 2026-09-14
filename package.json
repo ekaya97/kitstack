@@ -14,6 +14,7 @@
     "dev": "sst dev",
     "test": "vitest",
     "test:run": "vitest run",
+    "demo:server": "npm run start --workspace @kitstackco/demo",
     "db:generate": "drizzle-kit generate",
     "db:seed": "tsx web/src/db/seed.ts",
     "dev:db": "turso dev --db-file databases/local.db",

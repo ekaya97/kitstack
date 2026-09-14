@@ -16,6 +16,7 @@
     "vitest": "^2"
   },
   "scripts": {
-    "test": "vitest run"
+    "test": "vitest run",
+    "start": "tsx src/server.ts"
   }
 }
