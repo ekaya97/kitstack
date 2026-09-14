@@ -6,6 +6,7 @@ function fixture() {
   const debrief = {
     markCalling: vi.fn(async (id: string) => { sessions.get(id)!.state = "calling"; }),
     awaitConfirmation: vi.fn(async (id: string) => { sessions.get(id)!.state = "awaiting_confirmation"; }),
+    markPartial: vi.fn(async (id: string) => { sessions.get(id)!.state = "partial"; }),
     confirmDebrief: vi.fn(async (id: string) => { sessions.get(id)!.state = "confirmed"; }),
     markFailed: vi.fn(async (id: string) => { sessions.get(id)!.state = "failed"; }),
     getSession: vi.fn((id: string) => ({ sessionId: id, state: sessions.get(id)!.state, memoryIds: [] })),
@@ -27,13 +28,24 @@ describe("German simulator voice lifecycle", () => {
   });
   it("supports partial completion for teach-compatible follow-up", async () => {
     const f = fixture(); f.add("teach-1"); const voice = f.simulator(); await voice.start("teach-1"); await voice.advance("teach-1");
-    expect((await voice.complete("teach-1", "partial")).status).toBe("partial");
+    expect((await voice.complete("teach-1", "partial"))).toMatchObject({ status: "partial", debriefState: "partial" });
+    expect(f.debrief.markPartial).toHaveBeenCalledWith("teach-1");
     expect(f.debrief.confirmDebrief).not.toHaveBeenCalled();
   });
   it("marks provider/start failures", async () => {
     const f = fixture(); f.add("fail-1"); const voice = f.simulator(); await voice.start("fail-1");
     const result = await voice.fail("fail-1", new Error("provider unavailable"));
     expect(result.status).toBe("failed"); expect(f.debrief.markFailed).toHaveBeenCalledWith("fail-1", expect.any(Error));
+  });
+  it("converts markCalling and telemetry startup errors into failed results", async () => {
+    const f = fixture(); f.add("startup-fail"); f.debrief.markCalling.mockRejectedValueOnce(new Error("provider unavailable"));
+    const result = await f.simulator().start("startup-fail");
+    expect(result).toMatchObject({ status: "failed", error: "provider unavailable" });
+    expect(f.debrief.markFailed).toHaveBeenCalledWith("startup-fail", expect.any(Error));
+    const g = fixture(); g.add("telemetry-fail"); g.telemetry.append.mockRejectedValueOnce(new Error("telemetry unavailable"));
+    const telemetryResult = await g.simulator().start("telemetry-fail");
+    expect(telemetryResult).toMatchObject({ status: "failed", error: "telemetry unavailable" });
+    expect(g.debrief.markFailed).toHaveBeenCalledWith("telemetry-fail", expect.any(Error));
   });
   it("keeps session continuity across status reads", async () => {
     const f = fixture(); f.add("same"); const voice = f.simulator(); await voice.start("same");
