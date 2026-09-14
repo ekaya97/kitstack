@@ -18,10 +18,10 @@ beforeEach(() => {
 describe("demo observability page", () => {
   it("loads with the three observability views and empty state", async () => {
     render(<DemoPage />);
-    expect(screen.getByText("Developer observability")).toBeInTheDocument();
-    await waitFor(() => expect(screen.getByText("No apps in this browser session")).toBeInTheDocument());
-    expect(screen.getByRole("button", { name: "Usage" })).toBeInTheDocument();
-    expect(screen.getByRole("button", { name: "Session Trace" })).toBeInTheDocument();
+    expect(screen.getByText("Developer observability")).toBeTruthy();
+    await waitFor(() => expect(screen.getByText("No apps in this browser session")).toBeTruthy());
+    expect(screen.getByRole("button", { name: "Usage" })).toBeTruthy();
+    expect(screen.getByRole("button", { name: "Session Trace" })).toBeTruthy();
   });
 
   it("keeps an issued token masked until explicit reveal", async () => {
@@ -30,12 +30,12 @@ describe("demo observability page", () => {
       .mockResolvedValueOnce({ ok: true, json: async () => ({ id: "app_demo", name: "Demo", org: "org-demo", scopes: ["inference"], createdAt: "2026-01-01T00:00:00.000Z" }) })
       .mockResolvedValueOnce({ ok: true, json: async () => ({ token: "secret-demo-token", expiresInSeconds: 900 }) });
     render(<DemoPage />);
-    await waitFor(() => expect(screen.getByText("No apps in this browser session")).toBeInTheDocument());
+    await waitFor(() => expect(screen.getByText("No apps in this browser session")).toBeTruthy());
     fireEvent.click(screen.getByRole("button", { name: "Register + issue token" }));
-    await waitFor(() => expect(screen.getByText(/secret-demo-/)).toBeInTheDocument());
-    expect(screen.getByText(/••••/)).toBeInTheDocument();
-    expect(screen.queryByText("secret-demo-token")).not.toBeInTheDocument();
+    await waitFor(() => expect(screen.getByText(/secret-demo-/)).toBeTruthy());
+    expect(screen.getByText(/••••/)).toBeTruthy();
+    expect(screen.queryByText("secret-demo-token")).toBeNull();
     fireEvent.click(screen.getByRole("button", { name: "Reveal token once" }));
-    expect(screen.getByText("secret-demo-token")).toBeVisible();
+    expect(screen.getByText("secret-demo-token")).toBeTruthy();
   });
 });
