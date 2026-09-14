@@ -7,7 +7,8 @@
     "web",
     "packages/sdk",
     "packages/mcp-server",
-    "packages/authz"
+    "packages/authz",
+    "packages/demo"
   ],
   "scripts": {
     "dev": "sst dev",
