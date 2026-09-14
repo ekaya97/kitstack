@@ -40,12 +40,32 @@ describe("composed demo HTTP surface", () => {
     await app.debrief.approve(first.sessionId, memoryId);
     await app.debrief.publish(first.sessionId, memoryId);
 
-    const secondPrepared = await app.debrief.prepareDebrief("Improve qualification");
+    const secondResponse = await handleDemoAppRequest(app, {
+      method: "POST", path: "/mcp", body: {
+        id: 4, method: "tools/call", params: {
+          name: "prepare_debrief", arguments: { goal: "Improve qualification" },
+        },
+      },
+    });
+    const secondPrepared = JSON.parse(((secondResponse.body as any).result.content[0].text)) as {
+      sessionId: string; memoryIds: string[];
+    };
     expect(secondPrepared.sessionId).not.toBe(first.sessionId);
     expect(secondPrepared.memoryIds).toContain(memoryId);
-    await app.voice.start(secondPrepared.sessionId);
-    await app.voice.advance(secondPrepared.sessionId);
-    await app.voice.complete(secondPrepared.sessionId, "confirmed");
+    await handleDemoAppRequest(app, {
+      method: "POST", path: "/t/voice/start", body: { session_id: secondPrepared.sessionId },
+    });
+    await handleDemoAppRequest(app, {
+      method: "POST", path: "/t/voice/status", body: { session_id: secondPrepared.sessionId },
+    });
+    const confirmed = await handleDemoAppRequest(app, {
+      method: "POST", path: "/mcp", body: {
+        id: 5, method: "tools/call", params: {
+          name: "confirm_debrief", arguments: { session_id: secondPrepared.sessionId, outcome: "confirmed" },
+        },
+      },
+    });
+    expect(JSON.parse(((confirmed.body as any).result.content[0].text)).state).toBe("confirmed");
 
     const observability = await handleDemoAppRequest(app, {
       method: "GET", path: "/api/demo/observability", query: { appId: "null" },
