@@ -1,0 +1,28 @@
+@import url("https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap");
+@import "tailwindcss";
+@source "./**/*.tsx";
+
+@theme {
+  /* Clean retail surface */
+  --color-ks-paper: #ffffff;
+  --color-ks-paper-warm: #f6f7f5;
+  --color-ks-paper-deep: #eef0ec;
+  --color-ks-ink: #14231a;
+  --color-ks-ink2: #2c3a32;
+  --color-ks-muted: #6a756e;
+  --color-ks-faint: #a7b0aa;
+  --color-ks-hair: #e2e6e1;
+
+  /* Fressnapf-adjacent green (accent only — not the wordmark) */
+  --color-ks-accent: #009640;
+  --color-ks-accent-deep: #007a34;
+  --color-ks-accent-soft: #e3f4e9;
+
+  /* Ratings / offers */
+  --color-ks-star: #f5a623;
+  --color-ks-sale: #d64524;
+
+  --font-serif: "Inter", system-ui, sans-serif;
+  --font-sans: "Inter", system-ui, -apple-system, sans-serif;
+  --font-mono: "JetBrains Mono", ui-monospace, monospace;
+}
