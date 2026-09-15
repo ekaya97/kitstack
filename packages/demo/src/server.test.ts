@@ -31,7 +31,7 @@ describe("local demo HTTP server", () => {
       body: JSON.stringify({ id: 1, method: "tools/list" }),
     });
     expect(tools.status).toBe(200);
-    expect((await tools.json()).result.tools).toHaveLength(9);
+    expect((await tools.json()).result.tools).toHaveLength(10);
 
     const observability = await request(base, "/api/demo/observability?appId=null&limit=5");
     expect(observability.status).toBe(200);

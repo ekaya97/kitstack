@@ -509,6 +509,8 @@ export interface TwilioOpenAIBridgeOptions {
   agent?: VoiceAgentLoopAdapter | ((binding: SessionBinding) => VoiceAgentLoopAdapter | Promise<VoiceAgentLoopAdapter>);
   /** Resolve prepared-session context before opening the provider model session. */
   instructionsFor?: (binding: SessionBinding) => Promise<string>;
+  /** Finalize metadata-only call state once, after the provider stream stops. */
+  onCallCompleted?: (call: { sessionId: string; orgId: string; appId: string | null; callId: string | null; reason: string; occurredAt: string }) => Promise<void>;
   now?: () => string;
   createId?: () => string;
   estimateCostUsd?: (usage: { inputTokens?: number; outputTokens?: number }) => number | null;
@@ -549,6 +551,20 @@ export function bridgeTwilioToOpenAI(options: TwilioOpenAIBridgeOptions): Twilio
     realtime?.close();
     if (error) await agent?.onError?.(error);
     else await agent?.onStop?.(reason);
+    if (!error && current) {
+      try {
+        await options.onCallCompleted?.({
+          sessionId: current.sessionId,
+          orgId: current.orgId,
+          appId: current.appId,
+          callId: current.callSid ?? null,
+          reason,
+          occurredAt: now(),
+        });
+      } catch {
+        // Provider shutdown must remain successful even if metadata finalization is unavailable.
+      }
+    }
     await appendVoiceTelemetry(options.telemetry, {
       id: id(), timestamp: now(), orgId: current?.orgId ?? "unknown", appId: current?.appId ?? null, sessionId: current?.sessionId ?? null,
       traceId: current?.sessionId ?? streamSid ?? null, channel: "voice", kitId: "kit:debrief", type: "voice.call",

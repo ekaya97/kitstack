@@ -119,7 +119,7 @@ describe("handleMcpRequest", () => {
         invokeKitLambda
       );
       const result = res.response.result as any;
-      expect(result.tools).toHaveLength(1);
+      expect(result.tools).toHaveLength(2);
       expect(result.tools[0].name).toBe("kit");
     });
   });

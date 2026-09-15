@@ -63,6 +63,11 @@ describe("platform debrief adapter", () => {
       type: "object",
       required: ["goal", "company", "contact_name", "location", "callback_at", "callback_timezone"],
     });
+    expect(debrief?.views).toEqual([{
+      slug: "prebrief",
+      name: "Sales Prebrief",
+      description: expect.stringContaining("customer context"),
+    }]);
   });
 
   it("forwards debrief calls with a short-lived signed internal identity", async () => {

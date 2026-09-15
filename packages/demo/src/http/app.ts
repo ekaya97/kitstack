@@ -67,6 +67,11 @@ const MCP_TOOLS = [
     description: "Poll the sales voice call until it reaches confirmation.",
     inputSchema: { type: "object", properties: { session_id: { type: "string" } }, required: ["session_id"] },
   },
+  {
+    name: "kit_view",
+    description: "Load an interactive debrief View for the current prepared session.",
+    inputSchema: { type: "object", properties: { id: { type: "string" }, view: { type: "string" } }, required: ["id", "view"] },
+  },
 ] as const;
 
 export interface DemoAppRouteRequest extends DemoHttpRequest {
@@ -253,6 +258,12 @@ async function mcp(app: DemoApp, body: Record<string, unknown>): Promise<DemoHtt
     const current = await app.plugins.dispatch<{ operation: string; sessionId: string }, VoiceStatusResult>("channel:voice", { operation: "status", sessionId }, pluginContext(app, undefined, sessionId));
     value = current.status === "calling" ? await app.plugins.dispatch<{ operation: string; sessionId: string }, VoiceStatusResult>("channel:voice", { operation: "advance", sessionId }, pluginContext(app, undefined, sessionId)) : current;
   }
+  else if (name === "kit_view") {
+    if (stringField(args, "id") !== "debrief" || stringField(args, "view") !== "prebrief") {
+      return json(400, { jsonrpc: "2.0", id: body.id ?? null, error: { code: -32602, message: "Unknown debrief View" } });
+    }
+    value = { data: await loadPrebriefView(app) };
+  }
   else if (name === "confirm_debrief") {
     const sessionId = stringField(args, "session_id");
     value = await app.plugins.dispatch("trigger:voice-http", {
@@ -263,6 +274,41 @@ async function mcp(app: DemoApp, body: Record<string, unknown>): Promise<DemoHtt
   }
   else return json(400, { jsonrpc: "2.0", id: body.id ?? null, error: { code: -32602, message: `Unknown tool ${name}` } });
   return json(200, { jsonrpc: "2.0", id: body.id ?? null, result: { content: [{ type: "text", text: JSON.stringify(value) }] } });
+}
+
+async function loadPrebriefView(app: DemoApp): Promise<Record<string, unknown>> {
+  const session = app.debrief.getLatestSession();
+  if (!session?.customerId || !session.callbackAt || !session.scheduledCallAt) throw new Error("No prepared customer prebrief is available");
+  const customer = await app.debrief.getCustomer(session.customerId);
+  if (!customer) throw new Error(`Customer "${session.customerId}" was not found`);
+  const events = await app.debrief.listCustomerEvents(session.customerId);
+  const last = [...events].reverse().find((event) => event.type !== "prebrief");
+  const lastInteraction = last
+    ? last.type === "debrief_confirmed" ? "Previous debrief was confirmed."
+      : last.type === "address_discovered" ? "Previous call captured a new address."
+        : last.type === "call_completed" ? "Previous voice call completed."
+          : "Previous customer interaction recorded."
+    : "No prior interaction recorded.";
+  const providerStatus = session.state === "failed" ? "unavailable" : session.state === "confirmed" ? "completed" : session.state === "calling" ? "calling" : "scheduled";
+  return {
+    session_id: session.sessionId,
+    customer_id: customer.customerId,
+    company: customer.company,
+    contact_name: customer.contactName,
+    location: customer.location,
+    prebrief_sections: {
+      known: [`Company: ${customer.company}`, `Contact: ${customer.contactName}`, `Location: ${customer.location}`],
+      last_interaction: lastInteraction,
+      relevant_history: [],
+      open_items: ["No open items recorded."],
+      call_objective: session.goal,
+    },
+    prebrief_ends_at: session.callbackAt,
+    scheduled_call_at: session.scheduledCallAt,
+    destination_masked: "configured demo destination",
+    provider_status: providerStatus,
+    provider_name: "Twilio + OpenAI Realtime",
+  };
 }
 
 async function kitDispatch(

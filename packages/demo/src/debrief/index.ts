@@ -284,6 +284,10 @@ export class DebriefService {
   }
 
   getSession(sessionId: string): DebriefSession { const session = this.require(sessionId); return { ...session, memoryIds: [...session.memoryIds] }; }
+  getLatestSession(): DebriefSession | null {
+    const latest = [...this.sessions.values()].sort((a, b) => b.updatedAt.localeCompare(a.updatedAt) || b.sessionId.localeCompare(a.sessionId))[0];
+    return latest ? cloneSession(latest) : null;
+  }
   getDebrief(sessionId: string): DebriefSummary { const s = this.getSession(sessionId); return { sessionId: s.sessionId, state: s.state, goal: s.goal, instructionVersion: s.instructionVersion, memoryIds: s.memoryIds }; }
   clearSessions(): void { this.sessions.clear(); }
 
@@ -328,6 +332,30 @@ export class DebriefService {
     session.updatedAt = this.now();
     await this.persist(session);
     return this.getSession(sessionId);
+  }
+
+  /** Persist only structured provider completion metadata for the confirmation View. */
+  async recordCallCompleted(input: {
+    sessionId: string;
+    callId: string | null;
+    reason: string;
+    occurredAt: string;
+  }): Promise<void> {
+    const session = this.require(input.sessionId);
+    await this.saveDraft(input.sessionId, {
+      provider_call_id: input.callId,
+      completed_at: input.occurredAt,
+      completion_reason: input.reason,
+      recording: false,
+      retention: false,
+    });
+    await this.appendCustomerEvent(session, "call_completed", {
+      provider: "twilio-openai-realtime",
+      call_id: input.callId,
+      reason: input.reason,
+      recording: false,
+      retention: false,
+    });
   }
 
   private get kitId(): string { return this.context.kitId ?? "kit:debrief"; }

@@ -107,11 +107,12 @@ describe("Twilio and OpenAI Realtime boundary", () => {
     const openai = new FakeSocket();
     const store = telemetry();
     const agent = { onProviderTurn: vi.fn(async () => undefined), onInterruption: vi.fn(async () => undefined), onStop: vi.fn(async () => undefined), onError: vi.fn(async () => undefined) };
+    const onCallCompleted = vi.fn(async () => undefined);
     const bridge = bridgeTwilioToOpenAI({
       twilioSocket: twilio,
       openai: { socketFactory: { connect: vi.fn(async () => openai) }, url: "wss://openai.example/realtime", apiKey: "server-key", model: "gpt-4o-realtime-preview" },
       verifier: { verify: vi.fn(async (token: string) => { expect(token).toBe("signed-session"); return { sessionId: "session-1", orgId: "org-demo", appId: "app-sales" }; }) },
-      bindings: createSessionBindingStore(), telemetry: store, agent, now: () => "2026-01-01T00:00:00.000Z", createId: (() => { let i = 0; return () => `event-${++i}`; })(),
+      bindings: createSessionBindingStore(), telemetry: store, agent, onCallCompleted, now: () => "2026-01-01T00:00:00.000Z", createId: (() => { let i = 0; return () => `event-${++i}`; })(),
     });
     twilio.emit("message", JSON.stringify({ event: "start", streamSid: "MZ123", start: { streamSid: "MZ123", callSid: "CA123", customParameters: { kitstack_session_token: "signed-session" } } }));
     await expect(bridge.binding).resolves.toMatchObject({ streamSid: "MZ123", sessionId: "session-1" });
@@ -139,6 +140,8 @@ describe("Twilio and OpenAI Realtime boundary", () => {
     twilio.emit("message", JSON.stringify({ event: "stop", streamSid: "MZ123" }));
     await bridge.done;
     expect(agent.onStop).toHaveBeenCalledWith("twilio_stop");
+    expect(onCallCompleted).toHaveBeenCalledOnce();
+    expect(onCallCompleted).toHaveBeenCalledWith(expect.objectContaining({ sessionId: "session-1", callId: "CA123", reason: "twilio_stop" }));
     expect(JSON.stringify(store.append.mock.calls)).not.toMatch(/AQID|BAUG|transcript|audio/i);
   });
 

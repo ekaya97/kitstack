@@ -26,6 +26,13 @@ const DEBRIEF_KIT_ID = "debrief";
 const INTERNAL_TOKEN_TTL_SECONDS = 60;
 const VOICE_REQUEST_TIMEOUT_MS = 8_000;
 
+/** Metadata exposed before T-0195 publishes the debrief shell bundle. */
+export const DEBRIEF_VIEW_METADATA: ResolvedView = {
+  slug: "prebrief",
+  name: "Sales Prebrief",
+  description: "before the scheduled sales call, to review customer context, history, objective, timing, and privacy status",
+};
+
 const DEBRIEF_TOOLS = createDebriefTools().map((tool) => ({
   name: tool.name,
   description: tool.description,
@@ -72,13 +79,16 @@ export function platformAdapter(deps: PlatformAdapterDeps): KitServerAdapter {
     getAllTools,
     getUserKitDbs,
     invokeKitLambda,
-    debriefViews = [],
+    debriefViews,
     getDebriefShellHtml,
     fetch: fetcher = globalThis.fetch,
     requestContext,
   } = deps;
 
-  const debriefKit: ResolvedKit = { ...DEBRIEF_KIT, views: [...debriefViews] };
+  const debriefKit: ResolvedKit = {
+    ...DEBRIEF_KIT,
+    views: [...(debriefViews ?? [DEBRIEF_VIEW_METADATA])],
+  };
 
   return {
     async resolveUserKits(userId: string): Promise<ResolvedKit[]> {

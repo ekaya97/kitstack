@@ -12,8 +12,8 @@ import { WebSocketServer } from "ws";
 import { createDemoApp, type DemoApp } from "./app/index.js";
 import type { McpAuthMode } from "./auth/mcp.js";
 import { handleDemoAppRequest, type DemoLiveVoiceRoute, type DemoAppRouteRequest } from "./http/app.js";
-import { attachVoiceMediaBridge } from "./http/voice.js";
-import type { ScheduledCallPoller } from "./scheduler/index.js";
+import { attachVoiceMediaBridge, handleVoiceProviderStatus, startScheduledLiveVoiceCall } from "./http/voice.js";
+import { ScheduledCallPoller, type ScheduledCallPoller as ScheduledCallPollerType } from "./scheduler/index.js";
 import {
   createDefineAgentVoiceLoop,
   createOpenAIRealtimeSocketFactory,
@@ -93,6 +93,7 @@ export async function createDemoServer(options: DemoServerOptions = {}): Promise
   }
 
   const liveVoice = options.liveVoice ?? await composeLiveVoiceRoute(app);
+  const scheduledCallPoller = options.scheduledCallPoller ?? (liveVoice ? createLiveVoiceScheduler(app, liveVoice) : undefined);
   const webSocketServer = new WebSocketServer({ noServer: true });
 
   let listening = false;
@@ -124,13 +125,13 @@ export async function createDemoServer(options: DemoServerOptions = {}): Promise
         server.once("listening", onListening);
         server.listen(requestedPort, requestedHost);
       });
-      options.scheduledCallPoller?.start();
+      scheduledCallPoller?.start();
       return address(server);
     },
     async close() {
       if (closed) return;
       closed = true;
-      options.scheduledCallPoller?.stop();
+      scheduledCallPoller?.stop();
       if (listening) {
         await new Promise<void>((resolve, reject) => {
           server.close((error) => error ? reject(error) : resolve());
@@ -168,13 +169,16 @@ async function handleIncomingRequest(
       return;
     }
     const body = await readJsonBody(request, maxBodyBytes);
-    const result = await handleDemoAppRequest(app, {
+    const routeRequest = {
       method: request.method ?? "GET",
       path: url.pathname,
       query: queryParams(url),
       headers: requestHeaders(request.headers),
       body,
-    }, liveVoice);
+    } satisfies DemoAppRouteRequest;
+    const result = await (request.method?.toUpperCase() === "POST" && url.pathname === "/t/voice/provider-status" && liveVoice
+      ? handleVoiceProviderStatus(routeRequest, liveVoice.http)
+      : handleDemoAppRequest(app, routeRequest, liveVoice));
     response.statusCode = result.status;
     for (const [name, value] of Object.entries(result.headers)) response.setHeader(name, value);
     response.end(result.status === 204 ? undefined : JSON.stringify(result.body));
@@ -198,7 +202,11 @@ async function readJsonBody(request: IncomingMessage, maxBodyBytes: number): Pro
     chunks.push(buffer);
   }
   if (total === 0) return undefined;
-  const parsed: unknown = JSON.parse(Buffer.concat(chunks).toString("utf8"));
+  const raw = Buffer.concat(chunks).toString("utf8");
+  const contentType = String(request.headers["content-type"] ?? "").toLowerCase();
+  const parsed: unknown = contentType.includes("application/x-www-form-urlencoded")
+    ? Object.fromEntries(new URLSearchParams(raw).entries())
+    : JSON.parse(raw);
   if (parsed === null || typeof parsed !== "object" || Array.isArray(parsed)) throw new Error("request body must be a JSON object");
   return parsed as Record<string, unknown>;
 }
@@ -245,25 +253,24 @@ async function composeLiveVoiceRoute(app: DemoApp): Promise<DemoLiveVoiceRoute |
   const tokenCodec = createSignedSessionTokenCodec(app.apps.secret);
   const instructionsContent = readFileSync(new URL("./instructions/debrief-baseline.md", import.meta.url), "utf8");
   const baseInstructionsVersion = `sha256:${createHash("sha256").update(instructionsContent, "utf8").digest("hex")}`;
-  const voiceContexts = new Map<string, Promise<{ content: string; version: string; memoryIds: string[] }>>();
-  const voiceContextFor = (binding: SessionBinding) => {
-    const existing = voiceContexts.get(binding.sessionId);
-    if (existing) return existing;
-    const context = (async () => {
+  const voiceContextFor = async (binding: SessionBinding) => {
       const session = app.debrief.getSession(binding.sessionId);
-      const records = await app.memory.readRelevant({ orgId: session.orgId, kitId: session.kitId, limit: 20 }, {
+      const customer = session.customerId ? await app.debrief.getCustomer(session.customerId) : null;
+      const records = await app.memory.readRelevant({ orgId: session.orgId, kitId: session.kitId, ...(session.customerId ? { customerId: session.customerId } : {}), limit: 20 }, {
         orgId: session.orgId,
         appId: binding.appId,
         sessionId: session.sessionId,
         traceId: session.sessionId,
         parentId: null,
         kitId: session.kitId,
+        customerId: session.customerId,
       });
       const selected = records.filter((record) => session.memoryIds.includes(record.memoryId));
       const content = [
         instructionsContent.trim(),
         "\nPrepared debrief context:",
         `Goal: ${session.goal}`,
+        customer ? `Customer: ${customer.company}; contact ${customer.contactName}; location ${customer.location}` : "Customer: unavailable.",
         selected.length ? `Approved workflow feedback:\n${selected.map((record) => `- ${record.correction}`).join("\n")}` : "Approved workflow feedback: none.",
         "Use this context during the call. Ask one useful question at a time and do not invent customer details.",
       ].join("\n");
@@ -272,9 +279,6 @@ async function composeLiveVoiceRoute(app: DemoApp): Promise<DemoLiveVoiceRoute |
         version: `${baseInstructionsVersion}:voice:${createHash("sha256").update(content, "utf8").digest("hex").slice(0, 16)}`,
         memoryIds: selected.map((record) => record.memoryId),
       };
-    })();
-    voiceContexts.set(binding.sessionId, context);
-    return context;
   };
   const openai = {
     socketFactory: createOpenAIRealtimeSocketFactory(),
@@ -296,7 +300,24 @@ async function composeLiveVoiceRoute(app: DemoApp): Promise<DemoLiveVoiceRoute |
       fromNumber: values.TWILIO_FROM_NUMBER,
       allowedDestinations: [destination],
       requireConfirmation: true,
+      statusCallbackUrl: `${publicHttpsUrl}/t/voice/provider-status`,
+      statusCallback: { validator: signatureValidator, url: `${publicHttpsUrl}/t/voice/provider-status` },
+      resolveSessionIdForCallId: async (callId) => {
+        const job = (await app.scheduler.list(app.orgId)).find((candidate) => candidate.providerCallId === callId);
+        return job?.sessionId ?? null;
+      },
+      onProviderStatus: async (status) => {
+        await app.telemetry.append({
+          id: crypto.randomUUID(), timestamp: new Date().toISOString(), orgId: app.orgId, appId: app.appId,
+          sessionId: status.sessionId, traceId: status.sessionId, channel: "voice", kitId: "kit:debrief",
+          type: "voice.call", operation: `provider_status.${status.status}`, provider: "twilio-openai-realtime",
+          callId: status.callId, outcome: status.status === "failed" ? "error" : "success",
+        });
+        if (status.status === "failed" && status.sessionId) await app.debrief.markFailed(status.sessionId, `Twilio call status: ${status.rawStatus}`);
+      },
+      onCallCompleted: async (call) => finalizeLiveCall(app, call),
       beforeStart: async (sessionId) => { await app.debrief.markCalling(sessionId); },
+      onProviderStart: async (sessionId, callId) => { await app.debrief.setCallId(sessionId, callId); },
       onFailure: async (sessionId, error) => { await app.debrief.markFailed(sessionId, error); },
       sessionTokenFor: async (sessionId) => {
         const session = app.debrief.getSession(sessionId);
@@ -312,6 +333,7 @@ async function composeLiveVoiceRoute(app: DemoApp): Promise<DemoLiveVoiceRoute |
       openai,
       telemetry: app.telemetry,
       instructionsFor: async (binding) => (await voiceContextFor(binding)).content,
+      onCallCompleted: async (call) => finalizeLiveCall(app, call),
       signature: {
         validator: signatureValidator,
         url: `${publicHttpsUrl}/t/voice/media`,
@@ -335,6 +357,41 @@ async function composeLiveVoiceRoute(app: DemoApp): Promise<DemoLiveVoiceRoute |
       },
     }),
   };
+}
+
+function createLiveVoiceScheduler(app: DemoApp, liveVoice: DemoLiveVoiceRoute): ScheduledCallPollerType {
+  return new ScheduledCallPoller({
+    operations: app.scheduler,
+    orgId: app.orgId,
+    workerId: process.env.KITSTACK_DEMO_SCHEDULER_WORKER_ID?.trim() || `demo-voice-${process.pid}`,
+    intervalMs: Number(process.env.KITSTACK_DEMO_SCHEDULER_INTERVAL_MS ?? 1_000),
+    startCall: async (job) => {
+      // The session is read from DebriefService's durable hydration, not a
+      // process-local voice context, before the provider seam is invoked.
+      const session = app.debrief.getSession(job.sessionId);
+      if (session.orgId !== job.orgId) throw new Error("Scheduled call organization mismatch");
+      const result = await startScheduledLiveVoiceCall(job.sessionId, liveVoice.http);
+      return result.callId;
+    },
+    onProviderFailure: async (job, error) => {
+      try { await app.debrief.markFailed(job.sessionId, error); } catch { /* Keep the scheduler failure durable. */ }
+    },
+  });
+}
+
+async function finalizeLiveCall(
+  app: DemoApp,
+  call: { sessionId: string; orgId: string; callId: string | null; reason: string; occurredAt: string },
+): Promise<void> {
+  const session = app.debrief.getSession(call.sessionId);
+  await app.debrief.recordCallCompleted(call);
+  await app.telemetry.append({
+    id: crypto.randomUUID(), timestamp: call.occurredAt, orgId: call.orgId, appId: app.appId,
+    customerId: session.customerId, sessionId: call.sessionId, traceId: call.sessionId,
+    channel: "voice", pluginId: "kit:debrief", kitId: session.kitId, type: "voice.call",
+    operation: "call_completed", provider: "twilio-openai-realtime", callId: call.callId,
+    outcome: "success",
+  });
 }
 
 function requireWssUrl(value: string, name: string): string {
@@ -397,8 +454,8 @@ function readDatabaseAuthToken(): string | undefined {
 
 function readMcpAuthMode(value: string | undefined): McpAuthMode {
   if (value === undefined || value === "") return "none";
-  if (value === "none" || value === "app-token") return value;
-  throw new Error("KITSTACK_DEMO_MCP_AUTH must be none or app-token");
+  if (value === "none" || value === "app-token" || value === "internal-signed") return value;
+  throw new Error("KITSTACK_DEMO_MCP_AUTH must be none, app-token, or internal-signed");
 }
 
 function address(server: Server): DemoServerAddress {

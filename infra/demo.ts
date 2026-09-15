@@ -35,7 +35,9 @@ export const demoVoice = new sst.aws.Service("DemoVoice", {
   environment: {
     HOST: "0.0.0.0",
     PORT: "3001",
-    KITSTACK_DEMO_MCP_AUTH: "app-token",
+    // The public Claude connector reaches this service through the MCP router's
+    // short-lived internal-signed bridge. Local/direct fallback remains app-token.
+    KITSTACK_DEMO_MCP_AUTH: "internal-signed",
     KITSTACK_DEMO_INTERNAL_SECRET: demoInternalSecret.value,
     KITSTACK_DEMO_INTERNAL_USER_ORG_ALLOWLIST: process.env.KITSTACK_DEMO_INTERNAL_USER_ORG_ALLOWLIST || "*=" + (process.env.KITSTACK_DEMO_ORG_ID || "org-demo"),
     KITSTACK_DEMO_DB_URL: tursoDbUrl.value,
