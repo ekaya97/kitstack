@@ -1,8 +1,8 @@
 {
   "mcpServers": {
     "kitstack-sales-demo": {
-      "command": "npm",
-      "args": ["run", "start:stdio", "--workspace", "@kitstackco/demo"],
+      "command": "node",
+      "args": ["--import", "tsx/esm", "packages/demo/src/mcp/stdio.ts"],
       "cwd": "/Users/eneskaya/dev/kitstack"
     }
   }
