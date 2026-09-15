@@ -65,6 +65,55 @@ describe("demo observability page", () => {
     expect(screen.getAllByText("MCP auth-none (loopback)").length).toBeGreaterThan(0);
   });
 
+  it("labels simulator and live providers without fabricating missing evidence", async () => {
+    fetchMock.mockResolvedValueOnce({ ok: true, json: async () => ({
+      events: [{ id: "sim-event", timestamp: "2026-01-01T00:00:00.000Z", orgId: "org-demo", appId: "app_demo", sessionId: "sim-session", channel: "voice", type: "voice.call", operation: "start", outcome: "started", model: "simulator-german-sales-v1" }],
+      voiceSessions: [{ sessionId: "live-session", status: "confirmed", provider: "realtime", model: "gpt-4o-realtime-preview", latencyMs: 240, estimatedCostUsd: 0.0312 }],
+      aggregate: null,
+    }) });
+    render(<DemoPage />);
+    await waitFor(() => expect(screen.getByText("No apps in this browser session")).toBeTruthy());
+    fireEvent.click(screen.getByRole("button", { name: "Overview" }));
+    fireEvent.change(screen.getByRole("combobox", { name: "Voice session" }), { target: { value: "live-session" } });
+    expect(screen.getAllByText("Live · realtime").length).toBeGreaterThan(0);
+    expect(screen.getByText("gpt-4o-realtime-preview")).toBeTruthy();
+    expect(screen.getByText("240 ms")).toBeTruthy();
+    fireEvent.change(screen.getByRole("combobox", { name: "Voice session" }), { target: { value: "sim-session" } });
+    expect(screen.getByText("Simulator")).toBeTruthy();
+  });
+
+  it("refreshes the selected session status while preserving the page state", async () => {
+    fetchMock
+      .mockResolvedValueOnce({ ok: true, json: async () => ({ events: [{ id: "start", timestamp: "2026-01-01T00:00:00.000Z", orgId: "org-demo", appId: "app_demo", sessionId: "session-1", channel: "voice", type: "voice.call", operation: "start", outcome: "started" }], aggregate: null }) })
+      .mockResolvedValueOnce({ ok: true, json: async () => ({ events: [{ id: "complete", timestamp: "2026-01-01T00:01:00.000Z", orgId: "org-demo", appId: "app_demo", sessionId: "session-1", channel: "voice", type: "voice.call", operation: "complete", outcome: "success", provider: "realtime", model: "live-model", latencyMs: 410, estimatedCostUsd: 0.04 }], aggregate: null }) });
+    render(<DemoPage />);
+    await waitFor(() => expect(screen.getByText("No apps in this browser session")).toBeTruthy());
+    fireEvent.click(screen.getByRole("button", { name: "Overview" }));
+    expect(screen.getByText("Calling")).toBeTruthy();
+    fireEvent.click(screen.getByRole("button", { name: "Refresh" }));
+    await waitFor(() => expect(screen.getByText("Confirmed")).toBeTruthy());
+    expect(screen.getByText("Live · realtime")).toBeTruthy();
+  });
+
+  it("keeps the live destination masked and requires explicit confirmation", async () => {
+    fetchMock.mockResolvedValueOnce({ ok: true, json: async () => ({
+      events: [{ id: "event-1", timestamp: "2026-01-01T00:00:00.000Z", orgId: "org-demo", appId: "app_demo", sessionId: "session-1", channel: "voice", type: "voice.call", operation: "start", outcome: "started" }],
+      aggregate: null,
+      liveCall: { enabled: true, provider: "realtime", model: "gpt-4o-realtime-preview", startPath: "/t/voice/live" },
+    }) });
+    render(<DemoPage />);
+    await waitFor(() => expect(screen.getByText("No apps in this browser session")).toBeTruthy());
+    fireEvent.click(screen.getByRole("button", { name: "Overview" }));
+    const input = screen.getByLabelText("Destination phone number");
+    fireEvent.change(input, { target: { value: "+491701234567" } });
+    expect(screen.queryByText("+491701234567")).toBeNull();
+    expect(screen.getByText("Live · realtime")).toBeTruthy();
+    const start = screen.getByRole("button", { name: "Start protected live call" });
+    expect(start.hasAttribute("disabled")).toBe(true);
+    fireEvent.click(screen.getByRole("checkbox"));
+    expect(start.hasAttribute("disabled")).toBe(false);
+  });
+
   it("keeps an issued token masked until explicit reveal", async () => {
     fetchMock
       .mockResolvedValueOnce({ ok: true, json: async () => ({ events: [], aggregate: null }) })

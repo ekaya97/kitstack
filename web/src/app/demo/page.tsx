@@ -22,6 +22,9 @@ type Event = {
   latencyMs?: number | null;
   estimatedCostUsd?: number | null;
   outcome: string;
+  provider?: string | null;
+  callId?: string | null;
+  error?: string | null;
   instructionVersions?: string[];
   memoryIds?: string[];
 };
@@ -35,7 +38,40 @@ type Aggregate = {
   errorCount: number;
 };
 type App = { id: string; name: string; org: string; scopes: string[]; createdAt: string; token?: string; expiresAt?: string };
-type ObservabilityResponse = { events?: Event[]; aggregate?: Aggregate; mcpAuthMode?: string; authMode?: string };
+type VoiceSession = {
+  sessionId: string;
+  status?: string | null;
+  provider?: string | null;
+  model?: string | null;
+  callId?: string | null;
+  latencyMs?: number | null;
+  estimatedCostUsd?: number | null;
+  error?: string | null;
+  destinationMasked?: string | null;
+};
+type LiveCallCapability = {
+  enabled?: boolean;
+  provider?: string | null;
+  model?: string | null;
+  startPath?: string | null;
+};
+type ObservabilityResponse = {
+  events?: Event[];
+  aggregate?: Aggregate;
+  mcpAuthMode?: string;
+  authMode?: string;
+  voiceSessions?: VoiceSession[];
+  liveCall?: LiveCallCapability;
+};
+
+/**
+ * Optional forward-compatible live-call contract. The dashboard does not
+ * invent live state: the API may return `liveCall` and `voiceSessions` from
+ * GET /api/demo/observability. A live start endpoint must accept
+ * `{ session_id, destination, confirmation: true }` and return a voice
+ * session/status object. The raw destination is held only in this form's
+ * volatile state, sent only to that protected endpoint, and then cleared.
+ */
 
 const API = process.env.NEXT_PUBLIC_DEMO_API_URL || "http://localhost:3001";
 const ADMIN_TOKEN = process.env.NEXT_PUBLIC_DEMO_ADMIN_TOKEN || "demo-admin-token";
@@ -57,6 +93,8 @@ export default function DemoPage() {
   const [error, setError] = useState("");
   const [notice, setNotice] = useState("");
   const [authLabel, setAuthLabel] = useState("MCP auth mode not reported");
+  const [voiceSessions, setVoiceSessions] = useState<VoiceSession[]>([]);
+  const [liveCall, setLiveCall] = useState<LiveCallCapability | null>(null);
 
   const load = useCallback(async (initial = false) => {
     if (initial) setLoading(true);
@@ -68,7 +106,9 @@ export default function DemoPage() {
       const data = await response.json() as ObservabilityResponse;
       setEvents(data.events ?? []);
       setAggregate(data.aggregate ?? null);
-      const first = data.events?.find((event) => event.sessionId)?.sessionId;
+      setVoiceSessions(data.voiceSessions ?? []);
+      setLiveCall(data.liveCall ?? null);
+      const first = data.voiceSessions?.[0]?.sessionId ?? data.events?.find((event) => event.sessionId)?.sessionId;
       if (first) setSelectedSession((current) => current || first);
       const reportedAuthMode = data.mcpAuthMode ?? data.authMode;
       if (typeof reportedAuthMode === "string" && reportedAuthMode.trim()) {
@@ -129,19 +169,22 @@ export default function DemoPage() {
         </div>
         {notice && <div className="mb-4 rounded-lg border border-green-200 bg-green-50 px-4 py-3 text-[12px] text-green-800">{notice}</div>}
         {error && <div role="alert" className="mb-4 rounded-lg border border-red-200 bg-red-50 px-4 py-3 text-[12px] text-red-800">{error} <button className="ml-2 underline" onClick={() => void load()}>Retry</button></div>}
-        {loading ? <Loading /> : tab === "overview" ? <OverviewView events={events} aggregate={aggregate} /> : tab === "apps" ? <AppsView apps={apps} events={events} setApps={setApps} authLabel={authLabel} /> : tab === "usage" ? <UsageView events={events} aggregate={aggregate} /> : <TraceView events={events} sessions={sessions} selectedSession={selectedSession} setSelectedSession={setSelectedSession} />}
+        {loading ? <Loading /> : tab === "overview" ? <OverviewView events={events} aggregate={aggregate} voiceSessions={voiceSessions} liveCall={liveCall} selectedSession={selectedSession} setSelectedSession={setSelectedSession} /> : tab === "apps" ? <AppsView apps={apps} events={events} setApps={setApps} authLabel={authLabel} /> : tab === "usage" ? <UsageView events={events} aggregate={aggregate} /> : <TraceView events={events} sessions={sessions} selectedSession={selectedSession} setSelectedSession={setSelectedSession} />}
       </div>
     </main>
   );
 }
 
-function OverviewView({ events, aggregate }: { events: Event[]; aggregate: Aggregate | null }) {
+function OverviewView({ events, aggregate, voiceSessions, liveCall, selectedSession, setSelectedSession }: { events: Event[]; aggregate: Aggregate | null; voiceSessions: VoiceSession[]; liveCall: LiveCallCapability | null; selectedSession: string; setSelectedSession: (id: string) => void }) {
   const sessions = new Set(events.map((event) => event.sessionId).filter(Boolean));
   const memoryReferences = events.reduce((count, event) => count + (event.memoryIds?.length ?? 0), 0);
   const instructionReferences = events.reduce((count, event) => count + (event.instructionVersions?.length ?? 0), 0);
   const voiceCalls = new Set(events.filter((event) => event.channel === "voice" && event.sessionId).map((event) => event.sessionId)).size;
   const errors = aggregate?.errorCount ?? events.filter((event) => event.outcome === "error").length;
   const cost = aggregate?.totalEstimatedCostUsd ?? events.reduce((total, event) => total + (event.estimatedCostUsd ?? 0), 0);
+
+  const sessionOptions = [...new Set([...voiceSessions.map((session) => session.sessionId), ...events.map((event) => event.sessionId).filter((id): id is string => Boolean(id))])];
+  const voiceEvidence = mergeVoiceEvidence(events, voiceSessions, selectedSession);
 
   return <section>
     <div className="mb-5 grid grid-cols-2 gap-3 lg:grid-cols-6">
@@ -171,7 +214,93 @@ function OverviewView({ events, aggregate }: { events: Event[]; aggregate: Aggre
         </ol>
       </div>
     </div>
+    <div className="mt-5 grid gap-5 lg:grid-cols-[1.2fr_0.8fr]">
+      <VoiceStatusView evidence={voiceEvidence} sessionOptions={sessionOptions} selectedSession={selectedSession} setSelectedSession={setSelectedSession} />
+      <LiveCallView capability={liveCall} selectedSession={selectedSession} />
+    </div>
   </section>;
+}
+
+function VoiceStatusView({ evidence, sessionOptions, selectedSession, setSelectedSession }: { evidence: VoiceSession | null; sessionOptions: string[]; selectedSession: string; setSelectedSession: (id: string) => void }) {
+  return <div className="ks-card p-5">
+    <div className="flex flex-wrap items-start justify-between gap-3">
+      <div><h2 className="font-serif text-[24px]">Voice status</h2><p className="mt-1 text-[12px] text-ks-muted">Provider and call evidence for the selected session.</p></div>
+      {evidence && <ProviderBadge provider={evidence.provider} />}
+    </div>
+    <label className="mt-4 block text-[10px] text-ks-muted">Selected session<select aria-label="Voice session" className="ks-input mt-1 w-full !py-2" value={selectedSession} onChange={(event) => setSelectedSession(event.target.value)}><option value="">Select a session</option>{sessionOptions.map((session) => <option key={session}>{session}</option>)}</select></label>
+    {!evidence ? <p className="mt-4 rounded-lg border border-ks-hair p-3 text-[12px] text-ks-muted">No voice session selected. Run the simulator or start a protected live call.</p> : <div className="mt-4 grid gap-3 text-[12px] sm:grid-cols-2">
+      <Evidence label="Status" value={formatVoiceStatus(evidence.status)} />
+      <Evidence label="Model" value={evidence.model ?? "Not reported"} mono />
+      <Evidence label="Call ID" value={evidence.callId ?? "Not reported"} mono />
+      <Evidence label="Latency" value={evidence.latencyMs == null ? "Not reported" : `${evidence.latencyMs} ms`} mono />
+      <Evidence label="Estimated cost" value={evidence.estimatedCostUsd == null ? "Not reported" : `$${evidence.estimatedCostUsd.toFixed(4)}`} mono />
+      {evidence.destinationMasked && <Evidence label="Destination" value={evidence.destinationMasked} mono />}
+      {evidence.error && <div className="rounded-lg border border-red-200 bg-red-50 p-3 text-red-800 sm:col-span-2"><div className="text-[10px] uppercase tracking-wider">Provider error</div><div className="mt-1">{evidence.error}</div></div>}
+    </div>}
+  </div>;
+}
+
+function LiveCallView({ capability, selectedSession }: { capability: LiveCallCapability | null; selectedSession: string }) {
+  const [destination, setDestination] = useState("");
+  const [maskedDestination, setMaskedDestination] = useState("");
+  const [confirmed, setConfirmed] = useState(false);
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState("");
+  const configured = Boolean(capability?.enabled && capability.startPath);
+  const available = Boolean(configured && selectedSession);
+
+  async function startLiveCall(event: FormEvent) {
+    event.preventDefault();
+    if (!available || !capability?.startPath || !destination || !confirmed) return;
+    setBusy(true); setError("");
+    const requestDestination = destination;
+    const masked = maskPhoneNumber(requestDestination);
+    setDestination("");
+    try {
+      const response = await fetch(`${API}${capability.startPath}`, { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ session_id: selectedSession, destination: requestDestination, confirmation: true }) });
+      if (!response.ok) throw new Error(`Live call request failed (${response.status})`);
+      setMaskedDestination(masked);
+      setConfirmed(false);
+    } catch (cause) { setError(cause instanceof Error ? cause.message : "Could not start the live call."); }
+    finally { setBusy(false); }
+  }
+
+  return <div className="ks-card p-5">
+    <div className="flex flex-wrap items-start justify-between gap-3"><div><h2 className="font-serif text-[24px]">Protected live call</h2><p className="mt-1 text-[12px] text-ks-muted">The live provider is opt-in and never substitutes for the simulator.</p></div><ProviderBadge provider={capability?.provider ?? "not available"} /></div>
+    <p className="mt-4 rounded-lg border border-ks-hair bg-ks-paper-warm p-3 text-[11px] text-ks-muted">{!capability?.enabled ? "The backend has not advertised a protected live-call endpoint. This control stays disabled; no live data is fabricated." : !capability.startPath ? "The backend reported live-call capability without a protected start path. This control stays disabled." : selectedSession ? "Live-call capability is advertised for this session." : "Select a session before starting a live call."}</p>
+    <form onSubmit={startLiveCall} className="mt-4 space-y-3">
+      <label className="block text-[10px] text-ks-muted">Destination (entered transiently)<input aria-label="Destination phone number" type="password" inputMode="tel" autoComplete="off" className="ks-input mt-1 w-full" value={destination} onChange={(event) => setDestination(event.target.value)} placeholder="E.164 test number" disabled={!available} /></label>
+      <label className="flex items-start gap-2 text-[11px] text-ks-muted"><input type="checkbox" checked={confirmed} onChange={(event) => setConfirmed(event.target.checked)} disabled={!available} /><span>I confirm this allowlisted test number and authorize one bounded call.</span></label>
+      {maskedDestination && <p className="text-[11px] text-ks-muted">Last requested destination: <span className="font-mono">{maskedDestination}</span></p>}
+      {error && <p role="alert" className="text-[11px] text-red-700">{error}</p>}
+      <button disabled={!available || !destination || !confirmed || busy} className="ks-btn ks-btn-primary w-full justify-center !py-2 !text-[12px]">{busy ? "Starting live call…" : "Start protected live call"}</button>
+    </form>
+  </div>;
+}
+
+function Evidence({ label, value, mono = false }: { label: string; value: string; mono?: boolean }) { return <div className="rounded-lg border border-ks-hair p-3"><div className="text-[10px] text-ks-muted">{label}</div><div className={`mt-1 break-all ${mono ? "font-mono text-[10px]" : "font-medium"}`}>{value}</div></div>; }
+function ProviderBadge({ provider }: { provider: string | null | undefined }) { const label = providerLabel(provider); return <span className={`ks-chip ks-chip-soft ${provider === "simulator" ? "" : "!border-ks-accent/40 !text-ks-accent-deep"}`}>{label}</span>; }
+function providerLabel(provider: string | null | undefined) { if (provider === "simulator") return "Simulator"; if (provider === "realtime") return "Live · realtime"; if (!provider || provider === "not available") return "Provider not available"; return `Live · ${provider}`; }
+function formatVoiceStatus(status: string | null | undefined) { if (!status) return "Not reported"; return status.replaceAll("_", " ").replace(/\b\w/g, (letter) => letter.toUpperCase()); }
+function maskPhoneNumber(value: string) { const digits = value.replace(/\D/g, ""); return digits.length <= 2 ? "••" : `+••••••${digits.slice(-4)}`; }
+function mergeVoiceEvidence(events: Event[], reported: VoiceSession[], selectedSession: string): VoiceSession | null {
+  if (!selectedSession) return null;
+  const explicit = reported.find((session) => session.sessionId === selectedSession);
+  const voiceEvents = events.filter((event) => event.sessionId === selectedSession && event.channel === "voice").sort((a, b) => a.timestamp.localeCompare(b.timestamp));
+  const latest = voiceEvents.at(-1);
+  if (!explicit && !latest) return null;
+  const status = explicit?.status ?? statusFromVoiceEvent(latest);
+  return { sessionId: selectedSession, status, provider: explicit?.provider ?? latest?.provider ?? "simulator", model: explicit?.model ?? latest?.model ?? null, callId: explicit?.callId ?? latest?.callId ?? null, latencyMs: explicit?.latencyMs ?? latest?.latencyMs ?? null, estimatedCostUsd: explicit?.estimatedCostUsd ?? latest?.estimatedCostUsd ?? null, error: explicit?.error ?? latest?.error ?? (latest?.outcome === "error" ? latest.operation : null), destinationMasked: explicit?.destinationMasked ?? null };
+}
+function statusFromVoiceEvent(event: Event | undefined) {
+  if (!event) return undefined;
+  const operation = event.operation.toLowerCase();
+  if (event.outcome === "error" || operation.includes("error") || operation.includes("fail")) return "failed";
+  if (operation.includes("partial")) return "partial";
+  if (operation.includes("await") || operation.includes("confirm")) return "awaiting_confirmation";
+  if (operation.includes("complete") || operation.includes("finish")) return "confirmed";
+  if (operation.includes("start") || operation.includes("connect") || operation.includes("call")) return "calling";
+  return undefined;
 }
 
 function AppsView({ apps, events, setApps, authLabel }: { apps: App[]; events: Event[]; setApps: (apps: App[]) => void; authLabel: string }) {
