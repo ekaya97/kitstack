@@ -5,6 +5,7 @@ import {
   type DebriefToolName,
 } from "./src/tools";
 import prebriefView from "./src/views/prebrief";
+import confirmationView from "./src/views/confirmation";
 
 export type { DebriefToolHandler, DebriefToolName } from "./src/tools";
 
@@ -23,7 +24,7 @@ export function createDebriefKit(
     instructions: "Use the injected demo debrief service; never retain call transcripts or audio.",
     triggers: ["sales", "debrief", "voice", "customer", "follow-up"],
     tools,
-    views: [prebriefView],
+    views: [prebriefView, confirmationView],
   });
 }
 

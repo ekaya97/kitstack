@@ -1,11 +1,19 @@
 import { defineTool, kit, type KitContext, type KitToolResult } from "@kitstackco/sdk";
 import { z } from "zod";
-import type { DebriefOperations, DebriefToolHandler, PrepareDebriefInput } from "../contracts";
+import type {
+  DebriefDraftUpdate,
+  DebriefOperations,
+  DebriefToolHandler,
+  PrepareDebriefInput,
+} from "../contracts";
 
 export type DebriefToolName =
   | "prepare_debrief"
   | "get_session"
   | "get_debrief"
+  | "get_debrief_for_confirmation"
+  | "update_debrief_draft"
+  | "confirm_debrief_draft"
   | "confirm_debrief"
   | "teach_from_correction";
 
@@ -68,6 +76,31 @@ export function createDebriefTools(
       handlers,
     ),
     tool(
+      "get_debrief_for_confirmation",
+      "Load the editable structured debrief draft and the confirmation View.",
+      z.object({ session_id: z.string().min(1).describe("The shared debrief session ID") }),
+      handlers,
+    ),
+    tool(
+      "update_debrief_draft",
+      "Edit structured debrief fields before confirmation; this never writes an immutable event.",
+      z.object({
+        session_id: z.string().min(1).describe("The shared debrief session ID"),
+        outcome: z.string().optional().describe("The agreed outcome"),
+        next_step: z.string().optional().describe("The next sales action"),
+        customer_update: z.string().optional().describe("What changed for the customer"),
+        discovered_address: z.string().optional().describe("A new customer address learned on the call"),
+        follow_up_date: z.string().optional().describe("The requested follow-up date"),
+      }),
+      handlers,
+    ),
+    tool(
+      "confirm_debrief_draft",
+      "Confirm the editable debrief draft and persist its immutable customer events.",
+      z.object({ session_id: z.string().min(1).describe("The shared debrief session ID") }),
+      handlers,
+    ),
+    tool(
       "confirm_debrief",
       "Confirm a read-back or mark the debrief partial when details remain uncertain.",
       z.object({
@@ -113,6 +146,19 @@ export function createDebriefToolHandlers(
     get_debrief: async (_db, args, ctx) => kit.json(
       await operations.getDebrief(String(args.session_id), ctx),
     ),
+    get_debrief_for_confirmation: async (_db, args, ctx) => kit.json(
+      await operations.getDebriefForConfirmation(String(args.session_id), ctx),
+    ),
+    update_debrief_draft: async (_db, args, ctx) => kit.json(
+      await operations.updateDebriefDraft(
+        String(args.session_id),
+        pickDraftUpdate(args),
+        ctx,
+      ),
+    ),
+    confirm_debrief_draft: async (_db, args, ctx) => kit.json(
+      await operations.confirmDebriefDraft(String(args.session_id), ctx),
+    ),
     confirm_debrief: async (_db, args, ctx) => kit.json(
       await operations.confirmDebrief(
         String(args.session_id),
@@ -128,4 +174,11 @@ export function createDebriefToolHandlers(
       ),
     ),
   };
+}
+
+function pickDraftUpdate(args: Record<string, unknown>): DebriefDraftUpdate {
+  const fields = ["outcome", "next_step", "customer_update", "discovered_address", "follow_up_date"] as const;
+  return Object.fromEntries(
+    fields.flatMap((field) => typeof args[field] === "string" ? [[field, args[field]]] : []),
+  ) as DebriefDraftUpdate;
 }

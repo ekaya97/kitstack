@@ -38,6 +38,32 @@ const MCP_TOOLS = [
     inputSchema: { type: "object", properties: { session_id: { type: "string" } }, required: ["session_id"] },
   },
   {
+    name: "get_debrief_for_confirmation",
+    description: "Load the editable structured debrief draft and the confirmation View.",
+    inputSchema: { type: "object", properties: { session_id: { type: "string" } }, required: ["session_id"] },
+  },
+  {
+    name: "update_debrief_draft",
+    description: "Edit structured debrief fields before confirmation.",
+    inputSchema: {
+      type: "object",
+      properties: {
+        session_id: { type: "string" },
+        outcome: { type: "string" },
+        next_step: { type: "string" },
+        customer_update: { type: "string" },
+        discovered_address: { type: "string" },
+        follow_up_date: { type: "string" },
+      },
+      required: ["session_id"],
+    },
+  },
+  {
+    name: "confirm_debrief_draft",
+    description: "Confirm the editable debrief draft and persist its customer events.",
+    inputSchema: { type: "object", properties: { session_id: { type: "string" } }, required: ["session_id"] },
+  },
+  {
     name: "confirm_debrief",
     description: "Confirm a completed debrief, or record a partial outcome.",
     inputSchema: { type: "object", properties: { session_id: { type: "string" }, outcome: { type: "string", enum: ["confirmed", "partial"] } }, required: ["session_id", "outcome"] },
@@ -249,6 +275,9 @@ async function mcp(app: DemoApp, body: Record<string, unknown>): Promise<DemoHtt
   }
   else if (name === "get_session") value = await kitDispatch(app, { operation: "get_session", sessionId: stringField(args, "session_id") }, args);
   else if (name === "get_debrief") value = await kitDispatch(app, { operation: "get_debrief", sessionId: stringField(args, "session_id") }, args);
+  else if (name === "get_debrief_for_confirmation") value = await app.debrief.getDebriefForConfirmation(stringField(args, "session_id"));
+  else if (name === "update_debrief_draft") value = await app.debrief.updateDebriefDraft(stringField(args, "session_id"), draftUpdate(args));
+  else if (name === "confirm_debrief_draft") value = await app.debrief.confirmDebriefDraft(stringField(args, "session_id"));
   else if (name === "teach_from_correction") value = await kitDispatch(app, { operation: "teach", sessionId: stringField(args, "session_id"), correction: stringField(args, "correction") }, args);
   else if (name === "approve_memory") value = await kitDispatch(app, { operation: "approve", sessionId: stringField(args, "session_id"), memoryId: stringField(args, "memory_id") }, args);
   else if (name === "publish_memory") value = await kitDispatch(app, { operation: "publish", sessionId: stringField(args, "session_id"), memoryId: stringField(args, "memory_id") }, args);
@@ -259,10 +288,10 @@ async function mcp(app: DemoApp, body: Record<string, unknown>): Promise<DemoHtt
     value = current.status === "calling" ? await app.plugins.dispatch<{ operation: string; sessionId: string }, VoiceStatusResult>("channel:voice", { operation: "advance", sessionId }, pluginContext(app, undefined, sessionId)) : current;
   }
   else if (name === "kit_view") {
-    if (stringField(args, "id") !== "debrief" || stringField(args, "view") !== "prebrief") {
+    if (stringField(args, "id") !== "debrief" || !["prebrief", "confirmation"].includes(stringField(args, "view"))) {
       return json(400, { jsonrpc: "2.0", id: body.id ?? null, error: { code: -32602, message: "Unknown debrief View" } });
     }
-    value = { data: await loadPrebriefView(app) };
+    value = { data: stringField(args, "view") === "confirmation" ? await loadConfirmationView(app) : await loadPrebriefView(app) };
   }
   else if (name === "confirm_debrief") {
     const sessionId = stringField(args, "session_id");
@@ -274,6 +303,17 @@ async function mcp(app: DemoApp, body: Record<string, unknown>): Promise<DemoHtt
   }
   else return json(400, { jsonrpc: "2.0", id: body.id ?? null, error: { code: -32602, message: `Unknown tool ${name}` } });
   return json(200, { jsonrpc: "2.0", id: body.id ?? null, result: { content: [{ type: "text", text: JSON.stringify(value) }] } });
+}
+
+function draftUpdate(args: Record<string, unknown>) {
+  const fields = ["outcome", "next_step", "customer_update", "discovered_address", "follow_up_date"] as const;
+  return Object.fromEntries(fields.flatMap((field) => typeof args[field] === "string" ? [[field, args[field]]] : []));
+}
+
+async function loadConfirmationView(app: DemoApp): Promise<Record<string, unknown>> {
+  const session = app.debrief.getLatestSession();
+  if (!session) throw new Error("No debrief session is available for confirmation");
+  return app.debrief.getDebriefForConfirmation(session.sessionId) as unknown as Record<string, unknown>;
 }
 
 async function loadPrebriefView(app: DemoApp): Promise<Record<string, unknown>> {

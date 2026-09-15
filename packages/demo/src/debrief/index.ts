@@ -2,6 +2,10 @@ import type { MemoryContext, MemoryRecord, MemoryWriteInput } from "../memory/in
 import type { InstructionPlugin, ResolvedInstruction } from "../instructions/index.js";
 import type { TelemetryEventInput, TelemetryStore } from "../telemetry/index.js";
 import type {
+  DebriefConfirmationResult,
+  DebriefDraftUpdate,
+} from "../../../../kits/debrief/src/confirmation-contracts.js";
+import type {
   CustomerEventRecord,
   CustomerIdentityInput,
   CustomerRecord,
@@ -304,6 +308,81 @@ export class DebriefService {
     return this.persistence?.getDraft(this.context.orgId, sessionId) ?? null;
   }
 
+  async getDebriefForConfirmation(sessionId: string): Promise<DebriefConfirmationResult> {
+    const session = this.require(sessionId);
+    if (session.state !== "awaiting_confirmation" && session.state !== "partial" && session.state !== "confirmed") {
+      throw new Error(`Debrief session "${sessionId}" is not ready for confirmation`);
+    }
+    const draft = await this.getDraft(sessionId) ?? await this.saveDraft(sessionId, {}, "draft");
+    const events = session.customerId ? await this.listCustomerEvents(session.customerId) : [];
+    const confirmed = events.find((event) => event.sessionId === sessionId && event.type === "debrief_confirmed");
+    const address = events.find((event) => event.sessionId === sessionId && event.type === "address_discovered");
+    return this.confirmationResult(session, draft, {
+      confirmedEventId: confirmed?.eventId,
+      addressEventId: address?.eventId,
+    });
+  }
+
+  async updateDebriefDraft(sessionId: string, update: DebriefDraftUpdate): Promise<DebriefConfirmationResult> {
+    const session = this.require(sessionId);
+    if (session.state !== "awaiting_confirmation" && session.state !== "partial") {
+      throw new Error(`Debrief session "${sessionId}" is not editable`);
+    }
+    const fields = Object.fromEntries(
+      Object.entries(update).filter(([, value]) => typeof value === "string" && value.trim().length > 0),
+    );
+    if (Object.keys(fields).length === 0) throw new Error("At least one debrief draft field is required");
+    const draft = await this.saveDraft(sessionId, fields, session.state === "partial" ? "partial" : "draft");
+    return this.confirmationResult(session, draft);
+  }
+
+  async confirmDebriefDraft(sessionId: string): Promise<DebriefConfirmationResult> {
+    const session = this.require(sessionId);
+    if (session.state !== "awaiting_confirmation" && session.state !== "partial" && session.state !== "confirmed") {
+      throw new Error(`Debrief session "${sessionId}" cannot be confirmed`);
+    }
+    const draft = await this.getDraft(sessionId) ?? await this.saveDraft(sessionId, {}, "draft");
+    const events = session.customerId ? await this.listCustomerEvents(session.customerId) : [];
+    const existingConfirmed = events.find((event) => event.sessionId === sessionId && event.type === "debrief_confirmed");
+    const existingAddress = events.find((event) => event.sessionId === sessionId && event.type === "address_discovered");
+    if (existingConfirmed) {
+      return this.confirmationResult(session, { ...draft, status: "confirmed" }, {
+        confirmedEventId: existingConfirmed.eventId,
+        addressEventId: existingAddress?.eventId,
+      });
+    }
+
+    const confirmedEventId = `debrief-confirmed-${sessionId}`;
+    if (session.customerId && this.persistence) {
+      await this.appendCustomerEvent(session, "debrief_confirmed", {
+        ...draft.fields,
+        outcome: "confirmed",
+        draft_id: draft.draftId,
+      }, confirmedEventId);
+      const address = typeof draft.fields.discovered_address === "string" ? draft.fields.discovered_address.trim() : "";
+      if (address) {
+        await this.appendCustomerEvent(session, "address_discovered", {
+          address,
+          source: "operator-confirmed",
+          draft_id: draft.draftId,
+        }, `address-discovered-${sessionId}`);
+      }
+    }
+    const confirmed = await this.saveDraft(sessionId, draft.fields, "confirmed");
+    if (session.state !== "confirmed") {
+      session.state = "confirmed";
+      session.updatedAt = this.now();
+      await this.persist(session);
+      await this.emit(session, "complete", "success");
+    }
+    return this.confirmationResult(session, confirmed, {
+      confirmedEventId: session.customerId ? confirmedEventId : undefined,
+      addressEventId: session.customerId && typeof draft.fields.discovered_address === "string" && draft.fields.discovered_address.trim()
+        ? `address-discovered-${sessionId}`
+        : undefined,
+    });
+  }
+
   async saveDraft(
     sessionId: string,
     fields: Record<string, unknown>,
@@ -369,10 +448,27 @@ export class DebriefService {
   }
   private memoryContext(sessionId: string, customerId: string | null = null) { return { orgId: this.context.orgId, appId: this.context.appId, sessionId, traceId: sessionId, parentId: null, kitId: this.kitId, customerId }; }
   private pluginContext(sessionId: string) { return { ...this.memoryContext(sessionId), telemetry: this.telemetry, lookupPlugin: () => undefined }; }
-  private async transition(id: string, state: DebriefState): Promise<DebriefSession> { const s = this.require(id); const allowed = s.state === "prepared" && state === "calling" || s.state === "calling" && state === "awaiting_confirmation" || s.state === "awaiting_confirmation" && state === "partial" || (s.state === "awaiting_confirmation" || s.state === "partial") && state === "confirmed"; if (!allowed) throw new Error(`Invalid debrief transition ${s.state} -> ${state}`); s.state = state; s.updatedAt = this.now(); await this.persist(s); if (state === "confirmed") await this.appendCustomerEvent(s, "debrief_confirmed", { outcome: "confirmed" }); const operation = state === "confirmed" ? "complete" : state === "awaiting_confirmation" ? "await_confirmation" : "state"; await this.emit(s, operation, state === "partial" ? "partial" : "success"); return this.getSession(id); }
+  private async transition(id: string, state: DebriefState): Promise<DebriefSession> { const s = this.require(id); if (s.state === state) return this.getSession(id); const allowed = s.state === "prepared" && state === "calling" || s.state === "calling" && state === "awaiting_confirmation" || s.state === "awaiting_confirmation" && state === "partial" || (s.state === "awaiting_confirmation" || s.state === "partial") && state === "confirmed"; if (!allowed) throw new Error(`Invalid debrief transition ${s.state} -> ${state}`); s.state = state; s.updatedAt = this.now(); await this.persist(s); if (state === "confirmed") await this.appendCustomerEvent(s, "debrief_confirmed", { outcome: "confirmed" }, `debrief-confirmed-${id}`); const operation = state === "confirmed" ? "complete" : state === "awaiting_confirmation" ? "await_confirmation" : "state"; await this.emit(s, operation, state === "partial" ? "partial" : "success"); return this.getSession(id); }
   private async persist(session: DebriefSession): Promise<void> { await this.persistence?.saveSession(cloneSession(session)); }
   private async persistDraft(draft: DebriefDraftRecord): Promise<void> { await this.persistence?.saveDraft(draft); }
-  private async appendCustomerEvent(session: DebriefSession, type: CustomerEventRecord["type"], payload: Record<string, unknown>): Promise<void> { if (!session.customerId || !this.persistence) return; await this.persistence.appendCustomerEvent({ eventId: `event-${this.id()}`, orgId: session.orgId, customerId: session.customerId, sessionId: session.sessionId, kitId: session.kitId, type, occurredAt: this.now(), payload }); }
+  private async appendCustomerEvent(session: DebriefSession, type: CustomerEventRecord["type"], payload: Record<string, unknown>, eventId = `event-${this.id()}`): Promise<void> { if (!session.customerId || !this.persistence) return; await this.persistence.appendCustomerEvent({ eventId, orgId: session.orgId, customerId: session.customerId, sessionId: session.sessionId, kitId: session.kitId, type, occurredAt: this.now(), payload }); }
+  private confirmationResult(session: DebriefSession, draft: DebriefDraftRecord, ids: { confirmedEventId?: string; addressEventId?: string } = {}): DebriefConfirmationResult {
+    return {
+      session_id: session.sessionId,
+      customer_id: session.customerId,
+      state: session.state as DebriefConfirmationResult["state"],
+      draft: {
+        draft_id: draft.draftId,
+        session_id: draft.sessionId,
+        status: draft.status,
+        fields: { ...draft.fields },
+        updated_at: draft.updatedAt,
+      },
+      ...(ids.confirmedEventId ? { confirmed_event_id: ids.confirmedEventId } : {}),
+      ...(ids.addressEventId ? { address_event_id: ids.addressEventId } : {}),
+      kit_view: { kit_id: "debrief", view: "confirmation", reason: "Review and confirm the structured debrief" },
+    };
+  }
   private async emit(s: DebriefSession, operation: string, outcome: "success" | "partial" | "error", memoryIds?: string[]) { const event: TelemetryEventInput = { id: this.id(), timestamp: this.now(), orgId: s.orgId, appId: this.context.appId, sessionId: s.sessionId, customerId: s.customerId, traceId: s.sessionId, channel: "voice", pluginId: "kit:debrief", kitId: s.kitId, type: operation === "complete" ? "session.completed" : "voice.call", operation, outcome, ...(memoryIds?.length ? { memoryIds } : {}) }; await this.telemetry.append(event); }
 }
 

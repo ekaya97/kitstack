@@ -1,5 +1,7 @@
 import { describe, expect, it, vi } from "vitest";
+import { createClient } from "@libsql/client";
 import { DebriefService } from "./index.js";
+import { createDebriefPersistence } from "./persistence.js";
 
 const instruction = { id: "i", kitId: "kit:debrief", context: "prebrief", locale: null, content: "x", version: "v1", hash: "h", source: "test" };
 function setup() {
@@ -8,6 +10,26 @@ function setup() {
   const telemetry: any = { append: vi.fn(async () => undefined) };
   const instructions: any = { resolve: vi.fn(async () => instruction) };
   return { service: new DebriefService(memory, instructions, telemetry, { orgId: "o", appId: "a", id: (() => { let n = 0; return () => `s${++n}`; })() }), memory, telemetry };
+}
+
+async function persistentSetup() {
+  const client = createClient({ url: ":memory:" });
+  const memories: any[] = [];
+  const memory: any = {
+    writeCandidate: vi.fn(async (input: any) => ({ memoryId: `m${memories.length + 1}`, status: "candidate", ...input })),
+    approveCandidate: vi.fn(async (id: string) => ({ memoryId: id, status: "approved" })),
+    publishCandidate: vi.fn(async (id: string) => ({ memoryId: id, status: "published" })),
+    readRelevant: vi.fn(async () => []),
+  };
+  const service = new DebriefService(
+    memory,
+    { resolve: vi.fn(async () => instruction) } as any,
+    { append: vi.fn(async () => undefined) } as any,
+    { orgId: "o", appId: "a" },
+    undefined,
+    { persistence: createDebriefPersistence(client) },
+  );
+  return { client, service };
 }
 
 describe("DebriefService", () => {
@@ -81,5 +103,54 @@ describe("DebriefService", () => {
     expect(failed.state).toBe("failed");
     expect(failed.error).toBe("provider unavailable");
     expect(telemetry.append).toHaveBeenCalledWith(expect.objectContaining({ type: "voice.call", outcome: "error" }));
+  });
+
+  it("supports editable confirmation and idempotent immutable customer events", async () => {
+    const { client, service } = await persistentSetup();
+    try {
+      const prepared = await service.prepareDebrief({
+        goal: "Close the next step",
+        company: "Acme Corp",
+        contactName: "Mr John Doe",
+        location: "Köln Café",
+      });
+      await service.markCalling(prepared.sessionId);
+      await service.awaitConfirmation(prepared.sessionId);
+
+      const initial = await service.getDebriefForConfirmation(prepared.sessionId);
+      expect(initial.draft.status).toBe("draft");
+      const updated = await service.updateDebriefDraft(prepared.sessionId, {
+        outcome: "Positive",
+        next_step: "Send proposal",
+        discovered_address: "Neue Straße 1, Köln",
+      });
+      expect(updated.draft.fields).toMatchObject({ next_step: "Send proposal" });
+
+      const confirmed = await service.confirmDebriefDraft(prepared.sessionId);
+      const replay = await service.confirmDebriefDraft(prepared.sessionId);
+      expect(confirmed.state).toBe("confirmed");
+      expect(confirmed.confirmed_event_id).toBe(replay.confirmed_event_id);
+      expect(confirmed.address_event_id).toBe(replay.address_event_id);
+      expect((await service.listCustomerEvents(prepared.customerId!)).filter((event) => event.sessionId === prepared.sessionId)).toEqual([
+        expect.objectContaining({ type: "prebrief" }),
+        expect.objectContaining({ type: "address_discovered", eventId: confirmed.address_event_id }),
+        expect.objectContaining({ type: "debrief_confirmed", eventId: confirmed.confirmed_event_id }),
+      ]);
+    } finally {
+      client.close();
+    }
+  });
+
+  it("keeps partial completion free of confirmed events", async () => {
+    const { client, service } = await persistentSetup();
+    try {
+      const prepared = await service.prepareDebrief({ goal: "Follow up", company: "Acme Corp", contactName: "John Doe", location: "Köln Café" });
+      await service.markCalling(prepared.sessionId);
+      await service.awaitConfirmation(prepared.sessionId);
+      await service.markPartial(prepared.sessionId);
+      expect((await service.listCustomerEvents(prepared.customerId!)).some((event) => event.type === "debrief_confirmed")).toBe(false);
+    } finally {
+      client.close();
+    }
   });
 });

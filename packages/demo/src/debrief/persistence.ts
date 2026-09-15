@@ -258,7 +258,8 @@ export class LibsqlDebriefPersistence implements DebriefPersistence {
     await this.client.execute({
       sql: `INSERT INTO demo_customer_events
         (event_id, org_id, customer_id, session_id, kit_id, type, occurred_at, payload_json)
-        VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+        ON CONFLICT(event_id) DO NOTHING`,
       args: [
         event.eventId,
         event.orgId,

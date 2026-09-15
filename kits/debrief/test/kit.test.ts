@@ -8,9 +8,16 @@ describe("debrief kit boundary", () => {
       "prepare_debrief",
       "get_session",
       "get_debrief",
+      "get_debrief_for_confirmation",
+      "update_debrief_draft",
+      "confirm_debrief_draft",
       "confirm_debrief",
       "teach_from_correction",
     ]);
+  });
+
+  it("exposes the confirmation View alongside the prebrief View", () => {
+    expect(kit.views?.map((view) => view.slug)).toEqual(["prebrief", "confirmation"]);
   });
 
   it("keeps an unbound kit visibly unbound", async () => {

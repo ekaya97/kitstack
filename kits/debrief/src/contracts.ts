@@ -6,6 +6,7 @@ import type {
   KitContext,
   KitToolResult,
 } from "@kitstackco/sdk";
+import type { DebriefConfirmationResult, DebriefDraftUpdate } from "./confirmation-contracts.js";
 
 /** Stable identity used by the kit and its host-provided plugins. */
 export const DEBRIEF_KIT_ID = "kit:debrief" as const;
@@ -165,6 +166,7 @@ export interface CustomerEvent {
 
 export type { NormalizedDebriefSchedule } from "./timing.js";
 export { normalizeDebriefSchedule } from "./timing.js";
+export type { DebriefConfirmationResult, DebriefDraftUpdate } from "./confirmation-contracts.js";
 
 export interface DebriefCapabilities {
   readonly persistence: DebriefPersistencePlugin;
@@ -179,6 +181,9 @@ export interface DebriefOperations {
   prepareDebrief(input: PrepareDebriefInput, context: KitContext): Promise<PreparedDebrief | unknown>;
   getSession(sessionId: string, context: KitContext): Promise<unknown>;
   getDebrief(sessionId: string, context: KitContext): Promise<unknown>;
+  getDebriefForConfirmation(sessionId: string, context: KitContext): Promise<DebriefConfirmationResult | unknown>;
+  updateDebriefDraft(sessionId: string, update: DebriefDraftUpdate, context: KitContext): Promise<DebriefConfirmationResult | unknown>;
+  confirmDebriefDraft(sessionId: string, context: KitContext): Promise<DebriefConfirmationResult | unknown>;
   confirmDebrief(sessionId: string, outcome: "confirmed" | "partial", context: KitContext): Promise<unknown>;
   teachFromCorrection(sessionId: string, correction: string, context: KitContext): Promise<unknown>;
 }

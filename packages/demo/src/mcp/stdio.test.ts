@@ -32,7 +32,7 @@ describe("demo MCP stdio adapter", () => {
     const listed = await adapter.handleRequest({ jsonrpc: "2.0", id: 3, method: "tools/list" });
     const tools = (listed as DemoMcpResponse).result as { tools: Array<{ name: string; inputSchema: { required?: string[] } }> };
     expect(tools.tools.map((tool) => tool.name)).toEqual([
-      "prepare_debrief", "get_session", "get_debrief", "confirm_debrief", "teach_from_correction", "approve_memory", "publish_memory", "start_voice_call", "get_voice_status",
+      "prepare_debrief", "get_session", "get_debrief", "get_debrief_for_confirmation", "update_debrief_draft", "confirm_debrief_draft", "confirm_debrief", "teach_from_correction", "approve_memory", "publish_memory", "start_voice_call", "get_voice_status",
     ]);
     expect(tools.tools[0].inputSchema.required).toEqual([
       "goal", "company", "contact_name", "location", "callback_at", "callback_timezone",

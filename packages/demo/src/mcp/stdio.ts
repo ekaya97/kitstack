@@ -42,6 +42,40 @@ const TOOL_DEFINITIONS = [
     },
   },
   {
+    name: "get_debrief_for_confirmation",
+    description: "Load the editable structured debrief draft and the confirmation View.",
+    inputSchema: {
+      type: "object",
+      properties: { session_id: { type: "string" } },
+      required: ["session_id"],
+    },
+  },
+  {
+    name: "update_debrief_draft",
+    description: "Edit structured debrief fields before confirmation.",
+    inputSchema: {
+      type: "object",
+      properties: {
+        session_id: { type: "string" },
+        outcome: { type: "string" },
+        next_step: { type: "string" },
+        customer_update: { type: "string" },
+        discovered_address: { type: "string" },
+        follow_up_date: { type: "string" },
+      },
+      required: ["session_id"],
+    },
+  },
+  {
+    name: "confirm_debrief_draft",
+    description: "Confirm the editable debrief draft and persist its customer events.",
+    inputSchema: {
+      type: "object",
+      properties: { session_id: { type: "string" } },
+      required: ["session_id"],
+    },
+  },
+  {
     name: "confirm_debrief",
     description: "Confirm a completed debrief, or record a partial outcome.",
     inputSchema: {
@@ -265,6 +299,12 @@ async function callTool(
       value = app.debrief.getSession(requiredString(args, "session_id"));
     } else if (name === "get_debrief") {
       value = app.debrief.getDebrief(requiredString(args, "session_id"));
+    } else if (name === "get_debrief_for_confirmation") {
+      value = await app.debrief.getDebriefForConfirmation(requiredString(args, "session_id"));
+    } else if (name === "update_debrief_draft") {
+      value = await app.debrief.updateDebriefDraft(requiredString(args, "session_id"), draftUpdate(args));
+    } else if (name === "confirm_debrief_draft") {
+      value = await app.debrief.confirmDebriefDraft(requiredString(args, "session_id"));
     } else if (name === "confirm_debrief") {
       const outcome = requiredString(args, "outcome");
       if (outcome !== "confirmed" && outcome !== "partial") {
@@ -299,6 +339,11 @@ async function callTool(
   } catch (error) {
     return rpcError(request.id, -32603, error instanceof Error ? error.message : String(error));
   }
+}
+
+function draftUpdate(args: Record<string, unknown>): Record<string, string> {
+  const fields = ["outcome", "next_step", "customer_update", "discovered_address", "follow_up_date"] as const;
+  return Object.fromEntries(fields.flatMap((field) => typeof args[field] === "string" ? [[field, args[field]]] : []));
 }
 
 function isRequest(value: unknown): value is DemoMcpRequest {

@@ -40,7 +40,7 @@ describe("composed demo HTTP surface", () => {
       body: { id: 2, method: "tools/list" },
     });
     expect(authenticated.status).toBe(200);
-    expect((authenticated.body as any).result.tools).toHaveLength(10);
+    expect((authenticated.body as any).result.tools).toHaveLength(13);
   });
 
   it("serves the standard HTTP MCP lifecycle", async () => {
@@ -133,6 +133,58 @@ describe("composed demo HTTP surface", () => {
     expect(second.prebrief_sections.open_items).toContain("Approved memory: Ask about the implementation timeline.");
   });
 
+  it("runs the confirmation tools through HTTP and returns the confirmation View payload", async () => {
+    app = await createDemoApp({ url: ":memory:" });
+    const preparedResponse = await handleDemoAppRequest(app, {
+      method: "POST", path: "/mcp", body: {
+        id: 21, method: "tools/call", params: {
+          name: "prepare_debrief",
+          arguments: {
+            goal: "Confirm the opportunity",
+            company: "Acme Corp",
+            contact_name: "Mr John Doe",
+            location: "Köln Café",
+            callback_at: new Date(Date.now() + 20 * 60 * 1000).toISOString(),
+            callback_timezone: "Europe/Berlin",
+          },
+        },
+      },
+    });
+    const prepared = JSON.parse(((preparedResponse.body as any).result.content[0].text)) as Record<string, string>;
+    await app.voice.start(prepared.session_id);
+    await app.voice.advance(prepared.session_id);
+
+    const loaded = await handleDemoAppRequest(app, {
+      method: "POST", path: "/mcp", body: { id: 22, method: "tools/call", params: { name: "get_debrief_for_confirmation", arguments: { session_id: prepared.session_id } } },
+    });
+    expect(JSON.parse(((loaded.body as any).result.content[0].text))).toMatchObject({
+      session_id: prepared.session_id,
+      draft: { status: "draft" },
+      kit_view: { view: "confirmation" },
+    });
+
+    const updated = await handleDemoAppRequest(app, {
+      method: "POST", path: "/mcp", body: {
+        id: 23, method: "tools/call", params: {
+          name: "update_debrief_draft",
+          arguments: { session_id: prepared.session_id, next_step: "Send proposal", discovered_address: "Neue Straße 1" },
+        },
+      },
+    });
+    expect(JSON.parse(((updated.body as any).result.content[0].text))).toMatchObject({ draft: { fields: { next_step: "Send proposal" } } });
+
+    const confirmed = await handleDemoAppRequest(app, {
+      method: "POST", path: "/mcp", body: { id: 24, method: "tools/call", params: { name: "confirm_debrief_draft", arguments: { session_id: prepared.session_id } } },
+    });
+    const result = JSON.parse(((confirmed.body as any).result.content[0].text)) as Record<string, string>;
+    expect(result).toMatchObject({ state: "confirmed", confirmed_event_id: expect.any(String), address_event_id: expect.any(String) });
+
+    const view = await handleDemoAppRequest(app, {
+      method: "POST", path: "/mcp", body: { id: 25, method: "tools/call", params: { name: "kit_view", arguments: { id: "debrief", view: "confirmation" } } },
+    });
+    expect(JSON.parse(((view.body as any).result.content[0].text))).toMatchObject({ data: { state: "confirmed", confirmed_event_id: result.confirmed_event_id } });
+  });
+
   it("supports Claude tool discovery and a two-run route dogfood flow", async () => {
     app = await createDemoApp({ url: ":memory:" });
     const list = await handleDemoAppRequest(app, {
@@ -140,7 +192,7 @@ describe("composed demo HTTP surface", () => {
     });
     const tools = (list.body as { result: { tools: Array<{ name: string }> } }).result.tools;
     expect(tools.map((tool) => tool.name)).toEqual([
-      "prepare_debrief", "get_session", "get_debrief", "confirm_debrief", "teach_from_correction", "approve_memory", "publish_memory", "start_voice_call", "get_voice_status",
+      "prepare_debrief", "get_session", "get_debrief", "get_debrief_for_confirmation", "update_debrief_draft", "confirm_debrief_draft", "confirm_debrief", "teach_from_correction", "approve_memory", "publish_memory", "start_voice_call", "get_voice_status",
       "kit_view",
     ]);
 
