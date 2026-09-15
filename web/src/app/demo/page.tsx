@@ -68,7 +68,7 @@ type ObservabilityResponse = {
  * Optional forward-compatible live-call contract. The dashboard does not
  * invent live state: the API may return `liveCall` and `voiceSessions` from
  * GET /api/demo/observability. A live start endpoint must accept
- * `{ session_id, destination, confirmation: true }` and return a voice
+ * `{ session_id, to, confirmation: true }` and return a voice
  * session/status object. The raw destination is held only in this form's
  * volatile state, sent only to that protected endpoint, and then cleared.
  */
@@ -257,7 +257,7 @@ function LiveCallView({ capability, selectedSession }: { capability: LiveCallCap
     const masked = maskPhoneNumber(requestDestination);
     setDestination("");
     try {
-      const response = await fetch(`${API}${capability.startPath}`, { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ session_id: selectedSession, destination: requestDestination, confirmation: true }) });
+      const response = await fetch(`${API}${capability.startPath}`, { method: "POST", headers: { "content-type": "application/json", "x-demo-admin-token": ADMIN_TOKEN }, body: JSON.stringify({ session_id: selectedSession, to: requestDestination, confirmation: true }) });
       if (!response.ok) throw new Error(`Live call request failed (${response.status})`);
       setMaskedDestination(masked);
       setConfirmed(false);
@@ -288,9 +288,10 @@ function mergeVoiceEvidence(events: Event[], reported: VoiceSession[], selectedS
   const explicit = reported.find((session) => session.sessionId === selectedSession);
   const voiceEvents = events.filter((event) => event.sessionId === selectedSession && event.channel === "voice").sort((a, b) => a.timestamp.localeCompare(b.timestamp));
   const latest = voiceEvents.at(-1);
+  const latestIdentity = [...voiceEvents].reverse().find((event) => event.provider || event.callId);
   if (!explicit && !latest) return null;
   const status = explicit?.status ?? statusFromVoiceEvent(latest);
-  return { sessionId: selectedSession, status, provider: explicit?.provider ?? latest?.provider ?? "simulator", model: explicit?.model ?? latest?.model ?? null, callId: explicit?.callId ?? latest?.callId ?? null, latencyMs: explicit?.latencyMs ?? latest?.latencyMs ?? null, estimatedCostUsd: explicit?.estimatedCostUsd ?? latest?.estimatedCostUsd ?? null, error: explicit?.error ?? latest?.error ?? (latest?.outcome === "error" ? latest.operation : null), destinationMasked: explicit?.destinationMasked ?? null };
+  return { sessionId: selectedSession, status, provider: explicit?.provider ?? latestIdentity?.provider ?? "simulator", model: explicit?.model ?? latest?.model ?? null, callId: explicit?.callId ?? latestIdentity?.callId ?? null, latencyMs: explicit?.latencyMs ?? latest?.latencyMs ?? null, estimatedCostUsd: explicit?.estimatedCostUsd ?? latest?.estimatedCostUsd ?? null, error: explicit?.error ?? latest?.error ?? (latest?.outcome === "error" ? latest.operation : null), destinationMasked: explicit?.destinationMasked ?? null };
 }
 function statusFromVoiceEvent(event: Event | undefined) {
   if (!event) return undefined;

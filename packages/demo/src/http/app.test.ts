@@ -1,6 +1,9 @@
 import { afterEach, describe, expect, it } from "vitest";
 import { createDemoApp, type DemoApp } from "../app/index.js";
-import { handleDemoAppRequest } from "./app.js";
+import type { LiveVoiceHttpOptions } from "./voice.js";
+import { handleDemoAppRequest, type DemoLiveVoiceRoute } from "./app.js";
+
+type InjectedLiveVoiceConfig = DemoLiveVoiceRoute;
 
 let app: DemoApp | undefined;
 
@@ -168,5 +171,93 @@ describe("composed demo HTTP surface", () => {
       method: "GET", path: "/api/demo/observability",
     });
     expect((observability.body as any).mcpAuthMode).toBe("app-token");
+  });
+
+  it("starts the protected live dashboard call through injected Twilio", async () => {
+    app = await createDemoApp({
+      url: ":memory:",
+      mcpAuthMode: "app-token",
+      adminToken: "live-admin-token",
+    });
+    const prepared = await app.debrief.prepareDebrief("Qualify the buyer");
+    const createCall = async (request: Parameters<NonNullable<LiveVoiceHttpOptions["twilio"]>["createCall"]>[0]) => {
+      expect(request.to).toBe("+491234567890");
+      expect(request.from).toBe("+491234567891");
+      expect(request.record).toBe(false);
+      expect(request.twiml).toContain("kitstack_session_token");
+      return { sid: "CA-dashboard-test" };
+    };
+    const liveVoice: InjectedLiveVoiceConfig = {
+      http: {
+        twilio: { createCall },
+        telemetry: app.telemetry,
+        orgId: app.orgId,
+        appId: app.appId,
+        mediaStreamUrl: "wss://demo.example/t/voice/media",
+        fromNumber: "+491234567891",
+        allowedDestinations: ["+491234567890"],
+        requireConfirmation: true,
+        sessionTokenFor: async (sessionId) => {
+          expect(sessionId).toBe(prepared.sessionId);
+          return "signed-dashboard-session";
+        },
+      },
+      capability: {
+        enabled: true,
+        provider: "twilio-openai-realtime",
+        model: "gpt-realtime",
+        startPath: "/t/voice/live/start",
+      },
+    };
+
+    const forbidden = await handleDemoAppRequest(app, {
+      method: "POST",
+      path: "/t/voice/live/start",
+      body: { session_id: prepared.sessionId, to: "+491234567890", confirmation: true },
+    }, liveVoice);
+    expect(forbidden.status).toBe(403);
+
+    const response = await handleDemoAppRequest(app, {
+      method: "POST",
+      path: "/t/voice/live/start",
+      headers: { "x-demo-admin-token": app.adminToken },
+      body: { session_id: prepared.sessionId, to: "+491234567890", confirmation: true },
+    }, liveVoice);
+
+    expect(response.status).toBe(202);
+    expect(response.body).toMatchObject({ callId: "CA-dashboard-test", status: "connecting" });
+  });
+
+  it("advertises the injected live-call capability in dashboard observability", async () => {
+    app = await createDemoApp({ url: ":memory:" });
+    const liveVoice: InjectedLiveVoiceConfig = {
+      http: {
+        twilio: { createCall: async () => ({ sid: "CA-unused" }) },
+        telemetry: app.telemetry,
+        orgId: app.orgId,
+        appId: app.appId,
+        mediaStreamUrl: "wss://demo.example/t/voice/media",
+        fromNumber: "+491234567891",
+        allowedDestinations: ["+491234567890"],
+        requireConfirmation: true,
+        sessionTokenFor: async () => "unused",
+      },
+      capability: {
+        enabled: true,
+        provider: "twilio-openai-realtime",
+        model: "gpt-realtime",
+        startPath: "/t/voice/live/start",
+      },
+    };
+
+    const response = await handleDemoAppRequest(app, {
+      method: "GET",
+      path: "/api/demo/observability",
+    }, liveVoice);
+
+    expect(response.status).toBe(200);
+    expect(response.body).toEqual(expect.objectContaining({
+      liveCall: liveVoice.capability,
+    }));
   });
 });

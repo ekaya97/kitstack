@@ -5,10 +5,23 @@ import {
   type Server,
   type ServerResponse,
 } from "node:http";
+import { createHash } from "node:crypto";
+import { readFileSync } from "node:fs";
 import { pathToFileURL, URL } from "node:url";
+import { WebSocketServer } from "ws";
 import { createDemoApp, type DemoApp } from "./app/index.js";
 import type { McpAuthMode } from "./auth/mcp.js";
-import { handleDemoAppRequest } from "./http/app.js";
+import { handleDemoAppRequest, type DemoLiveVoiceRoute, type DemoAppRouteRequest } from "./http/app.js";
+import { attachVoiceMediaBridge } from "./http/voice.js";
+import {
+  createDefineAgentVoiceLoop,
+  createOpenAIRealtimeSocketFactory,
+  createSignedSessionTokenCodec,
+  createTwilioCallsClient,
+  createTwilioSignatureValidator,
+  type SessionBinding,
+  type VoiceWebSocket,
+} from "./voice/realtime.js";
 
 const DEFAULT_PORT = 3001;
 const DEFAULT_MAX_BODY_BYTES = 1024 * 1024;
@@ -26,6 +39,8 @@ export interface DemoServerOptions {
   /** Supplying an app transfers lifecycle ownership to the caller. */
   app?: DemoApp;
   appOptions?: Parameters<typeof createDemoApp>[0];
+  /** Inject a live route in tests; otherwise it is composed from env vars. */
+  liveVoice?: DemoLiveVoiceRoute;
 }
 
 export interface DemoServer {
@@ -65,10 +80,16 @@ export async function createDemoServer(options: DemoServerOptions = {}): Promise
     throw new Error("port must be an integer between 0 and 65535");
   }
 
+  const liveVoice = options.liveVoice ?? await composeLiveVoiceRoute(app);
+  const webSocketServer = new WebSocketServer({ noServer: true });
+
   let listening = false;
   let closed = false;
   const server = createServer((request, response) => {
-    void handleIncomingRequest(request, response, app, maxBodyBytes);
+    void handleIncomingRequest(request, response, app, maxBodyBytes, liveVoice);
+  });
+  server.on("upgrade", (request, socket, head) => {
+    void handleUpgrade(request, socket, head, webSocketServer, liveVoice);
   });
 
   return {
@@ -102,6 +123,8 @@ export async function createDemoServer(options: DemoServerOptions = {}): Promise
         });
         listening = false;
       }
+      for (const client of webSocketServer.clients) client.close(1001, "demo server shutting down");
+      webSocketServer.close();
       if (ownsApp) await app.close();
     },
   };
@@ -112,6 +135,7 @@ async function handleIncomingRequest(
   response: ServerResponse,
   app: DemoApp,
   maxBodyBytes: number,
+  liveVoice?: DemoLiveVoiceRoute,
 ): Promise<void> {
   response.setHeader("content-type", "application/json");
   for (const [name, value] of Object.entries(CORS_HEADERS)) response.setHeader(name, value);
@@ -131,7 +155,7 @@ async function handleIncomingRequest(
       query: queryParams(url),
       headers: requestHeaders(request.headers),
       body,
-    });
+    }, liveVoice);
     response.statusCode = result.status;
     for (const [name, value] of Object.entries(result.headers)) response.setHeader(name, value);
     response.end(result.status === 204 ? undefined : JSON.stringify(result.body));
@@ -170,6 +194,171 @@ function queryParams(url: URL): Record<string, string | undefined> {
   const result: Record<string, string | undefined> = {};
   for (const [key, value] of url.searchParams) result[key] = value;
   return result;
+}
+
+function headerValue(headers: IncomingHttpHeaders, name: string): string | undefined {
+  const value = headers[name.toLowerCase()];
+  return Array.isArray(value) ? value[0] : value;
+}
+
+async function composeLiveVoiceRoute(app: DemoApp): Promise<DemoLiveVoiceRoute | undefined> {
+  const names = [
+    "TWILIO_ACCOUNT_SID",
+    "TWILIO_AUTH_TOKEN",
+    "TWILIO_FROM_NUMBER",
+    "OPENAI_API_KEY",
+    "KITSTACK_DEMO_PUBLIC_HTTPS_URL",
+    "KITSTACK_DEMO_PUBLIC_WSS_URL",
+    "KITSTACK_DEMO_ALLOWED_DESTINATION",
+  ] as const;
+  const configured = names.map((name) => [name, process.env[name]?.trim() ?? ""] as const);
+  if (configured.every(([, value]) => !value)) return undefined;
+  const missing = configured.filter(([, value]) => !value).map(([name]) => name);
+  if (missing.length) throw new Error(`Live voice configuration is incomplete; missing ${missing.join(", ")}`);
+
+  const values = Object.fromEntries(configured) as Record<(typeof names)[number], string>;
+  const mediaStreamUrl = requireWssUrl(values.KITSTACK_DEMO_PUBLIC_WSS_URL, "KITSTACK_DEMO_PUBLIC_WSS_URL");
+  const publicHttpsUrl = requireHttpsUrl(values.KITSTACK_DEMO_PUBLIC_HTTPS_URL, "KITSTACK_DEMO_PUBLIC_HTTPS_URL");
+  const destination = values.KITSTACK_DEMO_ALLOWED_DESTINATION;
+  if (!/^\+[1-9]\d{7,14}$/.test(values.TWILIO_FROM_NUMBER)) throw new Error("TWILIO_FROM_NUMBER must be E.164");
+  if (!/^\+[1-9]\d{7,14}$/.test(destination)) throw new Error("KITSTACK_DEMO_ALLOWED_DESTINATION must be E.164");
+
+  const tokenCodec = createSignedSessionTokenCodec(app.apps.secret);
+  const instructionsContent = readFileSync(new URL("./instructions/debrief-baseline.md", import.meta.url), "utf8");
+  const baseInstructionsVersion = `sha256:${createHash("sha256").update(instructionsContent, "utf8").digest("hex")}`;
+  const voiceContexts = new Map<string, Promise<{ content: string; version: string; memoryIds: string[] }>>();
+  const voiceContextFor = (binding: SessionBinding) => {
+    const existing = voiceContexts.get(binding.sessionId);
+    if (existing) return existing;
+    const context = (async () => {
+      const session = app.debrief.getSession(binding.sessionId);
+      const records = await app.memory.readRelevant({ orgId: session.orgId, kitId: session.kitId, limit: 20 }, {
+        orgId: session.orgId,
+        appId: binding.appId,
+        sessionId: session.sessionId,
+        traceId: session.sessionId,
+        parentId: null,
+        kitId: session.kitId,
+      });
+      const selected = records.filter((record) => session.memoryIds.includes(record.memoryId));
+      const content = [
+        instructionsContent.trim(),
+        "\nPrepared debrief context:",
+        `Goal: ${session.goal}`,
+        selected.length ? `Approved workflow feedback:\n${selected.map((record) => `- ${record.correction}`).join("\n")}` : "Approved workflow feedback: none.",
+        "Use this context during the call. Ask one useful question at a time and do not invent customer details.",
+      ].join("\n");
+      return {
+        content,
+        version: `${baseInstructionsVersion}:voice:${createHash("sha256").update(content, "utf8").digest("hex").slice(0, 16)}`,
+        memoryIds: selected.map((record) => record.memoryId),
+      };
+    })();
+    voiceContexts.set(binding.sessionId, context);
+    return context;
+  };
+  const openai = {
+    socketFactory: createOpenAIRealtimeSocketFactory(),
+    url: process.env.OPENAI_REALTIME_URL?.trim() || "wss://api.openai.com/v1/realtime",
+    apiKey: values.OPENAI_API_KEY,
+    model: process.env.OPENAI_REALTIME_MODEL?.trim() || "gpt-realtime",
+    instructions: instructionsContent,
+    voice: process.env.OPENAI_REALTIME_VOICE?.trim() || "marin",
+  };
+  const signatureValidator = createTwilioSignatureValidator(values.TWILIO_AUTH_TOKEN);
+
+  return {
+    http: {
+      twilio: createTwilioCallsClient({ accountSid: values.TWILIO_ACCOUNT_SID, authToken: values.TWILIO_AUTH_TOKEN }),
+      telemetry: app.telemetry,
+      orgId: app.orgId,
+      appId: app.appId,
+      mediaStreamUrl,
+      fromNumber: values.TWILIO_FROM_NUMBER,
+      allowedDestinations: [destination],
+      requireConfirmation: true,
+      beforeStart: async (sessionId) => { await app.debrief.markCalling(sessionId); },
+      onFailure: async (sessionId, error) => { await app.debrief.markFailed(sessionId, error); },
+      sessionTokenFor: async (sessionId) => {
+        const session = app.debrief.getSession(sessionId);
+        if (session.state !== "calling") throw new Error("Live voice session is not calling");
+        return tokenCodec.sign({ sessionId, orgId: session.orgId, appId: app.appId });
+      },
+    },
+    capability: { enabled: true, provider: "twilio-openai-realtime", model: openai.model, startPath: "/t/voice/live/start" },
+    requireAdminToken: true,
+    bridge: (socket, request) => attachVoiceMediaBridge({
+      socket,
+      verifier: tokenCodec,
+      openai,
+      telemetry: app.telemetry,
+      instructionsFor: async (binding) => (await voiceContextFor(binding)).content,
+      signature: {
+        validator: signatureValidator,
+        url: `${publicHttpsUrl}/t/voice/media`,
+        params: {},
+        value: headerValue(request.headers ?? {}, "x-twilio-signature"),
+      },
+      agent: async (binding) => {
+        const context = await voiceContextFor(binding);
+        return createDefineAgentVoiceLoop({
+        sessionId: binding.sessionId,
+        orgId: binding.orgId,
+        appId: binding.appId,
+        instructions: { version: context.version, content: context.content },
+        telemetry: app.telemetry,
+        provider: "twilio-openai-realtime",
+        callId: binding.callSid ?? null,
+        memoryIds: context.memoryIds,
+        onStop: async () => { await app.debrief.awaitConfirmation(binding.sessionId); },
+        onError: async (error) => { await app.debrief.markFailed(binding.sessionId, error); },
+        });
+      },
+    }),
+  };
+}
+
+function requireWssUrl(value: string, name: string): string {
+  let url: URL;
+  try { url = new URL(value); } catch { throw new Error(`${name} must be a valid URL`); }
+  if (url.protocol !== "wss:") throw new Error(`${name} must use wss:`);
+  return value.replace(/\/$/, "");
+}
+
+function requireHttpsUrl(value: string, name: string): string {
+  let url: URL;
+  try { url = new URL(value); } catch { throw new Error(`${name} must be a valid URL`); }
+  if (url.protocol !== "https:") throw new Error(`${name} must use https:`);
+  return value.replace(/\/$/, "");
+}
+
+async function handleUpgrade(
+  request: IncomingMessage,
+  socket: NodeJS.WritableStream & { destroy(): void; write(data: string): boolean },
+  head: Buffer,
+  webSocketServer: WebSocketServer,
+  liveVoice?: DemoLiveVoiceRoute,
+): Promise<void> {
+  const path = new URL(request.url ?? "/", "http://demo.local").pathname;
+  if (!liveVoice?.bridge || path !== "/t/voice/media") {
+    socket.write("HTTP/1.1 404 Not Found\r\nConnection: close\r\n\r\n");
+    socket.destroy();
+    return;
+  }
+  webSocketServer.handleUpgrade(request, socket as never, head, (ws) => {
+    const routeRequest: DemoAppRouteRequest = {
+      method: "GET",
+      path,
+      headers: requestHeaders(request.headers),
+    };
+    try {
+      const bridge = liveVoice.bridge!(ws as unknown as VoiceWebSocket, routeRequest);
+      void bridge.binding.catch(() => undefined);
+      void bridge.done.catch(() => undefined);
+    } catch (error) {
+      ws.close(1011, error instanceof Error ? error.message : "bridge setup failed");
+    }
+  });
 }
 
 function parsePort(value: string | undefined): number | undefined {

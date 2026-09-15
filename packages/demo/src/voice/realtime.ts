@@ -1,5 +1,7 @@
 import { createHmac, timingSafeEqual } from "node:crypto";
 import WebSocket from "ws";
+import { defineAgent, type AgentInput, type AgentLifecycleEvent, type AgentRunResult } from "@kitstackco/sdk";
+import { jwtVerify, SignJWT } from "jose";
 import type { TelemetryEventInput, TelemetryStore } from "../telemetry/index.js";
 
 export const REALTIME_AUDIO_FORMAT = "g711_ulaw" as const;
@@ -101,6 +103,32 @@ export interface SignedSessionTokenVerifier {
   verify(token: string): Promise<SignedSessionClaims>;
 }
 
+/** Short-lived internal token carried in Twilio Stream custom parameters. */
+export interface SignedSessionTokenCodec extends SignedSessionTokenVerifier {
+  sign(claims: SignedSessionClaims): Promise<string>;
+}
+
+export function createSignedSessionTokenCodec(secret: Uint8Array | string, now: () => number = Date.now): SignedSessionTokenCodec {
+  const key = typeof secret === "string" ? new TextEncoder().encode(secret) : secret;
+  if (key.byteLength < 32) throw new Error("Signed session token secret must be at least 32 bytes");
+  return {
+    sign(claims) {
+      return new SignJWT({ orgId: claims.orgId, appId: claims.appId })
+        .setProtectedHeader({ alg: "HS256" })
+        .setSubject(claims.sessionId)
+        .setExpirationTime(Math.floor(now() / 1000) + 10 * 60)
+        .sign(key);
+    },
+    async verify(token) {
+      const { payload } = await jwtVerify(token, key, { algorithms: ["HS256"], currentDate: new Date(now()) });
+      if (typeof payload.sub !== "string" || typeof payload.orgId !== "string" || (typeof payload.appId !== "string" && payload.appId !== null)) {
+        throw new Error("Invalid signed session token claims");
+      }
+      return { sessionId: payload.sub, orgId: payload.orgId, appId: payload.appId };
+    },
+  };
+}
+
 export interface TwilioSignatureInput {
   url: string;
   params: Readonly<Record<string, string | string[] | undefined>>;
@@ -197,6 +225,9 @@ export async function createOpenAIRealtimeSession(options: RealtimeSessionOption
       turn_detection: { type: "server_vad", create_response: true, interrupt_response: true },
     },
   }));
+  // Outbound calls need an explicit first response; otherwise server VAD
+  // waits for the callee to speak before the agent ever greets them.
+  socket.send(JSON.stringify({ type: "response.create", response: { modalities: ["audio"] } }));
   return {
     socket,
     sendAudio(payload) { socket.send(JSON.stringify({ type: "input_audio_buffer.append", audio: payload })); },
@@ -246,7 +277,7 @@ export async function startRealtimeCall(options: RealtimeCallStartOptions): Prom
     await appendVoiceTelemetry(options.telemetry, {
       id: id(), timestamp: timestamp(), orgId: options.orgId, appId: options.appId, sessionId: options.sessionId,
       traceId: options.sessionId, channel: "voice", kitId: "kit:debrief", type: "voice.call",
-      operation: "outbound_call_started:recording-off:retention-off", model: null, outcome: "started",
+      operation: "outbound_call_started:recording-off:retention-off", model: null, provider: REALTIME_PROVIDER, callId: call.sid, outcome: "started",
     });
     return {
       callId: call.sid, sessionId: options.sessionId, provider: REALTIME_PROVIDER, status: "connecting",
@@ -257,7 +288,7 @@ export async function startRealtimeCall(options: RealtimeCallStartOptions): Prom
     await appendVoiceTelemetry(options.telemetry, {
       id: id(), timestamp: timestamp(), orgId: options.orgId, appId: options.appId, sessionId: options.sessionId,
       traceId: options.sessionId, channel: "voice", kitId: "kit:debrief", type: "voice.call",
-      operation: "outbound_call_error:recording-off:retention-off", model: null, outcome: "error",
+      operation: "outbound_call_error:recording-off:retention-off", model: null, provider: REALTIME_PROVIDER, outcome: "error",
     });
     throw error;
   }
@@ -269,6 +300,130 @@ export interface VoiceAgentLoopAdapter {
   onInterruption?(): Promise<void>;
   onStop?(reason: string): Promise<void>;
   onError?(error: Error): Promise<void>;
+}
+
+export interface DefineAgentVoiceLoopOptions {
+  sessionId: string;
+  orgId: string;
+  appId: string | null;
+  instructions: { version: string; content: string };
+  telemetry: Pick<TelemetryStore, "append">;
+  now?: () => string;
+  createId?: () => string;
+  tools?: Parameters<typeof defineAgent>[0]["tools"];
+  provider?: string | null;
+  callId?: string | null;
+  memoryIds?: readonly string[];
+  onStop?: (reason: string) => Promise<void>;
+  onError?: (error: Error) => Promise<void>;
+}
+
+export interface DefineAgentVoiceLoop extends VoiceAgentLoopAdapter {
+  readonly done: Promise<AgentRunResult>;
+}
+
+/**
+ * Supervises a provider-owned realtime speech session with defineAgent.
+ * Realtime remains the low-latency audio/model connector; defineAgent owns the
+ * bounded session lifecycle, instruction version, declared tool set, limits,
+ * cancellation, and metadata-only turn events.
+ */
+export function createDefineAgentVoiceLoop(options: DefineAgentVoiceLoopOptions): DefineAgentVoiceLoop {
+  const queue: Array<AgentInput> = [];
+  const waiters: Array<(input: AgentInput | null) => void> = [];
+  let closed = false;
+  let resolveDone!: (value: AgentRunResult) => void;
+  const done = new Promise<AgentRunResult>((resolve) => { resolveDone = resolve; });
+  let result!: AgentRunResult;
+  const controller = new AbortController();
+  const next = async (): Promise<AgentInput | null> => {
+    if (queue.length) return queue.shift()!;
+    if (closed) return null;
+    return new Promise((resolve) => waiters.push(resolve));
+  };
+  const push = (input: AgentInput) => {
+    const waiter = waiters.shift();
+    if (waiter) waiter(input);
+    else queue.push(input);
+  };
+  const close = () => {
+    if (closed) return;
+    closed = true;
+    while (waiters.length) waiters.shift()!(null);
+  };
+  const agent = defineAgent({
+    id: "debrief-voice-interviewer",
+    kitId: "kit:debrief",
+    trigger: { id: "voice-call", identity: "sales-agent" },
+    instructions: options.instructions,
+    tools: options.tools ?? [],
+    turnSource: { next: async () => next() },
+    model: {
+      turn: async () => ({ type: "message" as const, content: "provider_turn_completed" }),
+    },
+    output: { emit: async () => undefined },
+    maxTurns: 30,
+    maxDurationMs: 10 * 60_000,
+    hooks: {
+      onEvent: async (event: AgentLifecycleEvent) => {
+        await options.telemetry.append({
+          id: options.createId?.() ?? crypto.randomUUID(),
+          timestamp: options.now?.() ?? new Date().toISOString(),
+          orgId: options.orgId,
+          appId: options.appId,
+          sessionId: options.sessionId,
+          traceId: options.sessionId,
+          channel: "voice",
+          kitId: "kit:debrief",
+          type: event.type === "tool_called" ? "mcp.tool_call" : "voice.call",
+          operation: `agent.${event.type}`,
+          provider: options.provider ?? null,
+          callId: options.callId ?? null,
+          outcome: event.type === "turn_finished" && event.outcome === "error" ? "error" : "success",
+          instructionVersions: event.type === "run_started" ? [event.instructionsVersion] : undefined,
+          memoryIds: event.type === "run_started" ? options.memoryIds : undefined,
+        });
+      },
+    },
+  });
+  void agent.run({ sessionId: options.sessionId, context: { orgId: options.orgId, appId: options.appId }, signal: controller.signal })
+    .then((value) => { result = value; resolveDone(value); })
+    .catch((error) => {
+      result = {
+        status: "failed",
+        sessionId: options.sessionId,
+        kitId: "kit:debrief",
+        agentId: "debrief-voice-interviewer",
+        triggerId: "voice-call",
+        instructionsVersion: options.instructions.version,
+        turns: 0,
+        toolCalls: 0,
+        outputs: 0,
+        durationMs: 0,
+        error: { code: "AGENT_SOURCE_ERROR", message: error instanceof Error ? error.message : String(error) },
+      };
+      resolveDone(result);
+    });
+  return {
+    done,
+    async onProviderTurn(event) {
+      if (event.kind === "turn_completed") push({ content: "provider_turn_completed", metadata: { latencyMs: event.latencyMs ?? null } });
+    },
+    async onInterruption() {
+      push({ content: "provider_interruption", metadata: { interruption: true } });
+    },
+    async onStop() {
+      close();
+      await done.catch(() => undefined);
+      try { await options.onStop?.("provider_stop"); } catch { /* Session cleanup must not tear down the bridge. */ }
+    },
+    async onError(error) {
+      close();
+      controller.abort(error);
+      await done.catch(() => undefined);
+      try { await options.onError?.(error); } catch { /* Session cleanup must not tear down the bridge. */ }
+    },
+  };
 }
 
 /**
@@ -351,7 +506,9 @@ export interface TwilioOpenAIBridgeOptions {
   bindings?: SessionBindingStore;
   signature?: { validator: TwilioSignatureValidator; url: string; params: Readonly<Record<string, string | string[] | undefined>>; value: string | undefined };
   telemetry: Pick<TelemetryStore, "append">;
-  agent?: VoiceAgentLoopAdapter;
+  agent?: VoiceAgentLoopAdapter | ((binding: SessionBinding) => VoiceAgentLoopAdapter | Promise<VoiceAgentLoopAdapter>);
+  /** Resolve prepared-session context before opening the provider model session. */
+  instructionsFor?: (binding: SessionBinding) => Promise<string>;
   now?: () => string;
   createId?: () => string;
   estimateCostUsd?: (usage: { inputTokens?: number; outputTokens?: number }) => number | null;
@@ -382,6 +539,7 @@ export function bridgeTwilioToOpenAI(options: TwilioOpenAIBridgeOptions): Twilio
   const done = new Promise<void>((resolve) => { resolveDone = resolve; });
   let finished = false;
   let twilioQueue = Promise.resolve();
+  let agent: VoiceAgentLoopAdapter | undefined;
 
   const finish = async (reason: string, error?: Error) => {
     if (finished) return;
@@ -389,12 +547,12 @@ export function bridgeTwilioToOpenAI(options: TwilioOpenAIBridgeOptions): Twilio
     const current = streamSid ? bindings.get(streamSid) : undefined;
     if (streamSid) bindings.remove(streamSid);
     realtime?.close();
-    if (error) await options.agent?.onError?.(error);
-    else await options.agent?.onStop?.(reason);
+    if (error) await agent?.onError?.(error);
+    else await agent?.onStop?.(reason);
     await appendVoiceTelemetry(options.telemetry, {
       id: id(), timestamp: now(), orgId: current?.orgId ?? "unknown", appId: current?.appId ?? null, sessionId: current?.sessionId ?? null,
       traceId: current?.sessionId ?? streamSid ?? null, channel: "voice", kitId: "kit:debrief", type: "voice.call",
-      operation: error ? "media_stream_error" : "media_stream_stopped", outcome: error ? "error" : "success",
+      operation: error ? "media_stream_error" : "media_stream_stopped", provider: REALTIME_PROVIDER, callId: current?.callSid ?? null, outcome: error ? "error" : "success",
     });
     resolveDone();
   };
@@ -413,13 +571,15 @@ export function bridgeTwilioToOpenAI(options: TwilioOpenAIBridgeOptions): Twilio
       streamSid = start.streamSid;
       bindings.bind(sessionBinding);
       resolveBinding(sessionBinding);
-      realtime = await createOpenAIRealtimeSession(options.openai);
+      agent = typeof options.agent === "function" ? await options.agent(sessionBinding) : options.agent;
+      const instructions = await options.instructionsFor?.(sessionBinding);
+      realtime = await createOpenAIRealtimeSession({ ...options.openai, ...(instructions ? { instructions } : {}) });
       realtime.socket.on("message", (data: unknown) => { void handleOpenAI(data).catch((error) => { void finish("openai_error", asError(error)); }); });
       realtime.socket.on("error", (error: Error) => { void finish("openai_error", error); });
       await appendVoiceTelemetry(options.telemetry, {
         id: id(), timestamp: now(), orgId: claims.orgId, appId: claims.appId, sessionId: claims.sessionId,
         traceId: claims.sessionId, channel: "voice", kitId: "kit:debrief", type: "voice.call",
-        operation: "media_stream_bound:recording-off:retention-off", outcome: "started",
+        operation: "media_stream_bound:recording-off:retention-off", provider: REALTIME_PROVIDER, callId: start.callSid ?? null, outcome: "started",
       });
       return;
     }
@@ -444,13 +604,13 @@ export function bridgeTwilioToOpenAI(options: TwilioOpenAIBridgeOptions): Twilio
     const current = streamSid ? bindings.get(streamSid) : undefined;
     if (translated.kind === "turn_started") {
       turnStartedAt = Date.now();
-      await options.agent?.onProviderTurn?.({ kind: "turn_started", sessionId: current?.sessionId ?? "unknown" });
+      await agent?.onProviderTurn?.({ kind: "turn_started", sessionId: current?.sessionId ?? "unknown" });
       return;
     }
     if (translated.kind === "interruption") {
       realtime?.cancelResponse();
       options.twilioSocket.send(JSON.stringify({ event: "clear", streamSid }));
-      await options.agent?.onInterruption?.();
+      await agent?.onInterruption?.();
       return;
     }
     if (translated.kind === "audio_delta") {
@@ -461,11 +621,12 @@ export function bridgeTwilioToOpenAI(options: TwilioOpenAIBridgeOptions): Twilio
     if (translated.kind === "turn_completed") {
       const usage = translated.usage;
       const latencyMs = turnStartedAt === undefined ? undefined : Date.now() - turnStartedAt;
-      await options.agent?.onProviderTurn?.({ kind: "turn_completed", sessionId: current?.sessionId ?? "unknown", usage, latencyMs });
+      await agent?.onProviderTurn?.({ kind: "turn_completed", sessionId: current?.sessionId ?? "unknown", usage, latencyMs });
       await appendVoiceTelemetry(options.telemetry, {
         id: id(), timestamp: now(), orgId: current?.orgId ?? "unknown", appId: current?.appId ?? null,
         sessionId: current?.sessionId ?? null, traceId: current?.sessionId ?? null, channel: "voice", kitId: "kit:debrief",
         type: "inference", operation: "realtime_turn", model: options.openai.model,
+        provider: REALTIME_PROVIDER, callId: current?.callSid ?? null,
         requestTokens: usage.inputTokens ?? null, responseTokens: usage.outputTokens ?? null,
         latencyMs: latencyMs ?? null, estimatedCostUsd: options.estimateCostUsd?.(usage) ?? null, outcome: "success",
       });

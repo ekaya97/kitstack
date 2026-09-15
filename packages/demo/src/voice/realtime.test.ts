@@ -1,7 +1,9 @@
 import { describe, expect, it, vi } from "vitest";
 import {
   bridgeTwilioToOpenAI,
+  createDefineAgentVoiceLoop,
   createOpenAIRealtimeSession,
+  createSignedSessionTokenCodec,
   createSessionBindingStore,
   createTwilioCallsClient,
   createTwilioSignatureValidator,
@@ -28,6 +30,28 @@ function telemetry() {
 }
 
 describe("Twilio and OpenAI Realtime boundary", () => {
+  it("runs the bounded defineAgent supervisor for provider turns and closes cleanly", async () => {
+    const store = telemetry();
+    const loop = createDefineAgentVoiceLoop({
+      sessionId: "session-agent",
+      orgId: "org-demo",
+      appId: null,
+      instructions: { version: "debrief-v1", content: "Ask one question." },
+      telemetry: store,
+    });
+    await loop.onProviderTurn?.({ kind: "turn_completed", sessionId: "session-agent", latencyMs: 12 });
+    await loop.onStop?.("twilio_stop");
+    await expect(loop.done).resolves.toMatchObject({ status: "completed", sessionId: "session-agent", turns: 1 });
+    expect(store.append).toHaveBeenCalledWith(expect.objectContaining({ operation: "agent.run_started", instructionVersions: ["debrief-v1"] }));
+    expect(store.append).toHaveBeenCalledWith(expect.objectContaining({ operation: "agent.run_finished" }));
+  });
+
+  it("signs and verifies short-lived media session claims", async () => {
+    const codec = createSignedSessionTokenCodec("01234567890123456789012345678901", () => 1_700_000_000_000);
+    const token = await codec.sign({ sessionId: "session-1", orgId: "org-demo", appId: null });
+    await expect(codec.verify(token)).resolves.toEqual({ sessionId: "session-1", orgId: "org-demo", appId: null });
+  });
+
   it("generates bidirectional μ-law TwiML and escapes the custom token", () => {
     const twiml = generateBidirectionalStreamTwiml({ mediaStreamUrl: "wss://demo.example/media", sessionToken: "signed&token\"" });
     expect(twiml).toContain("<Connect>");
@@ -74,7 +98,8 @@ describe("Twilio and OpenAI Realtime boundary", () => {
     });
     expect(JSON.parse(socket.sent[0])).toMatchObject({ type: "session.update", session: { input_audio_format: "g711_ulaw", output_audio_format: "g711_ulaw" } });
     session.sendAudio("AQID");
-    expect(JSON.parse(socket.sent[1])).toEqual({ type: "input_audio_buffer.append", audio: "AQID" });
+    expect(JSON.parse(socket.sent[1])).toEqual({ type: "response.create", response: { modalities: ["audio"] } });
+    expect(JSON.parse(socket.sent[2])).toEqual({ type: "input_audio_buffer.append", audio: "AQID" });
   });
 
   it("binds the signed session and forwards media in both directions", async () => {
@@ -94,7 +119,7 @@ describe("Twilio and OpenAI Realtime boundary", () => {
 
     twilio.emit("message", JSON.stringify({ event: "media", streamSid: "MZ123", media: { payload: "AQID" } }));
     await new Promise((resolve) => setTimeout(resolve, 0));
-    expect(JSON.parse(openai.sent[1])).toEqual({ type: "input_audio_buffer.append", audio: "AQID" });
+    expect(openai.sent.map((value) => JSON.parse(value))).toContainEqual({ type: "input_audio_buffer.append", audio: "AQID" });
     openai.emit("message", JSON.stringify({ type: "response.audio.delta", delta: "BAUG" }));
     await new Promise((resolve) => setTimeout(resolve, 0));
     expect(JSON.parse(twilio.sent.at(-1)!)).toEqual({ event: "media", streamSid: "MZ123", media: { payload: "BAUG" } });

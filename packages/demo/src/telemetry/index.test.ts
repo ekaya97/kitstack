@@ -47,6 +47,8 @@ describe("TelemetryStore", () => {
         responseTokens: 40,
         latencyMs: 95,
         estimatedCostUsd: 0.0025,
+        provider: "twilio-openai-realtime",
+        callId: "CA123",
         instructionVersions: ["interviewer@1"],
         memoryIds: ["memory-1"],
       }),
@@ -77,6 +79,8 @@ describe("TelemetryStore", () => {
       appId: "app-sales",
       latencyMs: 95,
       estimatedCostUsd: 0.0025,
+      provider: "twilio-openai-realtime",
+      callId: "CA123",
     });
   });
 

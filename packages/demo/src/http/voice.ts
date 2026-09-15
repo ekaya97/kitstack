@@ -9,6 +9,7 @@ import {
   type TwilioOpenAIBridge,
   type TwilioSignatureValidator,
   type VoiceWebSocket,
+  type SessionBinding,
 } from "../voice/realtime.js";
 import type { TelemetryStore } from "../telemetry/index.js";
 
@@ -37,6 +38,13 @@ export interface LiveVoiceHttpOptions {
   now?: () => string;
   createId?: () => string;
   statusCallbackUrl?: string;
+  /** A demo-only allowlist prevents accidental calls to arbitrary numbers. */
+  allowedDestinations?: readonly string[];
+  /** Require an explicit confirmation flag at the protected action boundary. */
+  requireConfirmation?: boolean;
+  /** Lifecycle hooks keep the provider action tied to the debrief state machine. */
+  beforeStart?: (sessionId: string) => Promise<void>;
+  onFailure?: (sessionId: string, error: unknown) => Promise<void>;
 }
 
 /** Framework-neutral action used by a protected dashboard/MCP layer. */
@@ -48,13 +56,25 @@ export async function handleLiveVoiceStart(
   const body = request.body ?? {};
   const sessionId = stringField(body, "session_id");
   const destination = stringField(body, "to");
-  const sessionToken = await options.sessionTokenFor(sessionId);
-  const result = await startRealtimeCall({
-    sessionId, orgId: options.orgId, appId: options.appId, to: destination, from: options.fromNumber,
-    mediaStreamUrl: options.mediaStreamUrl, sessionToken, twilio: options.twilio, telemetry: options.telemetry,
-    statusCallbackUrl: options.statusCallbackUrl, now: options.now, createId: options.createId,
-  });
-  return json(202, result);
+  if (options.requireConfirmation && body.confirmation !== true) {
+    return json(400, { error: "confirmation_required" });
+  }
+  if (options.allowedDestinations && !options.allowedDestinations.includes(destination)) {
+    return json(403, { error: "destination_not_allowed" });
+  }
+  try {
+    await options.beforeStart?.(sessionId);
+    const sessionToken = await options.sessionTokenFor(sessionId);
+    const result = await startRealtimeCall({
+      sessionId, orgId: options.orgId, appId: options.appId, to: destination, from: options.fromNumber,
+      mediaStreamUrl: options.mediaStreamUrl, sessionToken, twilio: options.twilio, telemetry: options.telemetry,
+      statusCallbackUrl: options.statusCallbackUrl, now: options.now, createId: options.createId,
+    });
+    return json(202, result);
+  } catch (error) {
+    try { await options.onFailure?.(sessionId, error); } catch { /* Preserve the provider error response. */ }
+    throw error;
+  }
 }
 
 export interface TwimlRequestOptions {
@@ -74,6 +94,7 @@ export interface VoiceMediaBridgeOptions {
   signature?: { validator: TwilioSignatureValidator; url: string; params: Readonly<Record<string, string | string[] | undefined>>; value: string | undefined };
   verifier: SignedSessionTokenVerifier;
   openai: { socketFactory: OpenAIRealtimeSocketFactory; url: string; apiKey: string; model: string; instructions?: string; voice?: string };
+  instructionsFor?: (binding: SessionBinding) => Promise<string>;
   telemetry: Pick<TelemetryStore, "append">;
   agent?: Parameters<typeof bridgeTwilioToOpenAI>[0]["agent"];
 }
@@ -82,7 +103,7 @@ export interface VoiceMediaBridgeOptions {
 export function attachVoiceMediaBridge(options: VoiceMediaBridgeOptions): TwilioOpenAIBridge {
   return bridgeTwilioToOpenAI({
     twilioSocket: options.socket, signature: options.signature, verifier: options.verifier,
-    openai: options.openai, telemetry: options.telemetry, agent: options.agent,
+    openai: options.openai, telemetry: options.telemetry, agent: options.agent, instructionsFor: options.instructionsFor,
   });
 }
 

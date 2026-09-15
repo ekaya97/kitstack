@@ -41,6 +41,8 @@ export interface TelemetryEventInput {
   type: TelemetryEventType;
   operation: string;
   model?: string | null;
+  provider?: string | null;
+  callId?: string | null;
   requestTokens?: number | null;
   responseTokens?: number | null;
   latencyMs?: number | null;
@@ -117,6 +119,8 @@ const CREATE_SCHEMA_SQL = `
     type TEXT NOT NULL,
     operation TEXT NOT NULL,
     model TEXT,
+    provider TEXT,
+    call_id TEXT,
     request_tokens INTEGER,
     response_tokens INTEGER,
     latency_ms INTEGER,
@@ -148,7 +152,12 @@ export class TelemetryStore {
 
   constructor(private readonly client: Client, ownsClient = false) {
     this.ownsClient = ownsClient;
-    this.initialized = client.executeMultiple(CREATE_SCHEMA_SQL).then(() => undefined);
+    this.initialized = client.executeMultiple(CREATE_SCHEMA_SQL).then(async () => {
+      const columns = await client.execute("PRAGMA table_info(telemetry_events)");
+      const names = new Set(columns.rows.map((row) => String((row as Row).name)));
+      if (!names.has("provider")) await client.execute("ALTER TABLE telemetry_events ADD COLUMN provider TEXT");
+      if (!names.has("call_id")) await client.execute("ALTER TABLE telemetry_events ADD COLUMN call_id TEXT");
+    });
   }
 
   async append(input: TelemetryEventInput): Promise<TelemetryEvent> {
@@ -160,10 +169,10 @@ export class TelemetryStore {
       sql: `
         INSERT INTO telemetry_events (
           id, timestamp, org_id, app_id, session_id, parent_id, trace_id,
-          channel, plugin_id, kit_id, type, operation, model,
+          channel, plugin_id, kit_id, type, operation, model, provider, call_id,
           request_tokens, response_tokens, latency_ms, estimated_cost_usd,
           outcome, instruction_versions, memory_ids
-        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
       `,
       args: [
         input.id,
@@ -179,6 +188,8 @@ export class TelemetryStore {
         input.type,
         input.operation,
         input.model ?? null,
+        input.provider ?? null,
+        input.callId ?? null,
         input.requestTokens ?? null,
         input.responseTokens ?? null,
         input.latencyMs ?? null,
@@ -366,6 +377,8 @@ function mapEvent(row: Row): TelemetryEvent {
     type: stringValue(row.type) as TelemetryEventType,
     operation: stringValue(row.operation),
     model: nullableString(row.model),
+    provider: nullableString(row.provider),
+    callId: nullableString(row.call_id),
     requestTokens: nullableNumber(row.request_tokens),
     responseTokens: nullableNumber(row.response_tokens),
     latencyMs: nullableNumber(row.latency_ms),

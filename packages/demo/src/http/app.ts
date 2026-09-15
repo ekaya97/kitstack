@@ -2,6 +2,8 @@ import type { DemoApp } from "../app/index.js";
 import { authenticateMcpRequest, McpAuthError } from "../auth/mcp.js";
 import { handleProxyRequest } from "../proxy/index.js";
 import type { DemoHttpRequest, DemoHttpResponse } from "./index.js";
+import { handleLiveVoiceStart, type LiveVoiceHttpOptions } from "./voice.js";
+import type { TwilioOpenAIBridge, VoiceWebSocket } from "../voice/realtime.js";
 
 const JSON_HEADERS = { "content-type": "application/json" };
 const MCP_SERVER_INFO = { name: "kitstack-demo", version: "0.1.0" };
@@ -58,10 +60,19 @@ export interface DemoAppRouteRequest extends DemoHttpRequest {
   body?: Record<string, unknown>;
 }
 
+export interface DemoLiveVoiceRoute {
+  http: LiveVoiceHttpOptions;
+  capability: { enabled: true; provider: string; model: string; startPath: string };
+  /** Real phone calls always require the operator token, even in loopback auth-none mode. */
+  requireAdminToken?: boolean;
+  bridge?: (socket: VoiceWebSocket, request: DemoAppRouteRequest) => TwilioOpenAIBridge;
+}
+
 /** Mounts the real app composition behind framework-neutral demo routes. */
 export async function handleDemoAppRequest(
   app: DemoApp,
   request: DemoAppRouteRequest,
+  liveVoice?: DemoLiveVoiceRoute,
 ): Promise<DemoHttpResponse> {
   const path = request.path.split("?", 1)[0];
   try {
@@ -88,6 +99,13 @@ export async function handleDemoAppRequest(
       return json(200, current.status === "calling"
         ? await app.voice.advance(sessionId)
         : current);
+    }
+    if (request.method === "POST" && path === "/t/voice/live/start") {
+      if (!liveVoice) return json(404, { error: "live_voice_disabled" });
+      if (!adminAuthorized(app, request) || (liveVoice.requireAdminToken && readHeader(request.headers, "x-demo-admin-token") !== app.adminToken)) {
+        return json(403, { error: "admin_token_required" });
+      }
+      return responseFromVoice(await handleLiveVoiceStart(request, liveVoice.http));
     }
     if (request.method === "POST" && path === "/v1/apps/register") {
       if (!adminAuthorized(app, request)) return json(403, { error: "admin_token_required" });
@@ -149,7 +167,12 @@ export async function handleDemoAppRequest(
         app.telemetry.query({ orgId: app.orgId, ...query(request.query) }),
         app.telemetry.aggregate({ orgId: app.orgId, ...query(request.query) }),
       ]);
-      return json(200, { events, aggregate, mcpAuthMode: app.mcpAuthMode });
+      return json(200, {
+        events,
+        aggregate,
+        mcpAuthMode: app.mcpAuthMode,
+        ...(liveVoice ? { liveCall: liveVoice.capability } : {}),
+      });
     }
     const sessionMatch = path.match(/^\/api\/demo\/sessions\/([^/]+)$/);
     if (request.method === "GET" && sessionMatch) {
@@ -261,4 +284,8 @@ async function responseFromWeb(response: Response): Promise<DemoHttpResponse> {
   let body: unknown;
   try { body = await response.clone().json(); } catch { body = null; }
   return { status: response.status, headers: JSON_HEADERS, body };
+}
+
+function responseFromVoice(response: { status: number; headers: Readonly<Record<string, string>>; body: unknown }): DemoHttpResponse {
+  return { status: response.status, headers: response.headers, body: response.body };
 }

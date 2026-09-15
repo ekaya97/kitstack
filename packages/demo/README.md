@@ -4,6 +4,13 @@ This is an unreleased, local-first sales voice agent demo. It is not a
 production deployment. The simulator is the default voice provider, so the
 demo runs without Twilio, OpenAI Realtime, or a public tunnel.
 
+The verified local path is the deterministic German simulator plus the
+KitStack `/demo` control plane. The server also composes the Twilio/OpenAI
+Realtime transport and bounded `defineAgent v1` supervisor when all live-call
+environment variables are present. Composition and fake-provider tests pass;
+no credentialed phone smoke has passed yet. T-0165 remains open for that
+external gate.
+
 ## Run locally
 
 ```sh
@@ -77,6 +84,54 @@ production data/secrets.
 The external smoke helper remains blocked until HTTPS/WSS and Claude MCP URLs
 are provided.
 
+## Real phone path: T-0165 target configuration
+
+This is the operator contract for the composed live path. Do not expose a
+tunnel or place a call without the required provider credentials, an
+allowlisted destination, and the protected dashboard confirmation.
+
+Required external prerequisites:
+
+- a Twilio account with outbound voice enabled and a verified/from phone
+  number;
+- an OpenAI API key with access to the selected Realtime model;
+- a public HTTPS/WSS tunnel that routes `/mcp` and `/t/voice/media` to the
+  same local process; and
+- one operator-owned, allowlisted E.164 destination number.
+
+The planned environment contract is:
+
+```sh
+export KITSTACK_DEMO_MCP_AUTH=app-token
+export KITSTACK_DEMO_ADMIN_TOKEN='use-a-long-random-local-token'
+export TWILIO_ACCOUNT_SID='AC...'
+export TWILIO_AUTH_TOKEN='do-not-commit-this'
+export TWILIO_FROM_NUMBER='+49...'
+export OPENAI_API_KEY='do-not-commit-this'
+export OPENAI_REALTIME_MODEL='gpt-realtime'
+export KITSTACK_DEMO_PUBLIC_HTTPS_URL='https://your-tunnel.example'
+export KITSTACK_DEMO_PUBLIC_WSS_URL='wss://your-tunnel.example/t/voice/media'
+export KITSTACK_DEMO_ALLOWED_DESTINATION='+49...'
+
+npm run demo:server
+```
+
+Run the web control plane separately, set
+`NEXT_PUBLIC_DEMO_API_URL=http://127.0.0.1:3001`, and set
+`NEXT_PUBLIC_DEMO_ADMIN_TOKEN` to the same local admin token. The live-call
+control remains disabled unless all provider settings are present. Prepare the
+session in Claude first, confirm the allowlisted number
+explicitly in `/demo`, then start one short call. Verify the session in
+Overview, Usage, and Session Trace. A provider failure is recorded as an
+unverified smoke failure; it is not hidden behind the simulator result.
+
+The live voice boundary must keep Twilio recording disabled, avoid provider
+retention, redact phone numbers from telemetry, and persist only metadata such
+as session/call identifiers, status, latency, usage, cost, instruction version,
+and memory references. The current `defineAgent v1` boundary supervises the
+bounded lifecycle while OpenAI Realtime owns audio/model turn generation; it
+is not a stream-native audio/tool orchestration contract.
+
 ## Dogfood sequence
 
 For the shortest presenter path:
@@ -87,19 +142,16 @@ For the shortest presenter path:
 3. Switch to `Overview`, keep it visible, and run the MCP sequence in Claude.
    The dashboard updates every five seconds; use `Refresh` immediately after
    a tool call if needed.
-4. Return to `Usage` and `Session Trace` to show the cost, app identity,
-   memory/instruction references, and parent/trace IDs.
-
-1. In Claude chat, call `prepare_debrief` with a concrete sales goal.
-2. Call `/t/voice/start`, then `/t/voice/status`; the deterministic German
+4. In Claude chat, call `prepare_debrief` with a concrete sales goal.
+5. Call `/t/voice/start`, then `/t/voice/status`; the deterministic German
    interview reaches confirmation.
-3. Mark the result partial, call `teach_from_correction`, then call
+6. Mark the result partial, call `teach_from_correction`, then call
    `approve_memory` and `publish_memory` for the returned memory ID.
-4. Prepare a second debrief. Its memory IDs show the approved correction from
+7. Prepare a second debrief. Its memory IDs show the approved correction from
    run 1; complete and confirm the second call.
-5. Use `/demo` Usage and Session Trace to inspect app identity, token events,
+8. Use `/demo` Usage and Session Trace to inspect app identity, token events,
    cost, latency, instruction version, memory IDs, and parent/trace IDs.
-6. Reset with the demo control or `POST /api/demo/reset` using the demo reset
+9. Reset with the demo control or `POST /api/demo/reset` using the demo reset
    token. Sessions, memory, and telemetry clear; app registrations and tokens
    remain.
 
