@@ -8,10 +8,12 @@
   },
   "dependencies": {
     "@kitstackco/sdk": "0.1.5",
-    "@libsql/client": "^0.14"
+    "@libsql/client": "^0.14",
+    "ws": "^8.18.0"
   },
   "devDependencies": {
     "@types/node": "^22.0.0",
+    "@types/ws": "^8.18.1",
     "typescript": "^5.0.0",
     "vitest": "^2"
   },

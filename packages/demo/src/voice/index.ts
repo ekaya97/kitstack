@@ -31,3 +31,5 @@ export class VoiceSimulator {
 
 function turns(sessionId: string): readonly GermanTurnMetadata[] { return [["agent", "greeting", "outbound", 900], ["prospect", "needs", "inbound", 1100], ["agent", "value_proposition", "outbound", 1200], ["prospect", "objection", "inbound", 1000], ["agent", "next_step", "outbound", 900]].map(([speaker, promptKey, direction, durationMs], index) => ({ turnId: `${sessionId}-turn-${index + 1}`, sequence: index + 1, speaker: speaker as GermanTurnMetadata["speaker"], locale: "de-DE", promptKey: promptKey as string, direction: direction as GermanTurnMetadata["direction"], durationMs: durationMs as number })); }
 function mapState(state: DebriefSession["state"]): VoiceStatus { if (state === "prepared") return "calling"; return state === "calling" || state === "awaiting_confirmation" || state === "partial" || state === "confirmed" || state === "failed" ? state : "failed"; }
+
+export * from "./realtime.js";
