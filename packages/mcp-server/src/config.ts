@@ -28,6 +28,20 @@ export const mcpAllowedOrigins = (): string[] =>
 export const mcpInternalApiKey = () => Resource.McpInternalApiKey.value;
 export const betterAuthUrl = () => Resource.BetterAuthUrl.value || "http://localhost:3000";
 
+// --- Demo voice bridge ---
+
+/** Base URL for the private router → demo voice-service bridge. */
+export const demoVoiceServiceUrl = (): string =>
+  (process.env.KITSTACK_DEMO_VOICE_URL || (Resource as any).DemoVoice?.url || "").replace(/\/$/, "");
+
+/** Secret shared only by the MCP router and the demo voice service. */
+export const demoInternalSecret = (): Uint8Array => new TextEncoder().encode(
+  (Resource as any).DemoInternalSecret?.value || process.env.KITSTACK_DEMO_INTERNAL_SECRET || "",
+);
+
+/** The unreleased demo has one synthetic organization. */
+export const demoOrgId = (): string => process.env.KITSTACK_DEMO_ORG_ID?.trim() || "org-demo";
+
 // --- Relay ---
 
 export const devRelayUrl = (): string => (Resource as any).DevRelay?.url?.replace(/\/$/, "") || "";

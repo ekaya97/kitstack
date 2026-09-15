@@ -16,6 +16,7 @@ export const githubClientSecret = new sst.Secret("GithubClientSecret", "");
 export const mcpJwtSecret = new sst.Secret("McpJwtSecret", "");
 export const mcpAllowedOrigins = new sst.Secret("McpAllowedOrigins", "http://localhost:3000");
 export const mcpInternalApiKey = new sst.Secret("McpInternalApiKey", "");
+export const demoInternalSecret = new sst.Secret("DemoInternalSecret", "");
 
 // ── Billing ─────────────────────────────────────────────────────
 export const lemonsqueezyApiKey = new sst.Secret("LemonsqueezyApiKey", "");

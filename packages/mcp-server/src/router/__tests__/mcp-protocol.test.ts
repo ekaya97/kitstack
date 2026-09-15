@@ -3,6 +3,15 @@ import { handleMcpRequest } from "../mcp-protocol";
 import type { KitRegistryItem, UserKitDbItem, JsonRpcRequest } from "../types";
 import { textOf } from "../../test/helpers";
 
+vi.mock("../tool-dispatcher", () => ({
+  dispatchToolCall: vi.fn(async () => ({ content: [{ type: "text", text: "Meeting processed" }] })),
+}));
+vi.mock("../app-resources", () => ({
+  getKitApps: vi.fn(async () => [{ slug: "meeting", name: "Meeting", description: "Meeting view" }]),
+  getKitShellS3Key: vi.fn(async () => null),
+  readAppResource: vi.fn(async () => null),
+}));
+
 const mockTools: KitRegistryItem[] = [
   {
     kitId: "kit-meeting",
@@ -110,9 +119,8 @@ describe("handleMcpRequest", () => {
         invokeKitLambda
       );
       const result = res.response.result as any;
-      expect(result.tools).toHaveLength(2);
+      expect(result.tools).toHaveLength(1);
       expect(result.tools[0].name).toBe("kit");
-      expect(result.tools[1].name).toBe("kit_view");
     });
   });
 

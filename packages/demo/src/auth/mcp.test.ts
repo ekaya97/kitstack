@@ -6,6 +6,7 @@ import {
 } from "./index.js";
 import {
   authenticateMcpRequest,
+  signInternalSignedMcpToken,
 } from "./mcp.js";
 
 const SECRET = "demo-secret-that-is-at-least-32-bytes-long";
@@ -86,5 +87,64 @@ describe("demo MCP authentication boundary", () => {
   it("fails closed when app-token mode has no registry", async () => {
     await expect(authenticateMcpRequest(request(), { mode: "app-token" }))
       .rejects.toMatchObject({ code: "misconfigured" });
+  });
+
+  it("verifies an internal router identity and enforces the user/org allowlist", async () => {
+    const now = 1_700_000_000_000;
+    const token = await signInternalSignedMcpToken({
+      userId: "user-1",
+      org: "org-demo",
+      req: "request-1",
+      trace: "trace-1",
+    }, { secret: SECRET, now: () => now });
+
+    await expect(authenticateMcpRequest(request(`Bearer ${token}`), {
+      mode: "internal-signed",
+      internalSecret: SECRET,
+      internalUserOrgAllowlist: { "user-1": "org-demo" },
+      now: () => now,
+    })).resolves.toMatchObject({
+      mode: "internal-signed",
+      authenticated: true,
+      appId: null,
+      org: "org-demo",
+      claims: {
+        sub: "user-1",
+        org: "org-demo",
+        kit: "debrief",
+        req: "request-1",
+        trace: "trace-1",
+      },
+    });
+  });
+
+  it("rejects a signed identity for an unknown user", async () => {
+    const token = await signInternalSignedMcpToken({
+      userId: "unknown-user",
+      org: "org-demo",
+      req: "request-1",
+      trace: "trace-1",
+    }, { secret: SECRET });
+
+    await expect(authenticateMcpRequest(request(`Bearer ${token}`), {
+      mode: "internal-signed",
+      internalSecret: SECRET,
+      internalUserOrgAllowlist: { "user-1": "org-demo" },
+    })).rejects.toMatchObject({ code: "forbidden_identity" });
+  });
+
+  it("rejects a tampered internal identity", async () => {
+    const token = await signInternalSignedMcpToken({
+      userId: "user-1",
+      org: "org-demo",
+      req: "request-1",
+      trace: "trace-1",
+    }, { secret: SECRET });
+
+    await expect(authenticateMcpRequest(request(`Bearer ${token}x`), {
+      mode: "internal-signed",
+      internalSecret: SECRET,
+      internalUserOrgAllowlist: { "user-1": "org-demo" },
+    })).rejects.toMatchObject({ code: "invalid_token" });
   });
 });

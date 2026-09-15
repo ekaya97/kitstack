@@ -8,10 +8,12 @@ import {
   mcpJwtSecret,
   mcpAllowedOrigins,
   mcpInternalApiKey,
+  demoInternalSecret,
   posthogKey,
   posthogHost,
 } from "./secrets";
 import { kitBucket, kitCdn } from "./storage";
+import { demoVoiceUrl } from "./demo";
 
 // --- DynamoDB Tables ---
 // Kit Registry moved to main Turso DB (kit_registry table)
@@ -231,10 +233,14 @@ export const mcpRouter = new sst.aws.Function("McpRouter", {
     mcpJwtSecret,
     mcpAllowedOrigins,
     mcpInternalApiKey,
+    demoInternalSecret,
     posthogKey,
     posthogHost,
-    mcpDomain
+    mcpDomain,
   ],
+  environment: {
+    KITSTACK_DEMO_VOICE_URL: demoVoiceUrl,
+  },
   permissions: [
     {
       actions: ["lambda:InvokeFunction"],

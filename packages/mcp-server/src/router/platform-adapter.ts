@@ -11,25 +11,74 @@
 import type {
   KitServerAdapter,
   ResolvedKit,
+  ResolvedView,
 } from "../../../sdk/src/server/types";
 import type { KitRegistryItem, UserKitDbItem, KitToolResult } from "./types";
 import { dispatchToolCall } from "./tool-dispatcher";
 import { getKitApps, getKitShellS3Key, readAppResource } from "./app-resources";
-import { kitCdnUrl } from "../config";
+import { kitCdnUrl, demoInternalSecret, demoOrgId, demoVoiceServiceUrl } from "../config";
+import { SignJWT } from "jose";
+import { createDebriefTools } from "../../../../kits/debrief/src/tools";
+import { zodToJsonSchema } from "../../../sdk/src/runtime/zod-to-json-schema";
 
 const APP_SHELL_URI = "ui://kitstack/app";
+const DEBRIEF_KIT_ID = "debrief";
+const INTERNAL_TOKEN_TTL_SECONDS = 60;
+const VOICE_REQUEST_TIMEOUT_MS = 8_000;
+
+const DEBRIEF_TOOLS = createDebriefTools().map((tool) => ({
+  name: tool.name,
+  description: tool.description,
+  inputSchema: schemaForMcp(tool.args),
+}));
+
+const DEBRIEF_KIT: ResolvedKit = {
+  id: DEBRIEF_KIT_ID,
+  name: "Sales Debrief",
+  description: "Prepare, conduct, confirm, and teach a short sales voice debrief.",
+  triggers: ["sales", "debrief", "voice", "customer", "follow-up"],
+  instructions: "Use the injected demo debrief service; never retain call transcripts or audio.",
+  tools: DEBRIEF_TOOLS,
+  // T-0195 supplies these from the published View bundle. Keeping the source
+  // injectable lets the router bridge land before the bundle is built.
+  views: [],
+};
+
+export interface PlatformAdapterRequestContext {
+  requestId?: string;
+  traceId?: string;
+}
 
 export interface PlatformAdapterDeps {
   getAllTools: () => Promise<KitRegistryItem[]>;
   getUserKitDbs: (userId: string) => Promise<UserKitDbItem[]>;
   invokeKitLambda: (arn: string, payload: unknown) => Promise<unknown>;
+  /** Voice service base URL. Omit to use the linked SST environment value. */
+  voiceServiceUrl?: string | (() => string);
+  /** Internal signing secret. Omit to use the linked SST secret. */
+  voiceInternalSecret?: Uint8Array | (() => Uint8Array);
+  /** View metadata and shell source are supplied by T-0195. */
+  debriefViews?: ResolvedView[];
+  getDebriefShellHtml?: () => Promise<string>;
+  fetch?: typeof globalThis.fetch;
+  requestContext?: PlatformAdapterRequestContext;
 }
 
 /**
  * Create a platform adapter for the KitStack cloud.
  */
 export function platformAdapter(deps: PlatformAdapterDeps): KitServerAdapter {
-  const { getAllTools, getUserKitDbs, invokeKitLambda } = deps;
+  const {
+    getAllTools,
+    getUserKitDbs,
+    invokeKitLambda,
+    debriefViews = [],
+    getDebriefShellHtml,
+    fetch: fetcher = globalThis.fetch,
+    requestContext,
+  } = deps;
+
+  const debriefKit: ResolvedKit = { ...DEBRIEF_KIT, views: [...debriefViews] };
 
   return {
     async resolveUserKits(userId: string): Promise<ResolvedKit[]> {
@@ -39,9 +88,10 @@ export function platformAdapter(deps: PlatformAdapterDeps): KitServerAdapter {
       ]);
 
       const activatedKitIds = new Set(userDbs.map((db) => db.kitId));
-      const kits = new Map<string, ResolvedKit>();
+      const kits = new Map<string, ResolvedKit>([[DEBRIEF_KIT_ID, debriefKit]]);
 
       for (const tool of allTools) {
+        if (tool.kitId === DEBRIEF_KIT_ID) continue;
         if (!activatedKitIds.has(tool.kitId)) continue;
         if (tool.toolName.startsWith("kitstack_")) continue;
 
@@ -76,6 +126,7 @@ export function platformAdapter(deps: PlatformAdapterDeps): KitServerAdapter {
 
       // Populate views for each kit
       for (const [kitId, kit] of kits) {
+        if (kitId === DEBRIEF_KIT_ID) continue;
         const apps = await getKitApps(kitId);
         kit.views = apps.map((a) => ({
           slug: a.slug,
@@ -93,6 +144,20 @@ export function platformAdapter(deps: PlatformAdapterDeps): KitServerAdapter {
       args: Record<string, unknown>,
       userId: string
     ): Promise<KitToolResult> {
+      if (kitId === DEBRIEF_KIT_ID) {
+        return callDebriefVoiceService({
+          operation: "tool",
+          name: toolName,
+          args,
+          userId,
+          voiceServiceUrl: resolveString(deps.voiceServiceUrl, demoVoiceServiceUrl),
+          voiceInternalSecret: resolveSecret(deps.voiceInternalSecret, demoInternalSecret),
+          orgId: demoOrgId(),
+          fetcher,
+          requestContext,
+        });
+      }
+
       return dispatchToolCall(
         toolName,
         args,
@@ -107,6 +172,21 @@ export function platformAdapter(deps: PlatformAdapterDeps): KitServerAdapter {
       viewSlug: string,
       userId: string
     ): Promise<unknown> {
+      if (kitId === DEBRIEF_KIT_ID) {
+        const result = await callDebriefVoiceService({
+          operation: "view",
+          name: "kit_view",
+          args: { id: DEBRIEF_KIT_ID, view: viewSlug },
+          userId,
+          voiceServiceUrl: resolveString(deps.voiceServiceUrl, demoVoiceServiceUrl),
+          voiceInternalSecret: resolveSecret(deps.voiceInternalSecret, demoInternalSecret),
+          orgId: demoOrgId(),
+          fetcher,
+          requestContext,
+        });
+        return unwrapToolData(result);
+      }
+
       const allTools = await getAllTools();
       const { getKitFunctionId } = await import("./kit-resources");
       const { getUserKitDb } = await import("../db/dynamo");
@@ -129,6 +209,13 @@ export function platformAdapter(deps: PlatformAdapterDeps): KitServerAdapter {
     },
 
     async getShellHtml(kitId: string): Promise<string> {
+      if (kitId === DEBRIEF_KIT_ID) {
+        if (!getDebriefShellHtml) {
+          throw new Error("Sales debrief View shell is not published yet (T-0195)");
+        }
+        return getDebriefShellHtml();
+      }
+
       const shellS3Key = await getKitShellS3Key(kitId);
       const resource = await readAppResource(APP_SHELL_URI, "system", new Set([kitId]), shellS3Key);
       return resource?.text || "";
@@ -138,4 +225,147 @@ export function platformAdapter(deps: PlatformAdapterDeps): KitServerAdapter {
       return kitCdnUrl();
     },
   };
+}
+
+interface DebriefVoiceCallInput {
+  operation: "tool" | "view";
+  name: string;
+  args: Record<string, unknown>;
+  userId: string;
+  voiceServiceUrl: string;
+  voiceInternalSecret: Uint8Array;
+  orgId: string;
+  fetcher: typeof globalThis.fetch;
+  requestContext?: PlatformAdapterRequestContext;
+}
+
+async function callDebriefVoiceService(input: DebriefVoiceCallInput): Promise<KitToolResult> {
+  if (!input.voiceServiceUrl) return voiceError("Sales debrief voice service is not configured");
+  if (input.voiceInternalSecret.byteLength < 32) {
+    return voiceError("Sales debrief voice service signing is not configured");
+  }
+  if (!input.fetcher) return voiceError("Sales debrief voice service cannot be reached from this runtime");
+
+  const requestId = input.requestContext?.requestId?.trim() || `mcp-${crypto.randomUUID()}`;
+  const traceId = input.requestContext?.traceId?.trim() || requestId;
+  const token = await new SignJWT({
+    org: input.orgId,
+    kit: DEBRIEF_KIT_ID,
+    req: requestId,
+    trace: traceId,
+  })
+    .setProtectedHeader({ alg: "HS256" })
+    .setSubject(input.userId)
+    .setExpirationTime(Math.floor(Date.now() / 1000) + INTERNAL_TOKEN_TTL_SECONDS)
+    .sign(input.voiceInternalSecret);
+
+  const controller = new AbortController();
+  const timeout = setTimeout(() => controller.abort(), VOICE_REQUEST_TIMEOUT_MS);
+  try {
+    const response = await input.fetcher(`${input.voiceServiceUrl.replace(/\/$/, "")}/mcp`, {
+      method: "POST",
+      headers: {
+        authorization: `Bearer ${token}`,
+        "content-type": "application/json",
+        "x-request-id": requestId,
+        "x-trace-id": traceId,
+      },
+      body: JSON.stringify({
+        jsonrpc: "2.0",
+        id: requestId,
+        method: "tools/call",
+        params: {
+          name: input.name,
+          arguments: input.args,
+        },
+      }),
+      signal: controller.signal,
+    });
+
+    const body = await readJson(response);
+    if (!response.ok) {
+      const message = errorMessage(body) || `voice service returned HTTP ${response.status}`;
+      return voiceError(`Sales debrief voice service unavailable: ${message}`);
+    }
+    if (body?.error) return voiceError(`Sales debrief request failed: ${body.error.message || "unknown error"}`);
+
+    const result = body?.result ?? body;
+    if (!result || !Array.isArray(result.content)) {
+      return voiceError("Sales debrief voice service returned an invalid MCP result");
+    }
+    return result as KitToolResult;
+  } catch (error) {
+    const reason = error instanceof Error && error.name === "AbortError"
+      ? "request timed out"
+      : error instanceof Error ? error.message : String(error);
+    return voiceError(`Sales debrief voice service unavailable: ${reason}`);
+  } finally {
+    clearTimeout(timeout);
+  }
+}
+
+async function readJson(response: Response): Promise<any> {
+  try { return await response.json(); } catch { return null; }
+}
+
+function errorMessage(body: any): string | null {
+  if (!body || typeof body !== "object") return null;
+  if (typeof body.message === "string") return body.message;
+  if (typeof body.error === "string") return body.error;
+  if (body.error && typeof body.error.message === "string") return body.error.message;
+  return null;
+}
+
+function unwrapToolData(result: KitToolResult): unknown {
+  const text = result.content.find((block) => block.type === "text");
+  if (!text || text.type !== "text") return result;
+  try {
+    const parsed = JSON.parse(text.text);
+    return parsed?.data ?? parsed;
+  } catch {
+    return text.text;
+  }
+}
+
+function voiceError(message: string): KitToolResult {
+  return { content: [{ type: "text", text: message }], isError: true };
+}
+
+function resolveString(value: string | (() => string) | undefined, fallback: () => string): string {
+  return typeof value === "function" ? value() : value ?? fallback();
+}
+
+function resolveSecret(value: Uint8Array | (() => Uint8Array) | undefined, fallback: () => Uint8Array): Uint8Array {
+  return typeof value === "function" ? value() : value ?? fallback();
+}
+
+function schemaForMcp(schema: any): Record<string, unknown> {
+  // Zod 4 exposes the standard JSON Schema conversion directly. The SDK
+  // fallback remains for the Zod 3 schemas used by existing registry kits.
+  const converted = typeof schema?.toJSONSchema === "function"
+    ? schema.toJSONSchema()
+    : zodToJsonSchema(schema);
+  return removeDefaultedRequired(converted);
+}
+
+function removeDefaultedRequired(schema: Record<string, any>): Record<string, any> {
+  const result = { ...schema };
+  if (result.properties && result.required) {
+    result.required = result.required.filter(
+      (name: string) => result.properties[name]?.default === undefined,
+    );
+    if (result.required.length === 0) delete result.required;
+  }
+  if (result.properties) {
+    result.properties = Object.fromEntries(
+      Object.entries(result.properties).map(([name, value]) => [
+        name,
+        value && typeof value === "object" ? removeDefaultedRequired(value as Record<string, any>) : value,
+      ]),
+    );
+  }
+  if (result.items && typeof result.items === "object") {
+    result.items = removeDefaultedRequired(result.items);
+  }
+  return result;
 }

@@ -7,6 +7,7 @@ import {
   twilioFromNumber,
   tursoAuthToken,
   tursoDbUrl,
+  demoInternalSecret,
 } from "./secrets";
 
 /**
@@ -35,6 +36,8 @@ export const demoVoice = new sst.aws.Service("DemoVoice", {
     HOST: "0.0.0.0",
     PORT: "3001",
     KITSTACK_DEMO_MCP_AUTH: "app-token",
+    KITSTACK_DEMO_INTERNAL_SECRET: demoInternalSecret.value,
+    KITSTACK_DEMO_INTERNAL_USER_ORG_ALLOWLIST: process.env.KITSTACK_DEMO_INTERNAL_USER_ORG_ALLOWLIST || "*=" + (process.env.KITSTACK_DEMO_ORG_ID || "org-demo"),
     KITSTACK_DEMO_DB_URL: tursoDbUrl.value,
     KITSTACK_DEMO_DB_AUTH_TOKEN: tursoAuthToken.value,
     KITSTACK_DEMO_PUBLIC_HTTPS_URL: voicePublicHttpsUrl,

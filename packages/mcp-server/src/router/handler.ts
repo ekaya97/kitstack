@@ -714,7 +714,11 @@ export async function handler(
         userId,
         getAllRegistryItems,
         getUserKitDbs,
-        invokeKitLambda
+        invokeKitLambda,
+        {
+          requestId: httpEvent.headers["x-request-id"] || httpEvent.headers["X-Request-Id"] || `${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
+          traceId: httpEvent.headers["x-trace-id"] || httpEvent.headers["X-Trace-Id"],
+        },
       );
 
       log.info("MCP request", { userId, method: request.method, durationMs: Date.now() - mcpStart });
