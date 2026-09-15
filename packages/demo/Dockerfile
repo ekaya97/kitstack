@@ -17,6 +17,9 @@ RUN npm ci --omit=dev --ignore-scripts
 # imports the published SDK dist files from the workspace package.
 COPY packages/sdk packages/sdk
 COPY packages/demo packages/demo
+# The production voice service imports the debrief kit's loaders and contracts
+# directly for its MCP/View bridge; keep that kit in the runtime image.
+COPY kits/debrief kits/debrief
 
 EXPOSE 3001
 CMD ["npm", "run", "demo:server"]

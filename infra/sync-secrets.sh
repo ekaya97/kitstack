@@ -48,6 +48,7 @@ SST_SECRETS=(
   McpJwtSecret
   McpAllowedOrigins
   McpInternalApiKey
+  DemoInternalSecret
   LemonsqueezyApiKey
   LemonsqueezyStoreId
   LemonsqueezyWebhookSecret
