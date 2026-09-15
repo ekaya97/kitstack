@@ -67,6 +67,8 @@ export interface TelemetryQuery {
   sessionId?: string;
   traceId?: string;
   parentId?: string | null;
+  pluginId?: string;
+  kitId?: string;
   type?: TelemetryEventType;
   channel?: TelemetryChannel;
   from?: string;
@@ -354,6 +356,14 @@ function buildWhere(query: TelemetryQuery): { where: string; args: InValue[] } {
   if (query.parentId !== undefined) {
     clauses.push(query.parentId === null ? "parent_id IS NULL" : "parent_id = ?");
     if (query.parentId !== null) args.push(query.parentId);
+  }
+  if (query.pluginId !== undefined) {
+    clauses.push("plugin_id = ?");
+    args.push(query.pluginId);
+  }
+  if (query.kitId !== undefined) {
+    clauses.push("kit_id = ?");
+    args.push(query.kitId);
   }
   if (query.type !== undefined) {
     clauses.push("type = ?");

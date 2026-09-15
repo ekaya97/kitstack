@@ -66,6 +66,31 @@ describe("demo observability page", () => {
     expect(screen.getAllByText("MCP auth-none (loopback)").length).toBeGreaterThan(0);
   });
 
+  it("shows the presenter Runtime/Registry and Usage/FinOps screens from one snapshot", async () => {
+    fetchMock.mockResolvedValueOnce({ ok: true, json: async () => ({
+      events: [{ id: "prebrief", timestamp: "2026-09-15T20:00:00.000Z", appId: "app_demo", sessionId: "session-1", customerId: "customer-1", kitId: "kit:debrief", pluginId: "ai:demo-compatible", channel: "proxy", type: "inference", operation: "prebrief", outcome: "success", requestTokens: 10, responseTokens: 20, estimatedCostUsd: 0.0123, latencyMs: 120, traceId: "session-1" }],
+      aggregate: { totalEvents: 1, totalRequestTokens: 10, totalResponseTokens: 20, totalEstimatedCostUsd: 0.0123, totalLatencyMs: 120, successCount: 1, errorCount: 0 },
+      mcpAuthMode: "internal-signed",
+      apps: [{ id: "app_demo", name: "Claude", org: "org-demo", scopes: ["mcp"], createdAt: "2026-09-15T20:00:00.000Z" }],
+      kits: [{ id: "debrief", version: "0.1.0", status: "ready" }],
+      schedulerJobs: [{ scheduledCallId: "job-1", sessionId: "session-1", scheduledAt: "2026-09-15T20:05:00.000Z", status: "scheduled", attemptCount: 0, providerCallId: null, error: null }],
+      sessions: [{ sessionId: "session-1", customerId: "customer-1", customerName: "Acme Corp", appId: "app_demo", kitId: "kit:debrief", state: "scheduled", scheduledCallAt: "2026-09-15T20:05:00.000Z", callId: null, lastEventAt: "2026-09-15T20:00:00.000Z", error: null }],
+      customers: [{ id: "customer-1", company: "Acme Corp", contactName: "Mr John Doe" }],
+      providerHealth: [{ provider: "demo", status: "healthy", eventCount: 1, errorCount: 0, lastEventAt: "2026-09-15T20:00:00.000Z", recentFailures: [] }],
+    }) });
+    render(<DemoPage />);
+    await waitFor(() => expect(screen.getByText("No apps in this browser session")).toBeTruthy());
+    fireEvent.click(screen.getByRole("button", { name: "Runtime / Registry" }));
+    expect(screen.getByRole("heading", { name: "Runtime / Registry", level: 2 })).toBeTruthy();
+    expect(screen.getByText("Acme Corp")).toBeTruthy();
+    expect(screen.getByText("scheduled")).toBeTruthy();
+    fireEvent.click(screen.getByRole("button", { name: "Usage / Observability / FinOps" }));
+    expect(screen.getByRole("heading", { name: "Usage / Observability / FinOps", level: 2 })).toBeTruthy();
+    expect(screen.getByLabelText("Filter by Customer")).toBeTruthy();
+    expect(screen.getByText("Cost by app")).toBeTruthy();
+    expect(screen.getByText("prebrief")).toBeTruthy();
+  });
+
   it("labels simulator and live providers without fabricating missing evidence", async () => {
     fetchMock.mockResolvedValueOnce({ ok: true, json: async () => ({
       events: [{ id: "sim-event", timestamp: "2026-01-01T00:00:00.000Z", orgId: "org-demo", appId: "app_demo", sessionId: "sim-session", channel: "voice", type: "voice.call", operation: "start", outcome: "started", model: "simulator-german-sales-v1" }],

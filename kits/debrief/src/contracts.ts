@@ -7,6 +7,9 @@ import type {
   KitToolResult,
 } from "@kitstackco/sdk";
 import type { DebriefConfirmationResult, DebriefDraftUpdate } from "./confirmation-contracts.js";
+import type { CustomerEventType } from "./event-contracts.js";
+
+export type { CustomerEventType } from "./event-contracts.js";
 
 /** Stable identity used by the kit and its host-provided plugins. */
 export const DEBRIEF_KIT_ID = "kit:debrief" as const;
@@ -112,13 +115,6 @@ export interface DebriefTelemetryEvent {
   readonly outcome?: "success" | "partial" | "error";
   readonly scope: DebriefScope;
 }
-
-export type CustomerEventType =
-  | "prebrief"
-  | "call_completed"
-  | "note"
-  | "address_discovered"
-  | "debrief_confirmed";
 
 export interface PrepareDebriefInput {
   readonly goal: string;

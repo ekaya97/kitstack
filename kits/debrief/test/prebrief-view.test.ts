@@ -22,7 +22,7 @@ const snapshot: PrebriefLoaderSnapshot = {
 
 describe("debrief prebrief View", () => {
   it("is registered with the kit and exposes the virtual-router metadata contract", () => {
-    expect(kit.views?.map((view) => view.slug)).toEqual(["prebrief", "confirmation"]);
+    expect(kit.views?.map((view) => view.slug)).toEqual(["prebrief", "confirmation", "customer-timeline"]);
     expect(kit.views?.[0]).toMatchObject({
       name: "Sales Prebrief",
       description: expect.stringContaining("customer context"),

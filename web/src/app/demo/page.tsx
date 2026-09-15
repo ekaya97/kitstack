@@ -2,8 +2,10 @@
 
 import { FormEvent, useCallback, useEffect, useMemo, useState } from "react";
 import { PluginObservabilityView, type PluginDescriptor } from "./plugin-observability";
+import { RuntimeRegistryView, type ProviderHealth, type RuntimeApp, type RuntimeCustomer, type RuntimeEvent, type RuntimeJob, type RuntimeKit, type RuntimeSession } from "./runtime-registry";
+import { UsageObservabilityView } from "./usage-observability";
 
-type Tab = "overview" | "apps" | "plugins" | "usage" | "trace";
+type Tab = "runtime" | "usage-finops" | "overview" | "apps" | "plugins" | "usage" | "trace";
 type Event = {
   id: string;
   timestamp: string;
@@ -28,6 +30,7 @@ type Event = {
   error?: string | null;
   instructionVersions?: string[];
   memoryIds?: string[];
+  customerId?: string | null;
 };
 type Aggregate = {
   totalEvents: number;
@@ -65,6 +68,12 @@ type ObservabilityResponse = {
   authMode?: string;
   voiceSessions?: VoiceSession[];
   liveCall?: LiveCallCapability;
+  apps?: RuntimeApp[];
+  kits?: RuntimeKit[];
+  schedulerJobs?: RuntimeJob[];
+  sessions?: RuntimeSession[];
+  customers?: RuntimeCustomer[];
+  providerHealth?: ProviderHealth[];
 };
 
 /**
@@ -79,6 +88,8 @@ type ObservabilityResponse = {
 const API = process.env.NEXT_PUBLIC_DEMO_API_URL || "http://localhost:3001";
 const ADMIN_TOKEN = process.env.NEXT_PUBLIC_DEMO_ADMIN_TOKEN || "demo-admin-token";
 const tabs: { id: Tab; label: string }[] = [
+  { id: "runtime", label: "Runtime / Registry" },
+  { id: "usage-finops", label: "Usage / Observability / FinOps" },
   { id: "overview", label: "Overview" },
   { id: "apps", label: "Apps" },
   { id: "plugins", label: "Plugins" },
@@ -100,6 +111,12 @@ export default function DemoPage() {
   const [authLabel, setAuthLabel] = useState("MCP auth mode not reported");
   const [voiceSessions, setVoiceSessions] = useState<VoiceSession[]>([]);
   const [liveCall, setLiveCall] = useState<LiveCallCapability | null>(null);
+  const [registryApps, setRegistryApps] = useState<RuntimeApp[]>([]);
+  const [kits, setKits] = useState<RuntimeKit[]>([]);
+  const [schedulerJobs, setSchedulerJobs] = useState<RuntimeJob[]>([]);
+  const [runtimeSessions, setRuntimeSessions] = useState<RuntimeSession[]>([]);
+  const [customers, setCustomers] = useState<RuntimeCustomer[]>([]);
+  const [providerHealth, setProviderHealth] = useState<ProviderHealth[]>([]);
 
   const load = useCallback(async (initial = false) => {
     if (initial) setLoading(true);
@@ -114,6 +131,12 @@ export default function DemoPage() {
       setPlugins(data.plugins ?? []);
       setVoiceSessions(data.voiceSessions ?? []);
       setLiveCall(data.liveCall ?? null);
+      setRegistryApps(data.apps ?? []);
+      setKits(data.kits ?? []);
+      setSchedulerJobs(data.schedulerJobs ?? []);
+      setRuntimeSessions(data.sessions ?? []);
+      setCustomers(data.customers ?? []);
+      setProviderHealth(data.providerHealth ?? []);
       const first = data.voiceSessions?.[0]?.sessionId ?? data.events?.find((event) => event.sessionId)?.sessionId;
       if (first) setSelectedSession((current) => current || first);
       const reportedAuthMode = data.mcpAuthMode ?? data.authMode;
@@ -175,7 +198,7 @@ export default function DemoPage() {
         </div>
         {notice && <div className="mb-4 rounded-lg border border-green-200 bg-green-50 px-4 py-3 text-[12px] text-green-800">{notice}</div>}
         {error && <div role="alert" className="mb-4 rounded-lg border border-red-200 bg-red-50 px-4 py-3 text-[12px] text-red-800">{error} <button className="ml-2 underline" onClick={() => void load()}>Retry</button></div>}
-        {loading ? <Loading /> : tab === "overview" ? <OverviewView events={events} aggregate={aggregate} voiceSessions={voiceSessions} liveCall={liveCall} selectedSession={selectedSession} setSelectedSession={setSelectedSession} /> : tab === "apps" ? <AppsView apps={apps} events={events} setApps={setApps} authLabel={authLabel} /> : tab === "plugins" ? <PluginObservabilityView events={events} plugins={plugins} /> : tab === "usage" ? <UsageView events={events} aggregate={aggregate} /> : <TraceView events={events} sessions={sessions} selectedSession={selectedSession} setSelectedSession={setSelectedSession} />}
+        {loading ? <Loading /> : tab === "runtime" ? <RuntimeRegistryView events={events as RuntimeEvent[]} plugins={plugins} apps={registryApps} kits={kits} schedulerJobs={schedulerJobs} sessions={runtimeSessions} customers={customers} providerHealth={providerHealth} /> : tab === "usage-finops" ? <UsageObservabilityView events={events} customers={customers} /> : tab === "overview" ? <OverviewView events={events} aggregate={aggregate} voiceSessions={voiceSessions} liveCall={liveCall} selectedSession={selectedSession} setSelectedSession={setSelectedSession} /> : tab === "apps" ? <AppsView apps={apps} events={events} setApps={setApps} authLabel={authLabel} /> : tab === "plugins" ? <PluginObservabilityView events={events} plugins={plugins} /> : tab === "usage" ? <UsageView events={events} aggregate={aggregate} /> : <TraceView events={events} sessions={sessions} selectedSession={selectedSession} setSelectedSession={setSelectedSession} />}
       </div>
     </main>
   );

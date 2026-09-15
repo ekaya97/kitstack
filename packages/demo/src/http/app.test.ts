@@ -183,6 +183,39 @@ describe("composed demo HTTP surface", () => {
       method: "POST", path: "/mcp", body: { id: 25, method: "tools/call", params: { name: "kit_view", arguments: { id: "debrief", view: "confirmation" } } },
     });
     expect(JSON.parse(((view.body as any).result.content[0].text))).toMatchObject({ data: { state: "confirmed", confirmed_event_id: result.confirmed_event_id } });
+
+    const timeline = await handleDemoAppRequest(app, {
+      method: "POST", path: "/mcp", body: {
+        id: 26, method: "tools/call", params: {
+          name: "kit_view",
+          arguments: { id: "debrief", view: "customer-timeline", session_id: prepared.session_id, customer_id: prepared.customer_id },
+        },
+      },
+    });
+    const timelineData = JSON.parse(((timeline.body as any).result.content[0].text)).data;
+    expect(timelineData).toMatchObject({ sessionId: prepared.session_id, customerId: prepared.customer_id });
+    expect(timelineData.events).toEqual(expect.arrayContaining([
+      expect.objectContaining({ type: "debrief_confirmed", details: expect.objectContaining({ outcome: "confirmed" }) }),
+      expect.objectContaining({ type: "address_discovered", details: expect.objectContaining({ address: "Neue Straße 1" }) }),
+    ]));
+    expect(JSON.stringify(timelineData)).not.toContain("+491234567890");
+
+    const other = await app.debrief.prepareDebrief({
+      goal: "Other customer", company: "Globex", contactName: "Jane Doe", location: "Berlin Office",
+    });
+    const isolated = await handleDemoAppRequest(app, {
+      method: "POST", path: "/mcp", body: {
+        id: 27, method: "tools/call", params: {
+          name: "kit_view", arguments: { id: "debrief", view: "customer-timeline", session_id: other.sessionId, customer_id: other.customerId },
+        },
+      },
+    });
+    const isolatedData = JSON.parse(((isolated.body as any).result.content[0].text)).data;
+    expect(isolatedData.customerId).toBe(other.customerId);
+    expect(isolatedData.events.every((event: { customerId: string }) => event.customerId === other.customerId)).toBe(true);
+    expect(isolatedData.events).not.toEqual(expect.arrayContaining([
+      expect.objectContaining({ eventId: result.confirmed_event_id }),
+    ]));
   });
 
   it("supports Claude tool discovery and a two-run route dogfood flow", async () => {
@@ -301,6 +334,10 @@ describe("composed demo HTTP surface", () => {
       method: "GET", path: "/api/demo/observability",
     });
     expect((observability.body as any).mcpAuthMode).toBe("app-token");
+    expect((observability.body as any).apps).toEqual([expect.objectContaining({ name: "Claude" })]);
+    expect((observability.body as any).kits).toEqual(expect.arrayContaining([expect.objectContaining({ id: "debrief", status: "ready" })]));
+    expect((observability.body as any).schedulerJobs).toEqual([]);
+    expect((observability.body as any).providerHealth).toEqual(expect.any(Array));
   });
 
   it("starts the protected live dashboard call through injected Twilio", async () => {

@@ -1,10 +1,16 @@
 import type { DemoApp } from "../app/index.js";
-import { authenticateMcpRequest, McpAuthError } from "../auth/mcp.js";
+import { authenticateMcpRequest, McpAuthError, type McpAuthMode } from "../auth/mcp.js";
 import type { DemoHttpRequest, DemoHttpResponse } from "./index.js";
 import { handleLiveVoiceStart, type LiveVoiceHttpOptions } from "./voice.js";
 import type { TwilioOpenAIBridge, VoiceWebSocket } from "../voice/realtime.js";
 import type { ProxyResult } from "../proxy/index.js";
+import type { ScheduledCallRecord } from "../scheduler/index.js";
+import type { TelemetryAggregate, TelemetryEvent } from "../telemetry/index.js";
 import type { VoiceStatusResult } from "../voice/index.js";
+import {
+  toCustomerTimelineViewData,
+  type CustomerTimelineLoaderSnapshot,
+} from "../../../../kits/debrief/src/views/customer-timeline/loader.js";
 
 const JSON_HEADERS = { "content-type": "application/json" };
 const MCP_SERVER_INFO = { name: "kitstack-demo", version: "0.1.0" };
@@ -96,7 +102,16 @@ const MCP_TOOLS = [
   {
     name: "kit_view",
     description: "Load an interactive debrief View for the current prepared session.",
-    inputSchema: { type: "object", properties: { id: { type: "string" }, view: { type: "string" } }, required: ["id", "view"] },
+    inputSchema: {
+      type: "object",
+      properties: {
+        id: { type: "string" },
+        view: { type: "string" },
+        session_id: { type: "string", description: "Active debrief session for customer-timeline" },
+        customer_id: { type: "string", description: "Active customer for customer-timeline" },
+      },
+      required: ["id", "view"],
+    },
   },
 ] as const;
 
@@ -110,6 +125,48 @@ export interface DemoLiveVoiceRoute {
   /** Real phone calls always require the operator token, even in loopback auth-none mode. */
   requireAdminToken?: boolean;
   bridge?: (socket: VoiceWebSocket, request: DemoAppRouteRequest) => TwilioOpenAIBridge;
+}
+
+export interface DemoObservabilityCustomer {
+  id: string;
+  company: string;
+  contactName: string;
+}
+
+export interface DemoObservabilitySession {
+  sessionId: string;
+  customerId: string | null;
+  customerName: string | null;
+  appId: string | null;
+  kitId: string | null;
+  state: string;
+  scheduledCallAt: string | null;
+  callId: string | null;
+  lastEventAt: string | null;
+  error: string | null;
+}
+
+export interface DemoProviderHealth {
+  provider: string;
+  status: "healthy" | "degraded" | "idle";
+  eventCount: number;
+  errorCount: number;
+  lastEventAt: string | null;
+  recentFailures: Array<{ timestamp: string; operation: string; sessionId: string | null }>;
+}
+
+export interface DemoObservabilityResponse {
+  events: TelemetryEvent[];
+  aggregate: TelemetryAggregate;
+  plugins: Array<{ id: string; kind: string; version: string; status: string }>;
+  apps: ReturnType<DemoApp["apps"]["list"]>;
+  kits: Array<{ id: string; version: string; status: string }>;
+  schedulerJobs: ScheduledCallRecord[];
+  sessions: DemoObservabilitySession[];
+  customers: DemoObservabilityCustomer[];
+  providerHealth: DemoProviderHealth[];
+  mcpAuthMode: McpAuthMode;
+  liveCall?: DemoLiveVoiceRoute["capability"];
 }
 
 /** Mounts the real app composition behind framework-neutral demo routes. */
@@ -198,22 +255,7 @@ export async function handleDemoAppRequest(
       return responseFromWeb(result.response);
     }
     if (request.method === "GET" && path === "/api/demo/observability") {
-      const [events, aggregate] = await Promise.all([
-        app.telemetry.query({ orgId: app.orgId, ...query(request.query) }),
-        app.telemetry.aggregate({ orgId: app.orgId, ...query(request.query) }),
-      ]);
-      return json(200, {
-        events,
-        aggregate,
-        plugins: app.plugins.list().map((plugin) => ({
-          id: plugin.id,
-          kind: plugin.kind,
-          version: plugin.version,
-          status: "ready",
-        })),
-        mcpAuthMode: app.mcpAuthMode,
-        ...(liveVoice ? { liveCall: liveVoice.capability } : {}),
-      });
+      return json(200, await observabilitySnapshot(app, query(request.query), liveVoice));
     }
     const sessionMatch = path.match(/^\/api\/demo\/sessions\/([^/]+)$/);
     if (request.method === "GET" && sessionMatch) {
@@ -288,10 +330,17 @@ async function mcp(app: DemoApp, body: Record<string, unknown>): Promise<DemoHtt
     value = current.status === "calling" ? await app.plugins.dispatch<{ operation: string; sessionId: string }, VoiceStatusResult>("channel:voice", { operation: "advance", sessionId }, pluginContext(app, undefined, sessionId)) : current;
   }
   else if (name === "kit_view") {
-    if (stringField(args, "id") !== "debrief" || !["prebrief", "confirmation"].includes(stringField(args, "view"))) {
+    const view = stringField(args, "view");
+    if (stringField(args, "id") !== "debrief" || !["prebrief", "confirmation", "customer-timeline"].includes(view)) {
       return json(400, { jsonrpc: "2.0", id: body.id ?? null, error: { code: -32602, message: "Unknown debrief View" } });
     }
-    value = { data: stringField(args, "view") === "confirmation" ? await loadConfirmationView(app) : await loadPrebriefView(app) };
+    value = {
+      data: view === "confirmation"
+        ? await loadConfirmationView(app)
+        : view === "prebrief"
+          ? await loadPrebriefView(app)
+          : await loadCustomerTimelineView(app, args),
+    };
   }
   else if (name === "confirm_debrief") {
     const sessionId = stringField(args, "session_id");
@@ -351,6 +400,53 @@ async function loadPrebriefView(app: DemoApp): Promise<Record<string, unknown>> 
   };
 }
 
+async function loadCustomerTimelineView(
+  app: DemoApp,
+  args: Record<string, unknown>,
+): Promise<Record<string, unknown>> {
+  const requestedSessionId = typeof args.session_id === "string" && args.session_id.trim() ? args.session_id : undefined;
+  const requestedCustomerId = typeof args.customer_id === "string" && args.customer_id.trim() ? args.customer_id : undefined;
+  const session = requestedSessionId ? app.debrief.getSession(requestedSessionId) : app.debrief.getLatestSession();
+  if (!session) throw new Error("No active debrief session is available for the customer timeline");
+  if (!session.customerId) throw new Error(`Debrief session "${session.sessionId}" has no customer for the timeline`);
+  if (requestedCustomerId && requestedCustomerId !== session.customerId) {
+    throw new Error("Customer timeline customer does not match the requested session");
+  }
+  const customer = await app.debrief.getCustomer(session.customerId);
+  if (!customer) throw new Error(`Customer "${session.customerId}" was not found`);
+  const [events, sessionTelemetry, customerTelemetry] = await Promise.all([
+    app.debrief.listCustomerEvents(session.customerId),
+    app.telemetry.query({ orgId: app.orgId, sessionId: session.sessionId }),
+    app.telemetry.query({ orgId: app.orgId, customerId: session.customerId }),
+  ]);
+  const metadataEvents = [...new Map([...sessionTelemetry, ...customerTelemetry].map((event) => [event.id, event])).values()];
+  const snapshot: CustomerTimelineLoaderSnapshot = {
+    session_id: session.sessionId,
+    customer_id: customer.customerId,
+    company: customer.company,
+    contact_name: customer.contactName,
+    location: customer.location,
+    events: events.map((event) => ({
+      event_id: event.eventId,
+      customer_id: event.customerId,
+      session_id: event.sessionId,
+      type: event.type,
+      occurred_at: event.occurredAt,
+      payload: event.payload,
+    })),
+    provider_metadata: {
+      providers: metadataEvents.map((event) => event.provider),
+      models: metadataEvents.map((event) => event.model),
+      estimated_cost_usd: metadataEvents.reduce((total, event) => total + (event.estimatedCostUsd ?? 0), 0),
+      latency_ms: metadataEvents.reduce((total, event) => total + (event.latencyMs ?? 0), 0),
+    },
+  };
+  return toCustomerTimelineViewData(
+    { session_id: session.sessionId, customer_id: customer.customerId },
+    snapshot,
+  ) as unknown as Record<string, unknown>;
+}
+
 async function kitDispatch(
   app: DemoApp,
   input: Record<string, unknown>,
@@ -407,12 +503,120 @@ function toHeaders(headers: DemoHttpRequest["headers"]): Headers {
   return result;
 }
 
-function query(values: DemoHttpRequest["query"]): { appId?: string | null; sessionId?: string; limit?: number } {
-  const result: { appId?: string | null; sessionId?: string; limit?: number } = {};
+function query(values: DemoHttpRequest["query"]): {
+  appId?: string | null;
+  customerId?: string;
+  sessionId?: string;
+  pluginId?: string;
+  kitId?: string;
+  from?: string;
+  to?: string;
+  limit?: number;
+} {
+  const result: {
+    appId?: string | null;
+    customerId?: string;
+    sessionId?: string;
+    pluginId?: string;
+    kitId?: string;
+    from?: string;
+    to?: string;
+    limit?: number;
+  } = {};
   if (values?.appId !== undefined) result.appId = values.appId === "null" ? null : values.appId;
+  if (values?.customerId !== undefined) result.customerId = values.customerId;
   if (values?.sessionId !== undefined) result.sessionId = values.sessionId;
+  if (values?.pluginId !== undefined) result.pluginId = values.pluginId;
+  if (values?.kitId !== undefined) result.kitId = values.kitId;
+  if (values?.from !== undefined) result.from = values.from;
+  if (values?.to !== undefined) result.to = values.to;
   if (values?.limit !== undefined && Number.isFinite(Number(values.limit))) result.limit = Number(values.limit);
   return result;
+}
+
+async function observabilitySnapshot(
+  app: DemoApp,
+  filters: ReturnType<typeof query>,
+  liveVoice?: DemoLiveVoiceRoute,
+): Promise<DemoObservabilityResponse> {
+  const [events, aggregate, schedulerJobs] = await Promise.all([
+    app.telemetry.query({ orgId: app.orgId, ...filters }),
+    app.telemetry.aggregate({ orgId: app.orgId, ...filters }),
+    app.scheduler.list(app.orgId),
+  ]);
+  const sessions = [...new Set(events.map((event) => event.sessionId).filter((id): id is string => Boolean(id)))];
+  const customerIds = [...new Set(events.map((event) => event.customerId).filter((id): id is string => Boolean(id)))];
+  const customers = (await Promise.all(customerIds.map(async (id) => {
+    const customer = await app.debrief.getCustomer(id);
+    return customer ? { id, company: customer.company, contactName: customer.contactName } : null;
+  }))).filter((customer): customer is DemoObservabilityCustomer => Boolean(customer));
+  const plugins = app.plugins.list().map((plugin) => ({ id: plugin.id, kind: plugin.kind, version: plugin.version, status: "ready" }));
+  const kits = plugins.filter((plugin) => plugin.kind === "kit").map((plugin) => ({ id: plugin.id.replace(/^kit:/, ""), version: plugin.version, status: plugin.status }));
+  const sessionRows = sessions.map((sessionId) => {
+    const sessionEvents = events.filter((event) => event.sessionId === sessionId);
+    const latest = sessionEvents.at(-1);
+    const customerId = [...sessionEvents].reverse().find((event) => event.customerId)?.customerId ?? null;
+    const customer = customerId ? customers.find((item) => item.id === customerId) : undefined;
+    const job = schedulerJobs.find((item) => item.sessionId === sessionId);
+    const failure = [...sessionEvents].reverse().find((event) => event.outcome === "error");
+    return {
+      sessionId,
+      customerId,
+      customerName: customer?.company ?? null,
+      appId: [...sessionEvents].reverse().find((event) => event.appId)?.appId ?? null,
+      kitId: [...sessionEvents].reverse().find((event) => event.kitId)?.kitId ?? null,
+      state: sessionState(sessionEvents, job?.status),
+      scheduledCallAt: job?.scheduledAt ?? null,
+      callId: [...sessionEvents].reverse().find((event) => event.callId)?.callId ?? job?.providerCallId ?? null,
+      lastEventAt: latest?.timestamp ?? null,
+      error: failure?.operation ?? job?.error ?? null,
+    };
+  });
+  return {
+    events,
+    aggregate,
+    plugins,
+    apps: app.apps.list(),
+    kits,
+    schedulerJobs,
+    sessions: sessionRows,
+    customers,
+    providerHealth: providerHealth(events),
+    mcpAuthMode: app.mcpAuthMode,
+    ...(liveVoice ? { liveCall: liveVoice.capability } : {}),
+  };
+}
+
+function sessionState(events: Array<{ operation: string; outcome: string }>, scheduledStatus?: string): string {
+  const latest = events.at(-1);
+  if (latest?.outcome === "error") return "failed";
+  if (latest?.operation === "complete" || latest?.operation === "confirmed") return "confirmed";
+  if (latest?.operation === "await_confirmation") return "awaiting_confirmation";
+  if (latest?.operation === "start" || latest?.operation === "calling") return "calling";
+  return scheduledStatus === "scheduled" ? "scheduled" : "active";
+}
+
+function providerHealth(events: TelemetryEvent[]): DemoProviderHealth[] {
+  const providers = new Map<string, TelemetryEvent[]>();
+  for (const event of events) {
+    const provider = event.provider ?? (event.channel === "voice" ? "simulator" : null);
+    if (!provider) continue;
+    const current = providers.get(provider) ?? [];
+    current.push(event);
+    providers.set(provider, current);
+  }
+  if (!providers.has("simulator")) providers.set("simulator", []);
+  return [...providers].map(([provider, providerEvents]) => {
+    const failures = providerEvents.filter((event) => event.outcome === "error").slice(-3).reverse();
+    return {
+      provider,
+      status: failures.length ? "degraded" : providerEvents.length ? "healthy" : "idle",
+      eventCount: providerEvents.length,
+      errorCount: providerEvents.filter((event) => event.outcome === "error").length,
+      lastEventAt: providerEvents.at(-1)?.timestamp ?? null,
+      recentFailures: failures.map((event) => ({ timestamp: event.timestamp, operation: event.operation, sessionId: event.sessionId ?? null })),
+    };
+  });
 }
 
 function json<T>(status: number, body: T): DemoHttpResponse<T> { return { status, headers: JSON_HEADERS, body }; }

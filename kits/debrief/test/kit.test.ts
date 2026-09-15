@@ -17,7 +17,7 @@ describe("debrief kit boundary", () => {
   });
 
   it("exposes the confirmation View alongside the prebrief View", () => {
-    expect(kit.views?.map((view) => view.slug)).toEqual(["prebrief", "confirmation"]);
+    expect(kit.views?.map((view) => view.slug)).toEqual(["prebrief", "confirmation", "customer-timeline"]);
   });
 
   it("keeps an unbound kit visibly unbound", async () => {
