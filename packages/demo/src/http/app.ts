@@ -104,6 +104,10 @@ export async function handleDemoAppRequest(
       });
       return json(201, registered);
     }
+    if (request.method === "GET" && path === "/v1/apps") {
+      if (!adminAuthorized(app, request)) return json(403, { error: "admin_token_required" });
+      return json(200, { apps: app.apps.list() });
+    }
     const tokenMatch = path.match(/^\/v1\/apps\/([^/]+)\/token$/);
     if (request.method === "POST" && tokenMatch) {
       if (!adminAuthorized(app, request)) return json(403, { error: "admin_token_required" });
@@ -145,7 +149,7 @@ export async function handleDemoAppRequest(
         app.telemetry.query({ orgId: app.orgId, ...query(request.query) }),
         app.telemetry.aggregate({ orgId: app.orgId, ...query(request.query) }),
       ]);
-      return json(200, { events, aggregate });
+      return json(200, { events, aggregate, mcpAuthMode: app.mcpAuthMode });
     }
     const sessionMatch = path.match(/^\/api\/demo\/sessions\/([^/]+)$/);
     if (request.method === "GET" && sessionMatch) {

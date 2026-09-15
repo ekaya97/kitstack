@@ -111,6 +111,12 @@ export default function DashboardPage() {
             </div>
           </div>
           <div className="flex flex-wrap gap-2">
+            <Link
+              href="/demo"
+              className="ks-btn !py-2 !px-3.5 !text-[12px] !border-ks-accent !text-ks-accent"
+            >
+              Demo control plane
+            </Link>
             {isAdmin && (
               <Link
                 href="/admin"
@@ -1240,4 +1246,3 @@ function fmtDate(d: string | null) {
     year: "numeric",
   });
 }
-

@@ -147,4 +147,26 @@ describe("composed demo HTTP surface", () => {
     expect(app.apps.get(appId)?.id).toBe(appId);
     await expect(app.apps.verify(token)).resolves.toMatchObject({ sub: appId });
   });
+
+  it("lists registered apps and exposes the configured MCP auth mode to the dashboard", async () => {
+    app = await createDemoApp({ url: ":memory:", mcpAuthMode: "app-token" });
+    const registered = await handleDemoAppRequest(app, {
+      method: "POST", path: "/v1/apps/register",
+      headers: { "x-demo-admin-token": "demo-admin-token" },
+      body: { name: "Claude", org: "org-demo", scopes: ["inference"] },
+    });
+    expect(registered.status).toBe(201);
+
+    const apps = await handleDemoAppRequest(app, {
+      method: "GET", path: "/v1/apps",
+      headers: { "x-demo-admin-token": "demo-admin-token" },
+    });
+    expect(apps.status).toBe(200);
+    expect((apps.body as any).apps).toHaveLength(1);
+
+    const observability = await handleDemoAppRequest(app, {
+      method: "GET", path: "/api/demo/observability",
+    });
+    expect((observability.body as any).mcpAuthMode).toBe("app-token");
+  });
 });

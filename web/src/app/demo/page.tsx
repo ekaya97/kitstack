@@ -224,6 +224,9 @@ function TraceView({ events, sessions, selectedSession, setSelectedSession }: { 
 
 function Metric({ label, value }: { label: string; value: string | number }) { return <div className="ks-card p-4"><div className="font-mono text-[10px] uppercase tracking-wider text-ks-muted">{label}</div><div className="mt-1 font-serif text-[25px]">{value}</div></div>; }
 function Status({ label, value, healthy }: { label: string; value: string; healthy: boolean }) { return <div className="rounded-lg border border-ks-hair p-3"><div className="flex items-center gap-2 text-ks-muted"><span className={`h-2 w-2 rounded-full ${healthy ? "bg-green-500" : "bg-amber-500"}`} />{label}</div><div className="mt-1 font-medium">{value}</div></div>; }
-function formatAuthLabel(mode: string) { return `MCP ${mode === "auth-none" ? "auth-none (loopback)" : mode}`; }
+function formatAuthLabel(mode: string) {
+  if (mode === "none" || mode === "auth-none") return "MCP auth-none (loopback)";
+  return `MCP ${mode}`;
+}
 function Loading() { return <div className="flex items-center justify-center py-24"><div className="h-6 w-6 animate-spin rounded-full border-2 border-ks-hair border-t-ks-accent" /></div>; }
 function Empty({ title, detail }: { title: string; detail: string }) { return <div className="ks-card p-10 text-center"><h2 className="font-serif text-[24px]">{title}</h2><p className="mt-1 text-[12px] text-ks-muted">{detail}</p></div>; }

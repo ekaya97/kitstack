@@ -58,6 +58,13 @@ describe("demo observability page", () => {
     expect(screen.getAllByText("MCP auth mode not reported").length).toBeGreaterThan(0);
   });
 
+  it("labels auth-none as loopback-only", async () => {
+    fetchMock.mockResolvedValueOnce({ ok: true, json: async () => ({ events: [], aggregate: null, mcpAuthMode: "none" }) });
+    render(<DemoPage />);
+    await waitFor(() => expect(screen.getByText("No apps in this browser session")).toBeTruthy());
+    expect(screen.getAllByText("MCP auth-none (loopback)").length).toBeGreaterThan(0);
+  });
+
   it("keeps an issued token masked until explicit reveal", async () => {
     fetchMock
       .mockResolvedValueOnce({ ok: true, json: async () => ({ events: [], aggregate: null }) })

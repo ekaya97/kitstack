@@ -61,6 +61,10 @@ export class AppRegistry {
     return app ? { ...app, scopes: [...app.scopes] } : undefined;
   }
 
+  list(): RegisteredApp[] {
+    return [...this.apps.values()].map((app) => ({ ...app, scopes: [...app.scopes] }));
+  }
+
   issue(appId: string): Promise<string> {
     return issueAppToken(this, appId);
   }

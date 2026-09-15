@@ -20,6 +20,14 @@ npm run dev --workspace kitstack-web
 Open `/demo` in the web app. Set `NEXT_PUBLIC_DEMO_API_URL` when the server is
 not on the default port. The demo database defaults to `.kitstack/demo.db`.
 
+The `/demo` page is the KitStack control-plane dashboard for this unreleased
+demo. Use `Overview` for presenter metrics, `Apps` for registration and token
+issuance, `Usage` for per-app cost/latency/outcomes, and `Session Trace` for
+the prebrief → voice → feedback event chain. It refreshes automatically while
+Claude is calling the MCP tools. The authenticated product dashboard links to
+this surface as `Demo control plane`; the older marketplace/admin dashboards
+are not wired to this local telemetry store.
+
 For a local process MCP client, use the standard stdio harness instead of the
 HTTP server:
 
@@ -70,6 +78,17 @@ The external smoke helper remains blocked until HTTPS/WSS and Claude MCP URLs
 are provided.
 
 ## Dogfood sequence
+
+For the shortest presenter path:
+
+1. Start the demo server and web app in separate terminals, then open `/demo`.
+2. In `Apps`, register `Sales voice demo` and issue its token. Keep the token
+   masked in the dashboard until it is needed by the MCP connector.
+3. Switch to `Overview`, keep it visible, and run the MCP sequence in Claude.
+   The dashboard updates every five seconds; use `Refresh` immediately after
+   a tool call if needed.
+4. Return to `Usage` and `Session Trace` to show the cost, app identity,
+   memory/instruction references, and parent/trace IDs.
 
 1. In Claude chat, call `prepare_debrief` with a concrete sales goal.
 2. Call `/t/voice/start`, then `/t/voice/status`; the deterministic German
