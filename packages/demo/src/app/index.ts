@@ -95,20 +95,27 @@ export async function createDemoApp(options: CreateDemoAppOptions = {}): Promise
 
   const pluginHandlers = {
     "persistence:libsql": async (input: unknown) => {
-      const operation = (input as { operation?: string }).operation ?? "health";
+      const request = input as { operation?: string; run?: () => Promise<unknown> };
+      const operation = request.operation ?? "health";
       await client.execute("SELECT 1");
-      return { operation, backend: "libsql", durable: true };
+      return request.run ? request.run() : { operation, backend: "libsql", durable: true };
     },
     "memory:default": async (input: unknown, context: DemoPluginContext) => {
       const request = input as { operation: string; input?: MemoryWriteInput; memoryId?: string; query?: MemoryReadQuery; context: MemoryContext };
-      await plugins.dispatch("persistence:libsql", { operation: `memory.${request.operation}` }, contextToPluginInput(context, telemetry));
-      if (request.operation === "write_candidate" && request.input) return memory.writeCandidate(request.input, request.context);
-      if (request.operation === "approve" && request.memoryId) return memory.approveCandidate(request.memoryId, request.context);
-      if (request.operation === "publish" && request.memoryId) return memory.publishCandidate(request.memoryId, request.context);
-      if (request.operation === "read_relevant" && request.query) return memory.readRelevant(request.query, request.context);
+      if (request.operation === "write_candidate" && request.input) {
+        return plugins.dispatch("persistence:libsql", { operation: "memory.write_candidate", run: () => memory.writeCandidate(request.input!, request.context) }, contextToPluginInput(context, telemetry));
+      }
+      if (request.operation === "approve" && request.memoryId) {
+        return plugins.dispatch("persistence:libsql", { operation: "memory.approve", run: () => memory.approveCandidate(request.memoryId!, request.context) }, contextToPluginInput(context, telemetry));
+      }
+      if (request.operation === "publish" && request.memoryId) {
+        return plugins.dispatch("persistence:libsql", { operation: "memory.publish", run: () => memory.publishCandidate(request.memoryId!, request.context) }, contextToPluginInput(context, telemetry));
+      }
+      if (request.operation === "read_relevant" && request.query) {
+        return plugins.dispatch("persistence:libsql", { operation: "memory.read_relevant", run: () => memory.readRelevant(request.query!, request.context) }, contextToPluginInput(context, telemetry));
+      }
       if (request.operation === "reset") {
-        await memory.reset(request.context);
-        return { ok: true };
+        return plugins.dispatch("persistence:libsql", { operation: "memory.reset", run: async () => { await memory.reset(request.context); return { ok: true }; } }, contextToPluginInput(context, telemetry));
       }
       throw new Error(`Unknown memory plugin operation: ${request.operation}`);
     },
