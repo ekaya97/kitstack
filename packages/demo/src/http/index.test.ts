@@ -67,7 +67,7 @@ describe("demo HTTP boundary", () => {
       headers: { "X-Demo-Reset-Token": "wrong" },
     });
     expect(denied.status).toBe(403);
-    expect(await runtime.telemetry.query({ type: "plugin.registered" })).toHaveLength(9);
+    expect(await runtime.telemetry.query({ type: "plugin.registered" })).toHaveLength(10);
 
     const accepted = await handleDemoRequest(runtime, {
       method: "POST",
@@ -81,6 +81,6 @@ describe("demo HTTP boundary", () => {
       preserved: ["app_registry", "token_registry"],
     });
     expect(await runtime.telemetry.query()).toEqual([]);
-    expect(runtime.plugins.list()).toHaveLength(9);
+    expect(runtime.plugins.list()).toHaveLength(10);
   });
 });

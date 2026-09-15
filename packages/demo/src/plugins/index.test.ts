@@ -71,6 +71,7 @@ describe("PluginRegistry", () => {
       "trigger:voice-http",
       "channel:voice",
       "proxy:demo-openai-compatible",
+      "scheduler:scheduled-calls",
     ]);
     expect(registry.list().map((item) => item.kind)).toEqual([
       "persistence",
@@ -82,6 +83,7 @@ describe("PluginRegistry", () => {
       "trigger",
       "channel",
       "proxy",
+      "scheduler",
     ]);
     expect(registry.list().some((item) => item.kind === ("connector" as DemoPlugin["kind"]))).toBe(false);
   });
@@ -99,7 +101,7 @@ describe("PluginRegistry", () => {
     });
 
     const events = await store.query({ type: "plugin.registered" });
-    expect(events).toHaveLength(9);
+    expect(events).toHaveLength(10);
     expect(events.every((event) => event.appId === null)).toBe(true);
     expect(events.map((event) => event.pluginId)).toEqual([
       "persistence:libsql",
@@ -111,6 +113,7 @@ describe("PluginRegistry", () => {
       "trigger:voice-http",
       "channel:voice",
       "proxy:demo-openai-compatible",
+      "scheduler:scheduled-calls",
     ]);
   });
 

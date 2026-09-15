@@ -10,6 +10,7 @@ export const DEMO_PLUGIN_IDS = [
   "trigger:voice-http",
   "channel:voice",
   "proxy:demo-openai-compatible",
+  "scheduler:scheduled-calls",
 ] as const;
 
 export type DemoPluginId = (typeof DEMO_PLUGIN_IDS)[number];
@@ -22,7 +23,8 @@ export type DemoPluginKind =
   | "http"
   | "trigger"
   | "channel"
-  | "proxy";
+  | "proxy"
+  | "scheduler";
 
 export interface DemoPlugin<Input = unknown, Output = unknown> {
   readonly id: string;
@@ -230,6 +232,7 @@ export function createDemoPlugins(
     createPlugin("trigger:voice-http", "trigger", handlers["trigger:voice-http"]),
     createPlugin("channel:voice", "channel", handlers["channel:voice"]),
     createPlugin("proxy:demo-openai-compatible", "proxy", handlers["proxy:demo-openai-compatible"]),
+    createPlugin("scheduler:scheduled-calls", "scheduler", handlers["scheduler:scheduled-calls"]),
   ];
 }
 
@@ -248,6 +251,6 @@ function createPlugin(
 
 function channelForPlugin(kind: DemoPluginKind): "mcp" | "proxy" | "voice" | "trigger" | "system" | "chat" {
   if (kind === "proxy" || kind === "ai") return "proxy";
-  if (kind === "trigger" || kind === "channel") return "voice";
+  if (kind === "trigger" || kind === "channel" || kind === "scheduler") return "trigger";
   return "system";
 }

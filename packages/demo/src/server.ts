@@ -13,6 +13,7 @@ import { createDemoApp, type DemoApp } from "./app/index.js";
 import type { McpAuthMode } from "./auth/mcp.js";
 import { handleDemoAppRequest, type DemoLiveVoiceRoute, type DemoAppRouteRequest } from "./http/app.js";
 import { attachVoiceMediaBridge } from "./http/voice.js";
+import type { ScheduledCallPoller } from "./scheduler/index.js";
 import {
   createDefineAgentVoiceLoop,
   createOpenAIRealtimeSocketFactory,
@@ -43,6 +44,8 @@ export interface DemoServerOptions {
   appOptions?: Parameters<typeof createDemoApp>[0];
   /** Inject a live route in tests; otherwise it is composed from env vars. */
   liveVoice?: DemoLiveVoiceRoute;
+  /** Optional provider-neutral scheduler seam. T-0189 supplies the live-call adapter. */
+  scheduledCallPoller?: ScheduledCallPoller;
 }
 
 export interface DemoServer {
@@ -121,11 +124,13 @@ export async function createDemoServer(options: DemoServerOptions = {}): Promise
         server.once("listening", onListening);
         server.listen(requestedPort, requestedHost);
       });
+      options.scheduledCallPoller?.start();
       return address(server);
     },
     async close() {
       if (closed) return;
       closed = true;
+      options.scheduledCallPoller?.stop();
       if (listening) {
         await new Promise<void>((resolve, reject) => {
           server.close((error) => error ? reject(error) : resolve());

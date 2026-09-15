@@ -43,6 +43,7 @@ describe("DemoApp", () => {
     expect((await app.apps.verify(token)).sub).toBe(registered.id);
     expect(() => app.debrief.getSession(first.sessionId)).toThrow(`Debrief session "${first.sessionId}" was not found`);
     expect(await app.telemetry.query({ orgId: "org-demo" })).toHaveLength(0);
+    expect(await app.scheduler.list("org-demo")).toEqual([]);
     const repeat = await app.debrief.prepareDebrief("Sell a better workflow");
     expect(repeat.memoryIds).toEqual([]);
     await app.close();
@@ -61,6 +62,7 @@ describe("DemoApp", () => {
       callbackAt: "2026-09-16T10:00:00.000Z",
       scheduledCallAt: "2026-09-16T10:05:00.000Z",
       callbackTimezone: "Europe/Berlin",
+      bufferMinutes: 5,
     });
     expect(prepared.customerId).not.toBeNull();
     const events = await firstApp.debrief.listCustomerEvents(prepared.customerId!);

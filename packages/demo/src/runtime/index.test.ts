@@ -23,8 +23,9 @@ describe("DemoRuntime", () => {
       "trigger:voice-http",
       "channel:voice",
       "proxy:demo-openai-compatible",
+      "scheduler:scheduled-calls",
     ]);
-    expect((await runtime.telemetry.query({ type: "plugin.registered" }))).toHaveLength(9);
+    expect((await runtime.telemetry.query({ type: "plugin.registered" }))).toHaveLength(10);
   });
 
   it("creates stable request identity from transport headers and runtime identity", async () => {

@@ -11,8 +11,16 @@ const TOOL_DEFINITIONS = [
     description: "Prepare a sales debrief using the current instructions and approved memories.",
     inputSchema: {
       type: "object",
-      properties: { goal: { type: "string", description: "The sales goal for the debrief." } },
-      required: ["goal"],
+      properties: {
+        goal: { type: "string", description: "The sales goal for the debrief." },
+        company: { type: "string", description: "The customer company." },
+        contact_name: { type: "string", description: "The customer contact." },
+        location: { type: "string", description: "The meeting or customer location." },
+        callback_at: { type: "string", description: "When the phone should ring: ISO timestamp or HH:mm." },
+        callback_timezone: { type: "string", description: "IANA timezone for callback_at." },
+        buffer_minutes: { type: "number", description: "Optional delay after callback_at before starting the call." },
+      },
+      required: ["goal", "company", "contact_name", "location", "callback_at", "callback_timezone"],
     },
   },
   {
@@ -240,7 +248,19 @@ async function callTool(
   try {
     let value: unknown;
     if (name === "prepare_debrief") {
-      value = await app.debrief.prepareDebrief(requiredString(args, "goal"));
+      const hasPresenterFields = ["company", "contact_name", "location", "callback_at", "callback_timezone", "buffer_minutes"]
+        .some((field) => args[field] !== undefined);
+      value = hasPresenterFields
+        ? await app.debrief.prepareDebrief({
+          goal: requiredString(args, "goal"),
+          company: requiredString(args, "company"),
+          contactName: requiredString(args, "contact_name"),
+          location: requiredString(args, "location"),
+          callbackAt: requiredString(args, "callback_at"),
+          callbackTimezone: requiredString(args, "callback_timezone"),
+          bufferMinutes: optionalNumber(args, "buffer_minutes", 0),
+        })
+        : await app.debrief.prepareDebrief(requiredString(args, "goal"));
     } else if (name === "get_session") {
       value = app.debrief.getSession(requiredString(args, "session_id"));
     } else if (name === "get_debrief") {
@@ -300,6 +320,13 @@ function asRecord(value: unknown): Record<string, unknown> | undefined {
 function requiredString(body: Record<string, unknown>, name: string): string {
   const value = body[name];
   if (typeof value !== "string" || !value.trim()) throw new Error(`${name} is required`);
+  return value;
+}
+
+function optionalNumber(body: Record<string, unknown>, name: string, fallback: number): number {
+  const value = body[name];
+  if (value === undefined) return fallback;
+  if (typeof value !== "number" || !Number.isFinite(value)) throw new Error(`${name} must be a number`);
   return value;
 }
 

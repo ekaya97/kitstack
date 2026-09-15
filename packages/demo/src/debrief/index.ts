@@ -9,6 +9,7 @@ import type {
   DebriefDraftStatus,
   DebriefPersistence,
 } from "./persistence.js";
+import { normalizeDebriefSchedule } from "../../../../kits/debrief/src/timing.js";
 
 export type DebriefState = "prepared" | "calling" | "awaiting_confirmation" | "partial" | "confirmed" | "failed";
 
@@ -18,6 +19,8 @@ export interface DebriefContext {
   kitId?: string;
   now?: () => string;
   id?: () => string;
+  /** Already-masked destination label; raw phone numbers never enter debrief state. */
+  destinationMasked?: string;
 }
 
 export interface DebriefSession {
@@ -44,6 +47,7 @@ export interface DebriefPreparationInput extends CustomerIdentityInput {
   callbackAt?: string;
   scheduledCallAt?: string;
   callbackTimezone?: string;
+  bufferMinutes?: number;
 }
 
 export interface DebriefServiceOptions {
@@ -79,8 +83,36 @@ export interface MemoryStoreLike {
 }
 
 export interface TextInference {
-  (input: { goal: string; correction?: string; instruction: ResolvedInstruction; memories: MemoryRecord[] }): Promise<string>;
+  (input: {
+    goal: string;
+    correction?: string;
+    instruction: ResolvedInstruction;
+    memories: MemoryRecord[];
+    customer?: CustomerRecord;
+    events?: CustomerEventRecord[];
+    sections?: PrebriefSections;
+    sessionId?: string;
+  }): Promise<string>;
 }
+
+export interface PrebriefSections {
+  readonly known: readonly string[];
+  readonly last_interaction: string;
+  readonly open_items: readonly string[];
+  readonly call_objective: string;
+}
+
+/** The rich presenter response, retaining the legacy session fields. */
+export type PreparedDebriefResult = DebriefSession & {
+  readonly session_id: string;
+  readonly customer_id: string;
+  readonly prebrief: string;
+  readonly prebrief_ends_at: string;
+  readonly scheduled_call_at: string;
+  readonly destination_masked: string;
+  readonly kit_view: { readonly kit_id: "debrief"; readonly view: string; readonly reason: string };
+  readonly prebrief_sections: PrebriefSections;
+};
 
 export class DebriefService {
   private readonly sessions = new Map<string, DebriefSession>();
@@ -105,14 +137,24 @@ export class DebriefService {
 
   private readonly persistence?: DebriefPersistence;
 
-  async prepareDebrief(input: string | DebriefPreparationInput): Promise<DebriefSession> {
+  async prepareDebrief(input: string | DebriefPreparationInput): Promise<DebriefSession | PreparedDebriefResult> {
     const preparation: Partial<DebriefPreparationInput> & Pick<DebriefPreparationInput, "goal"> = typeof input === "string" ? { goal: input } : input;
     if (!preparation.goal.trim()) throw new Error("Debrief goal must not be empty");
     const sessionId = this.id();
     const instruction = await this.instructions.resolve({ kitId: this.kitId, context: { name: "prebrief" } }, this.pluginContext(sessionId));
+    const schedule = hasSchedule(preparation)
+      ? normalizeDebriefSchedule({
+        callback_at: preparation.callbackAt!,
+        callback_timezone: preparation.callbackTimezone!,
+        buffer_minutes: preparation.bufferMinutes,
+      }, new Date(this.now()))
+      : undefined;
     const customer = hasCustomerIdentity(preparation)
       ? await this.persistence?.upsertCustomer(this.context.orgId, preparation, { sessionId, traceId: sessionId })
       : undefined;
+    const priorEvents = customer
+      ? await this.listCustomerEvents(customer.customerId)
+      : [];
     const memoryContext = this.memoryContext(sessionId, customer?.customerId ?? null);
     const memories = await this.memory.readRelevant({
       orgId: this.context.orgId,
@@ -128,9 +170,9 @@ export class DebriefService {
       state: "prepared",
       goal: preparation.goal.trim(),
       customerId: customer?.customerId ?? null,
-      callbackAt: preparation.callbackAt ?? null,
-      scheduledCallAt: preparation.scheduledCallAt ?? null,
-      callbackTimezone: preparation.callbackTimezone ?? null,
+      callbackAt: schedule?.prebrief_ends_at ?? preparation.callbackAt ?? null,
+      scheduledCallAt: schedule?.scheduled_call_at ?? preparation.scheduledCallAt ?? null,
+      callbackTimezone: schedule?.callback_timezone ?? preparation.callbackTimezone ?? null,
       callId: null,
       instructionVersion: instruction.version,
       memoryIds: memories.map((m) => m.memoryId),
@@ -145,10 +187,47 @@ export class DebriefService {
         company: customer.company,
         contact_name: customer.contactName,
         location: customer.location,
+        ...(schedule ? { prebrief_ends_at: schedule.prebrief_ends_at, scheduled_call_at: schedule.scheduled_call_at } : {}),
       });
     }
-    await this.emit(session, "prepare", "success");
-    return this.getSession(sessionId);
+    if (!schedule || !customer) {
+      await this.emit(session, "prepare", "success");
+      return this.getSession(sessionId);
+    }
+
+    const sections = buildPrebriefSections(customer, priorEvents, memories, session.goal);
+    let generatedText = "";
+    if (this.infer) {
+      try {
+        generatedText = (await this.infer({
+          goal: session.goal,
+          instruction,
+          memories,
+          customer,
+          events: priorEvents,
+          sections,
+          sessionId,
+        })).trim();
+      } catch {
+        // The deterministic sections remain useful when an optional model
+        // provider is unavailable; provider telemetry records the failure.
+      }
+    }
+    const prebrief = generatedText && generatedText !== "Demo extraction complete."
+      ? generatedText
+      : renderPrebrief(sections);
+    await this.emit(session, "prebrief", "success", memories.map((memory) => memory.memoryId));
+    return {
+      ...this.getSession(sessionId),
+      session_id: session.sessionId,
+      customer_id: customer.customerId,
+      prebrief,
+      prebrief_sections: sections,
+      prebrief_ends_at: schedule.prebrief_ends_at,
+      scheduled_call_at: schedule.scheduled_call_at,
+      destination_masked: this.context.destinationMasked ?? "configured demo destination",
+      kit_view: { kit_id: "debrief", view: "prebrief", reason: "Review customer context before the scheduled call" },
+    };
   }
 
   async markCalling(sessionId: string): Promise<DebriefSession> { return this.transition(sessionId, "calling"); }
@@ -266,11 +345,51 @@ export class DebriefService {
   private async persist(session: DebriefSession): Promise<void> { await this.persistence?.saveSession(cloneSession(session)); }
   private async persistDraft(draft: DebriefDraftRecord): Promise<void> { await this.persistence?.saveDraft(draft); }
   private async appendCustomerEvent(session: DebriefSession, type: CustomerEventRecord["type"], payload: Record<string, unknown>): Promise<void> { if (!session.customerId || !this.persistence) return; await this.persistence.appendCustomerEvent({ eventId: `event-${this.id()}`, orgId: session.orgId, customerId: session.customerId, sessionId: session.sessionId, kitId: session.kitId, type, occurredAt: this.now(), payload }); }
-  private async emit(s: DebriefSession, operation: string, outcome: "success" | "partial" | "error") { const event: TelemetryEventInput = { id: this.id(), timestamp: this.now(), orgId: s.orgId, appId: this.context.appId, sessionId: s.sessionId, customerId: s.customerId, traceId: s.sessionId, channel: "voice", pluginId: "kit:debrief", kitId: s.kitId, type: operation === "complete" ? "session.completed" : "voice.call", operation, outcome }; await this.telemetry.append(event); }
+  private async emit(s: DebriefSession, operation: string, outcome: "success" | "partial" | "error", memoryIds?: string[]) { const event: TelemetryEventInput = { id: this.id(), timestamp: this.now(), orgId: s.orgId, appId: this.context.appId, sessionId: s.sessionId, customerId: s.customerId, traceId: s.sessionId, channel: "voice", pluginId: "kit:debrief", kitId: s.kitId, type: operation === "complete" ? "session.completed" : "voice.call", operation, outcome, ...(memoryIds?.length ? { memoryIds } : {}) }; await this.telemetry.append(event); }
 }
 
 function hasCustomerIdentity(input: Partial<DebriefPreparationInput>): input is DebriefPreparationInput {
   return Boolean(input.company?.trim() && input.contactName?.trim() && input.location?.trim());
+}
+
+function hasSchedule(input: Partial<DebriefPreparationInput>): input is DebriefPreparationInput & Required<Pick<DebriefPreparationInput, "callbackAt" | "callbackTimezone">> {
+  return Boolean(input.callbackAt?.trim() || input.callbackTimezone?.trim());
+}
+
+function buildPrebriefSections(
+  customer: CustomerRecord,
+  events: readonly CustomerEventRecord[],
+  memories: readonly MemoryRecord[],
+  goal: string,
+): PrebriefSections {
+  const known = [
+    `Company: ${customer.company}`,
+    `Contact: ${customer.contactName}`,
+    `Location: ${customer.location}`,
+  ];
+  const lastEvent = [...events].reverse().find((event) => event.type !== "prebrief");
+  const last_interaction = lastEvent ? summarizeEvent(lastEvent) : "No prior interaction recorded.";
+  const open_items = memories.length
+    ? memories.slice(0, 3).map((memory) => `Approved memory: ${memory.correction}`)
+    : ["No open items recorded."];
+  return { known, last_interaction, open_items, call_objective: goal };
+}
+
+function summarizeEvent(event: CustomerEventRecord): string {
+  if (event.type === "debrief_confirmed") return "Previous debrief was confirmed.";
+  if (event.type === "address_discovered") return "Previous call captured a new address.";
+  if (event.type === "note") return "Previous debrief included an operator note.";
+  if (event.type === "call_completed") return "Previous voice call completed.";
+  return "Previous customer interaction recorded.";
+}
+
+function renderPrebrief(sections: PrebriefSections): string {
+  return [
+    `Known: ${sections.known.join("; ")}`,
+    `Last interaction: ${sections.last_interaction}`,
+    `Open items: ${sections.open_items.join("; ")}`,
+    `Call objective: ${sections.call_objective}`,
+  ].join("\n");
 }
 
 function cloneSession(session: DebriefSession): DebriefSession {

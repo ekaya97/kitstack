@@ -1,12 +1,14 @@
 import { createClient, type Client } from "@libsql/client";
 import { createAppRegistry, type AppRegistry } from "../auth/index.js";
 import type { McpAuthMode } from "../auth/mcp.js";
-import { DebriefService, type DebriefSession, type MemoryStoreLike } from "../debrief/index.js";
+import { DebriefService, type DebriefSession, type MemoryStoreLike, type TextInference } from "../debrief/index.js";
 import { createDebriefPersistence, type DebriefPersistence } from "../debrief/persistence.js";
 import { createInstructionPlugin, type InstructionPlugin } from "../instructions/index.js";
 import { createMemoryStore, type MemoryContext, type MemoryReadQuery, type MemoryStore, type MemoryWriteInput } from "../memory/index.js";
 import { createDemoPluginRegistry, type DemoPluginContext, type PluginContextInput, type PluginRegistry } from "../plugins/index.js";
 import { handleProxyRequest } from "../proxy/index.js";
+import type { ClaimDueInput, CompleteCallInput, FailCallInput, ScheduleCallInput, ScheduledCallOperations } from "../scheduler/index.js";
+import { createScheduledCallStore } from "../scheduler/index.js";
 import { createTelemetryStore, type TelemetryStore } from "../telemetry/index.js";
 import { VoiceSimulator } from "../voice/index.js";
 
@@ -20,6 +22,8 @@ export interface DemoApp {
   readonly instructions: InstructionPlugin;
   readonly debrief: DebriefService;
   readonly voice: VoiceSimulator;
+  /** Registry-backed scheduled-call operations. The provider seam is owned by the poller. */
+  readonly scheduler: ScheduledCallOperations;
   readonly plugins: PluginRegistry;
   readonly mcpAuthMode: McpAuthMode;
   readonly adminToken: string;
@@ -54,6 +58,7 @@ export async function createDemoApp(options: CreateDemoAppOptions = {}): Promise
   const apps = createAppRegistry({ secret: options.secret ?? "demo-secret-at-least-32-characters-long" });
   const memory = createMemoryStore(client, telemetry);
   const debriefStore = createDebriefPersistence(client);
+  const scheduledCallStore = createScheduledCallStore(client);
   const initialSessions = await debriefStore.loadSessions(orgId, "kit:debrief");
   const instructions = createInstructionPlugin({ kitId: "kit:debrief", context: "prebrief" });
   let plugins!: PluginRegistry;
@@ -127,8 +132,42 @@ export async function createDemoApp(options: CreateDemoAppOptions = {}): Promise
       return instructions.resolve(request, context);
     },
     "kit:debrief": async (input: unknown) => {
-      const request = input as { operation: string; sessionId?: string; goal?: string; correction?: string; outcome?: "confirmed" | "partial"; memoryId?: string };
-      if (request.operation === "prepare") return debrief.prepareDebrief(request.goal ?? "");
+      const request = input as {
+        operation: string;
+        sessionId?: string;
+        goal?: string;
+        company?: string;
+        contactName?: string;
+        location?: string;
+        callbackAt?: string;
+        callbackTimezone?: string;
+        bufferMinutes?: number;
+        correction?: string;
+        outcome?: "confirmed" | "partial";
+        memoryId?: string;
+      };
+      if (request.operation === "prepare") {
+        if (request.company && request.contactName && request.location && request.callbackAt && request.callbackTimezone) {
+          const prepared = await debrief.prepareDebrief({
+            goal: request.goal ?? "",
+            company: request.company,
+            contactName: request.contactName,
+            location: request.location,
+            callbackAt: request.callbackAt,
+            callbackTimezone: request.callbackTimezone,
+            bufferMinutes: request.bufferMinutes,
+          });
+          if ("scheduled_call_at" in prepared && "session_id" in prepared) {
+            await scheduler.schedule({
+              orgId,
+              sessionId: String(prepared.session_id),
+              scheduledAt: String(prepared.scheduled_call_at),
+            });
+          }
+          return prepared;
+        }
+        return debrief.prepareDebrief(request.goal ?? "");
+      }
       if (request.operation === "get_session" && request.sessionId) return debrief.getSession(request.sessionId);
       if (request.operation === "get_debrief" && request.sessionId) return debrief.getDebrief(request.sessionId);
       if (request.operation === "confirm" && request.sessionId) return request.outcome === "partial" ? debrief.markPartial(request.sessionId) : debrief.confirmDebrief(request.sessionId);
@@ -169,9 +208,117 @@ export async function createDemoApp(options: CreateDemoAppOptions = {}): Promise
         upstream: (upstreamRequest) => plugins.dispatch("ai:demo-compatible", { request: upstreamRequest }, contextToPluginInput(context, telemetry)),
       });
     },
+    "scheduler:scheduled-calls": async (input: unknown, context: DemoPluginContext) => {
+      const request = input as {
+        operation: "schedule" | "claim_due" | "complete" | "fail" | "reset";
+        input?: ScheduleCallInput | ClaimDueInput | CompleteCallInput | FailCallInput | { orgId: string };
+      };
+      const persist = <T>(operation: string, run: () => Promise<T>) => plugins.dispatch("persistence:libsql", {
+        operation,
+        run,
+      }, contextToPluginInput(context, telemetry));
+      if (request.operation === "schedule") {
+        return persist("scheduled_call.schedule", () => scheduledCallStore.schedule(request.input as ScheduleCallInput));
+      }
+      if (request.operation === "claim_due") {
+        return persist("scheduled_call.claim_due", () => scheduledCallStore.claimDue(request.input as ClaimDueInput));
+      }
+      if (request.operation === "complete") {
+        return persist("scheduled_call.complete", () => scheduledCallStore.complete(request.input as CompleteCallInput));
+      }
+      if (request.operation === "fail") {
+        return persist("scheduled_call.fail", () => scheduledCallStore.fail(request.input as FailCallInput));
+      }
+      if (request.operation === "reset") {
+        const reset = request.input as { orgId: string };
+        return persist("scheduled_call.reset", () => scheduledCallStore.reset(reset.orgId).then(() => ({ ok: true })));
+      }
+      throw new Error(`Unknown scheduler operation: ${request.operation}`);
+    },
   };
 
   plugins = await createDemoPluginRegistry({ orgId, appId, telemetry, handlers: pluginHandlers });
+  const inferPrebrief: TextInference = async (input) => {
+    const startedAt = Date.now();
+    const request = new Request("http://demo.local/v1/chat/completions", {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({
+        model: "gpt-4o-mini",
+        messages: [{
+          role: "user",
+          content: [
+            "Write a concise sales prebrief from these structured facts.",
+            JSON.stringify({ goal: input.goal, sections: input.sections, memory_count: input.memories.length }),
+          ].join("\n"),
+        }],
+      }),
+    });
+    try {
+      const response = await plugins.dispatch<{ request: Request }, Response>(
+        "ai:demo-compatible",
+        { request },
+        {
+          orgId,
+          appId,
+          sessionId: input.sessionId ?? "prebrief",
+          traceId: input.sessionId ?? "prebrief",
+          telemetry,
+        },
+      );
+      const payload = await response.clone().json() as {
+        choices?: Array<{ message?: { content?: unknown } }>;
+        usage?: { prompt_tokens?: number; completion_tokens?: number; total_tokens?: number };
+      };
+      const usage = payload.usage ?? {};
+      await telemetry.append({
+        id: crypto.randomUUID(),
+        timestamp: new Date().toISOString(),
+        orgId,
+        appId,
+        customerId: input.customer?.customerId ?? null,
+        sessionId: input.sessionId ?? null,
+        traceId: input.sessionId ?? null,
+        channel: "proxy",
+        pluginId: "ai:demo-compatible",
+        kitId: "kit:debrief",
+        type: "inference",
+        operation: "prebrief",
+        model: "gpt-4o-mini",
+        provider: "demo-compatible",
+        requestTokens: usage.prompt_tokens ?? null,
+        responseTokens: usage.completion_tokens ?? null,
+        latencyMs: Date.now() - startedAt,
+        estimatedCostUsd: estimateInferenceCost(usage.prompt_tokens, usage.completion_tokens),
+        outcome: response.ok ? "success" : "error",
+        memoryIds: input.memories.map((memory) => memory.memoryId),
+      });
+      const content = payload.choices?.[0]?.message?.content;
+      return typeof content === "string" ? content : "";
+    } catch (error) {
+      await telemetry.append({
+        id: crypto.randomUUID(),
+        timestamp: new Date().toISOString(),
+        orgId,
+        appId,
+        customerId: input.customer?.customerId ?? null,
+        sessionId: input.sessionId ?? null,
+        traceId: input.sessionId ?? null,
+        channel: "proxy",
+        pluginId: "ai:demo-compatible",
+        kitId: "kit:debrief",
+        type: "inference",
+        operation: "prebrief",
+        model: "gpt-4o-mini",
+        provider: "demo-compatible",
+        latencyMs: Date.now() - startedAt,
+        estimatedCostUsd: 0,
+        outcome: "error",
+        memoryIds: input.memories.map((memory) => memory.memoryId),
+      });
+      throw error;
+    }
+  };
   const persistenceBoundary: DebriefPersistence = {
     loadSessions: (scopeOrgId, kitId) => debriefStore.loadSessions(scopeOrgId, kitId),
     saveSession: (session) => plugins.dispatch("persistence:libsql", {
@@ -210,14 +357,25 @@ export async function createDemoApp(options: CreateDemoAppOptions = {}): Promise
       telemetry,
     }),
   };
-  debrief = new DebriefService(memoryBoundary, instructionBoundary, telemetry, { orgId, appId }, undefined, {
+  debrief = new DebriefService(memoryBoundary, instructionBoundary, telemetry, { orgId, appId }, inferPrebrief, {
     persistence: persistenceBoundary,
     initialSessions,
   });
   voice = new VoiceSimulator({ debrief, telemetry, orgId, appId });
+  const scheduler: ScheduledCallOperations = {
+    schedule: (input) => plugins.dispatch("scheduler:scheduled-calls", { operation: "schedule", input }, schedulerPluginContext(input.orgId, input.sessionId, appId, telemetry)),
+    claimDue: (input) => plugins.dispatch("scheduler:scheduled-calls", { operation: "claim_due", input }, schedulerPluginContext(input.orgId, "scheduler", appId, telemetry)),
+    complete: (input) => plugins.dispatch("scheduler:scheduled-calls", { operation: "complete", input }, schedulerPluginContext(input.orgId, input.scheduledCallId, appId, telemetry)),
+    fail: (input) => plugins.dispatch("scheduler:scheduled-calls", { operation: "fail", input }, schedulerPluginContext(input.orgId, input.scheduledCallId, appId, telemetry)),
+    get: (scopeOrgId, scheduledCallId) => scheduledCallStore.get(scopeOrgId, scheduledCallId),
+    list: (scopeOrgId) => scheduledCallStore.list(scopeOrgId),
+    reset: async (scopeOrgId) => {
+      await plugins.dispatch("scheduler:scheduled-calls", { operation: "reset", input: { orgId: scopeOrgId } }, schedulerPluginContext(scopeOrgId, "demo-reset", appId, telemetry));
+    },
+  };
 
   return {
-    client, orgId, appId, telemetry, apps, memory, instructions, debrief, voice, plugins, mcpAuthMode, adminToken,
+    client, orgId, appId, telemetry, apps, memory, instructions, debrief, voice, scheduler, plugins, mcpAuthMode, adminToken,
     async reset() {
       debrief.clearSessions();
       await plugins.dispatch("memory:default", {
@@ -228,6 +386,7 @@ export async function createDemoApp(options: CreateDemoAppOptions = {}): Promise
         operation: "debrief.reset",
         run: () => debriefStore.reset(orgId, "kit:debrief"),
       }, { orgId, appId, sessionId: "demo-reset", traceId: "demo-reset", telemetry });
+      await scheduler.reset(orgId);
       await telemetry.reset();
     },
     async close() {
@@ -235,6 +394,19 @@ export async function createDemoApp(options: CreateDemoAppOptions = {}): Promise
       client.close();
     },
   };
+}
+
+function schedulerPluginContext(
+  orgId: string,
+  sessionId: string,
+  appId: string | null,
+  telemetry: TelemetryStore,
+): PluginContextInput {
+  return { orgId, appId, sessionId, traceId: sessionId, parentId: null, telemetry };
+}
+
+function estimateInferenceCost(promptTokens?: number, completionTokens?: number): number {
+  return ((promptTokens ?? 0) * 0.15 + (completionTokens ?? 0) * 0.6) / 1_000_000;
 }
 
 function sessionPluginContext(

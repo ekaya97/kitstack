@@ -34,7 +34,9 @@ describe("demo MCP stdio adapter", () => {
     expect(tools.tools.map((tool) => tool.name)).toEqual([
       "prepare_debrief", "get_session", "get_debrief", "confirm_debrief", "teach_from_correction", "approve_memory", "publish_memory", "start_voice_call", "get_voice_status",
     ]);
-    expect(tools.tools[0].inputSchema.required).toEqual(["goal"]);
+    expect(tools.tools[0].inputSchema.required).toEqual([
+      "goal", "company", "contact_name", "location", "callback_at", "callback_timezone",
+    ]);
   });
 
   it("runs a debrief tool call through the shared demo services over stdio", async () => {

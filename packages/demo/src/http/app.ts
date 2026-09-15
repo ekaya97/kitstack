@@ -13,7 +13,19 @@ const MCP_TOOLS = [
   {
     name: "prepare_debrief",
     description: "Prepare a sales debrief using current instructions and approved memories.",
-    inputSchema: { type: "object", properties: { goal: { type: "string" } }, required: ["goal"] },
+    inputSchema: {
+      type: "object",
+      properties: {
+        goal: { type: "string", description: "The outcome to achieve in the sales debrief." },
+        company: { type: "string", description: "The customer company." },
+        contact_name: { type: "string", description: "The customer contact." },
+        location: { type: "string", description: "The meeting or customer location." },
+        callback_at: { type: "string", description: "When the phone should ring: ISO timestamp or HH:mm." },
+        callback_timezone: { type: "string", description: "IANA timezone for callback_at, for example Europe/Berlin." },
+        buffer_minutes: { type: "number", description: "Optional delay after callback_at before starting the call." },
+      },
+      required: ["goal", "company", "contact_name", "location", "callback_at", "callback_timezone"],
+    },
   },
   {
     name: "get_session",
@@ -212,7 +224,24 @@ async function mcp(app: DemoApp, body: Record<string, unknown>): Promise<DemoHtt
   const name = stringField(params, "name");
   const args = params.arguments && typeof params.arguments === "object" ? params.arguments as Record<string, unknown> : {};
   let value: unknown;
-  if (name === "prepare_debrief") value = await kitDispatch(app, { operation: "prepare", goal: stringField(args, "goal") }, args);
+  if (name === "prepare_debrief") {
+    // Keep the local simulator's goal-only shortcut while advertising the
+    // presenter contract above. Claude and the router use the rich branch.
+    const hasPresenterFields = ["company", "contact_name", "location", "callback_at", "callback_timezone", "buffer_minutes"]
+      .some((field) => args[field] !== undefined);
+    value = hasPresenterFields
+      ? await kitDispatch(app, {
+        operation: "prepare",
+        goal: stringField(args, "goal"),
+        company: stringField(args, "company"),
+        contactName: stringField(args, "contact_name"),
+        location: stringField(args, "location"),
+        callbackAt: stringField(args, "callback_at"),
+        callbackTimezone: stringField(args, "callback_timezone"),
+        bufferMinutes: numberField(args, "buffer_minutes", 0),
+      }, args)
+      : await kitDispatch(app, { operation: "prepare", goal: stringField(args, "goal") }, args);
+  }
   else if (name === "get_session") value = await kitDispatch(app, { operation: "get_session", sessionId: stringField(args, "session_id") }, args);
   else if (name === "get_debrief") value = await kitDispatch(app, { operation: "get_debrief", sessionId: stringField(args, "session_id") }, args);
   else if (name === "teach_from_correction") value = await kitDispatch(app, { operation: "teach", sessionId: stringField(args, "session_id"), correction: stringField(args, "correction") }, args);
@@ -266,6 +295,13 @@ function pluginContext(app: DemoApp, request?: DemoAppRouteRequest, sessionId?: 
 function stringField(body: Record<string, unknown> | undefined, name: string, fallback?: string): string {
   const value = body?.[name];
   if (typeof value === "string" && value.trim()) return value;
+  if (fallback !== undefined) return fallback;
+  throw new Error(`${name} is required`);
+}
+
+function numberField(body: Record<string, unknown> | undefined, name: string, fallback?: number): number {
+  const value = body?.[name];
+  if (typeof value === "number" && Number.isFinite(value)) return value;
   if (fallback !== undefined) return fallback;
   throw new Error(`${name} is required`);
 }

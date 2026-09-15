@@ -61,6 +61,78 @@ describe("composed demo HTTP surface", () => {
     expect(notification.status).toBe(204);
   });
 
+  it("generates a presenter-shaped customer prebrief with schedule and AI metadata", async () => {
+    app = await createDemoApp({ url: ":memory:" });
+    const callbackAt = new Date(Date.now() + 30 * 60 * 1000).toISOString();
+    const response = await handleDemoAppRequest(app, {
+      method: "POST", path: "/mcp", body: {
+        id: 11, method: "tools/call", params: {
+          name: "prepare_debrief",
+          arguments: {
+            goal: "Prepare the next sales conversation",
+            company: " Acme   Corp ",
+            contact_name: "Mr John Doe",
+            location: "Köln Café",
+            callback_at: callbackAt,
+            callback_timezone: "Europe/Berlin",
+            buffer_minutes: 5,
+          },
+        },
+      },
+    });
+    expect(response.status).toBe(200);
+    const prepared = JSON.parse(((response.body as any).result.content[0].text)) as Record<string, any>;
+    expect(prepared).toMatchObject({
+      state: "prepared",
+      customer_id: expect.any(String),
+      session_id: expect.any(String),
+      destination_masked: "configured demo destination",
+      kit_view: { kit_id: "debrief", view: "prebrief" },
+      prebrief_sections: {
+        known: ["Company: Acme Corp", "Contact: Mr John Doe", "Location: Köln Café"],
+        last_interaction: "No prior interaction recorded.",
+        open_items: ["No open items recorded."],
+        call_objective: "Prepare the next sales conversation",
+      },
+    });
+    expect(prepared.prebrief).toContain("Acme Corp");
+    expect(Date.parse(prepared.scheduled_call_at)).toBeGreaterThan(Date.parse(prepared.prebrief_ends_at));
+    expect(await app.scheduler.list("org-demo")).toEqual([
+      expect.objectContaining({ sessionId: prepared.session_id, scheduledAt: prepared.scheduled_call_at, status: "scheduled" }),
+    ]);
+    const inference = await app.telemetry.query({ sessionId: prepared.session_id, type: "inference" });
+    expect(inference).toHaveLength(1);
+    expect(inference[0]).toMatchObject({ operation: "prebrief", customerId: prepared.customer_id });
+
+    await app.voice.start(prepared.session_id);
+    await app.voice.advance(prepared.session_id);
+    await app.voice.complete(prepared.session_id, "partial");
+    const learned = await app.debrief.teachFromCorrection(prepared.session_id, "Ask about the implementation timeline.");
+    await app.debrief.approve(prepared.session_id, learned.memoryId);
+    await app.debrief.publish(prepared.session_id, learned.memoryId);
+    await app.debrief.confirmDebrief(prepared.session_id);
+
+    const secondResponse = await handleDemoAppRequest(app, {
+      method: "POST", path: "/mcp", body: {
+        id: 12, method: "tools/call", params: {
+          name: "prepare_debrief",
+          arguments: {
+            goal: "Prepare the next sales conversation",
+            company: "Acme Corp",
+            contact_name: "Mr John Doe",
+            location: "Berlin Office",
+            callback_at: new Date(Date.now() + 35 * 60 * 1000).toISOString(),
+            callback_timezone: "Europe/Berlin",
+          },
+        },
+      },
+    });
+    const second = JSON.parse(((secondResponse.body as any).result.content[0].text)) as Record<string, any>;
+    expect(second.customer_id).toBe(prepared.customer_id);
+    expect(second.prebrief_sections.last_interaction).toBe("Previous debrief was confirmed.");
+    expect(second.prebrief_sections.open_items).toContain("Approved memory: Ask about the implementation timeline.");
+  });
+
   it("supports Claude tool discovery and a two-run route dogfood flow", async () => {
     app = await createDemoApp({ url: ":memory:" });
     const list = await handleDemoAppRequest(app, {
