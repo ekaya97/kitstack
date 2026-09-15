@@ -141,8 +141,6 @@ const CREATE_SCHEMA_SQL = `
     ON telemetry_events (app_id, sequence);
   CREATE INDEX IF NOT EXISTS telemetry_events_session_idx
     ON telemetry_events (session_id, sequence);
-  CREATE INDEX IF NOT EXISTS telemetry_events_customer_idx
-    ON telemetry_events (org_id, customer_id, sequence);
   CREATE INDEX IF NOT EXISTS telemetry_events_parent_idx
     ON telemetry_events (parent_id, sequence);
 `;
@@ -166,6 +164,10 @@ export class TelemetryStore {
       if (!names.has("provider")) await client.execute("ALTER TABLE telemetry_events ADD COLUMN provider TEXT");
       if (!names.has("call_id")) await client.execute("ALTER TABLE telemetry_events ADD COLUMN call_id TEXT");
       if (!names.has("customer_id")) await client.execute("ALTER TABLE telemetry_events ADD COLUMN customer_id TEXT");
+      // Create this index only after the compatibility column migration. Older
+      // production databases predate customer-scoped telemetry.
+      await client.execute(`CREATE INDEX IF NOT EXISTS telemetry_events_customer_idx
+        ON telemetry_events (org_id, customer_id, sequence)`);
     });
   }
 
