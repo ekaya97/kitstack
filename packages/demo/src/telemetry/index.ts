@@ -8,6 +8,7 @@ export const TELEMETRY_EVENT_TYPES = [
   "app.token_issued",
   "mcp.tool_call",
   "plugin.registered",
+  "plugin.invoked",
   "memory.read",
   "memory.write",
   "instruction.served",

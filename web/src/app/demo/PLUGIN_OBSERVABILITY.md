@@ -1,9 +1,10 @@
 # Plugin observability contract
 
-The `/api/demo/observability` endpoint currently returns the existing
-metadata-only `events` and `aggregate` fields. The Plugins view derives its
-registration and activity rows from those events; it does not create or
-persist a second telemetry model.
+The `/api/demo/observability` endpoint returns the existing metadata-only
+`events` and `aggregate` fields plus a registry snapshot. The Plugins view uses
+the snapshot for stable id/kind/version/status labels and the shared events
+for registration and activity counts; it does not create or persist a second
+telemetry model.
 
 The web response type reserves an optional `plugins` field for a future
 backend registry snapshot:
@@ -27,7 +28,7 @@ type ObservabilityResponse = {
 };
 ```
 
-When `plugins` is not returned, the UI uses `plugin.registered` events and
-other events with `pluginId` to calculate registration and activity counts.
-Kind, version, and status remain `Not reported` unless the API supplies those
-fields. No backend changes are part of T-0181.
+When `plugins` is not returned, the UI falls back to `plugin.registered` events
+and other events with `pluginId` to calculate registration and activity
+counts. This keeps the view forward-compatible with hosts that expose only
+the shared telemetry stream.

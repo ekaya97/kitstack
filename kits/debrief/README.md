@@ -71,6 +71,8 @@ npm run typecheck
 npm test
 ```
 
-This slice intentionally does not move the existing demo implementations. It
-defines the stable package boundary so those implementations can be migrated
-and wired as plugins in the next extraction slice.
+The local demo host binds this boundary through its registered persistence,
+memory, instruction, AI, telemetry, trigger, and channel plugins. The kit
+package remains host-agnostic; the concrete wiring lives in
+`packages/demo/src/app/index.ts` so another codebase can replace those
+providers without changing sales policy or tool schemas.

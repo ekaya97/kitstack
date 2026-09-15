@@ -1,10 +1,11 @@
 import { createClient, type Client } from "@libsql/client";
 import { createAppRegistry, type AppRegistry } from "../auth/index.js";
 import type { McpAuthMode } from "../auth/mcp.js";
-import { DebriefService } from "../debrief/index.js";
+import { DebriefService, type MemoryStoreLike } from "../debrief/index.js";
 import { createInstructionPlugin, type InstructionPlugin } from "../instructions/index.js";
-import { createMemoryStore, type MemoryStore } from "../memory/index.js";
-import { createDemoPluginRegistry, type PluginRegistry } from "../plugins/index.js";
+import { createMemoryStore, type MemoryContext, type MemoryReadQuery, type MemoryStore, type MemoryWriteInput } from "../memory/index.js";
+import { createDemoPluginRegistry, type DemoPluginContext, type PluginContextInput, type PluginRegistry } from "../plugins/index.js";
+import { handleProxyRequest } from "../proxy/index.js";
 import { createTelemetryStore, type TelemetryStore } from "../telemetry/index.js";
 import { VoiceSimulator } from "../voice/index.js";
 
@@ -52,15 +53,126 @@ export async function createDemoApp(options: CreateDemoAppOptions = {}): Promise
   const apps = createAppRegistry({ secret: options.secret ?? "demo-secret-at-least-32-characters-long" });
   const memory = createMemoryStore(client, telemetry);
   const instructions = createInstructionPlugin({ kitId: "kit:debrief", context: "prebrief" });
-  const plugins = await createDemoPluginRegistry({ orgId, appId, telemetry });
-  const debrief = new DebriefService(memory, instructions, telemetry, { orgId, appId });
-  const voice = new VoiceSimulator({ debrief, telemetry, orgId, appId });
+  let plugins!: PluginRegistry;
+  let debrief!: DebriefService;
+  let voice!: VoiceSimulator;
+
+  const dispatchContext = (context: MemoryContext): PluginContextInput => ({
+    orgId: context.orgId,
+    appId: context.appId,
+    sessionId: context.sessionId,
+    traceId: context.traceId,
+    parentId: context.parentId,
+    telemetry,
+  });
+
+  const memoryBoundary: MemoryStoreLike = {
+    writeCandidate: (input, context) => plugins.dispatch("memory:default", { operation: "write_candidate", input, context }, dispatchContext(context)),
+    approveCandidate: (memoryId, context) => plugins.dispatch("memory:default", { operation: "approve", memoryId, context }, dispatchContext(context)),
+    publishCandidate: (memoryId, context) => plugins.dispatch("memory:default", { operation: "publish", memoryId, context }, dispatchContext(context)),
+    readRelevant: (query, context) => plugins.dispatch("memory:default", { operation: "read_relevant", query, context }, dispatchContext(context)),
+  };
+
+  const instructionBoundary: InstructionPlugin = {
+    ...instructions,
+    invoke: (request, context) => plugins.dispatch("instructions:debrief-baseline", { request }, {
+      orgId: context.orgId,
+      appId: context.appId,
+      sessionId: context.sessionId,
+      traceId: context.traceId,
+      parentId: context.parentId,
+      telemetry,
+    }),
+    resolve: (request, context) => plugins.dispatch("instructions:debrief-baseline", { request }, {
+      orgId: context.orgId,
+      appId: context.appId,
+      sessionId: context.sessionId,
+      traceId: context.traceId,
+      parentId: context.parentId,
+      telemetry,
+    }),
+  };
+
+  const pluginHandlers = {
+    "persistence:libsql": async (input: unknown) => {
+      const operation = (input as { operation?: string }).operation ?? "health";
+      await client.execute("SELECT 1");
+      return { operation, backend: "libsql", durable: true };
+    },
+    "memory:default": async (input: unknown, context: DemoPluginContext) => {
+      const request = input as { operation: string; input?: MemoryWriteInput; memoryId?: string; query?: MemoryReadQuery; context: MemoryContext };
+      await plugins.dispatch("persistence:libsql", { operation: `memory.${request.operation}` }, contextToPluginInput(context, telemetry));
+      if (request.operation === "write_candidate" && request.input) return memory.writeCandidate(request.input, request.context);
+      if (request.operation === "approve" && request.memoryId) return memory.approveCandidate(request.memoryId, request.context);
+      if (request.operation === "publish" && request.memoryId) return memory.publishCandidate(request.memoryId, request.context);
+      if (request.operation === "read_relevant" && request.query) return memory.readRelevant(request.query, request.context);
+      if (request.operation === "reset") {
+        await memory.reset(request.context);
+        return { ok: true };
+      }
+      throw new Error(`Unknown memory plugin operation: ${request.operation}`);
+    },
+    "instructions:debrief-baseline": async (input: unknown, context: DemoPluginContext) => {
+      const request = (input as { request: Parameters<InstructionPlugin["resolve"]>[0] }).request;
+      return instructions.resolve(request, context);
+    },
+    "kit:debrief": async (input: unknown) => {
+      const request = input as { operation: string; sessionId?: string; goal?: string; correction?: string; outcome?: "confirmed" | "partial"; memoryId?: string };
+      if (request.operation === "prepare") return debrief.prepareDebrief(request.goal ?? "");
+      if (request.operation === "get_session" && request.sessionId) return debrief.getSession(request.sessionId);
+      if (request.operation === "get_debrief" && request.sessionId) return debrief.getDebrief(request.sessionId);
+      if (request.operation === "confirm" && request.sessionId) return request.outcome === "partial" ? debrief.markPartial(request.sessionId) : debrief.confirmDebrief(request.sessionId);
+      if (request.operation === "teach" && request.sessionId && request.correction) return debrief.teachFromCorrection(request.sessionId, request.correction);
+      if (request.operation === "approve" && request.sessionId && request.memoryId) return debrief.approve(request.sessionId, request.memoryId);
+      if (request.operation === "publish" && request.sessionId && request.memoryId) return debrief.publish(request.sessionId, request.memoryId);
+      throw new Error(`Unknown debrief kit operation: ${request.operation}`);
+    },
+    "ai:demo-compatible": async (input: unknown) => {
+      const request = (input as { request: Request }).request;
+      const body = await request.clone().json() as { model?: string };
+      return new Response(JSON.stringify({
+        id: `demo-${crypto.randomUUID()}`,
+        object: "chat.completion",
+        model: body.model ?? "gpt-4o-mini",
+        choices: [{ index: 0, message: { role: "assistant", content: "Demo extraction complete." }, finish_reason: "stop" }],
+        usage: { prompt_tokens: 12, completion_tokens: 6, total_tokens: 18 },
+      }), { status: 200, headers: { "content-type": "application/json" } });
+    },
+    "http:demo-routes": async (input: unknown) => ({ accepted: true, ...(input as Record<string, unknown>) }),
+    "trigger:voice-http": async (input: unknown) => {
+      const request = input as { operation: string; sessionId: string };
+      if (request.operation === "start") return voice.start(request.sessionId);
+      if (request.operation === "complete") return voice.complete(request.sessionId, (input as { outcome: "confirmed" | "partial" }).outcome);
+      throw new Error(`Unknown voice trigger operation: ${request.operation}`);
+    },
+    "channel:voice": async (input: unknown) => {
+      const request = input as { operation: string; sessionId: string };
+      if (request.operation === "status") return voice.status(request.sessionId);
+      if (request.operation === "advance") return voice.advance(request.sessionId);
+      throw new Error(`Unknown voice channel operation: ${request.operation}`);
+    },
+    "proxy:demo-openai-compatible": async (input: unknown, context: DemoPluginContext) => {
+      const request = (input as { request: Request }).request;
+      return handleProxyRequest(request, {
+        registry: apps,
+        telemetry,
+        upstream: (upstreamRequest) => plugins.dispatch("ai:demo-compatible", { request: upstreamRequest }, contextToPluginInput(context, telemetry)),
+      });
+    },
+  };
+
+  plugins = await createDemoPluginRegistry({ orgId, appId, telemetry, handlers: pluginHandlers });
+  debrief = new DebriefService(memoryBoundary, instructionBoundary, telemetry, { orgId, appId });
+  voice = new VoiceSimulator({ debrief, telemetry, orgId, appId });
 
   return {
     client, orgId, appId, telemetry, apps, memory, instructions, debrief, voice, plugins, mcpAuthMode, adminToken,
     async reset() {
       debrief.clearSessions();
-      await memory.reset({ orgId, appId, sessionId: "demo-reset", traceId: "demo-reset", parentId: null, kitId: "kit:debrief" });
+      await plugins.dispatch("memory:default", {
+        operation: "reset",
+        context: { orgId, appId, sessionId: "demo-reset", traceId: "demo-reset", parentId: null, kitId: "kit:debrief" },
+      }, { orgId, appId, sessionId: "demo-reset", traceId: "demo-reset", telemetry });
       await telemetry.reset();
     },
     async close() {
@@ -68,4 +180,11 @@ export async function createDemoApp(options: CreateDemoAppOptions = {}): Promise
       client.close();
     },
   };
+}
+
+function contextToPluginInput(
+  context: { orgId: string; appId: string | null; sessionId: string; traceId: string; parentId: string | null },
+  telemetry: TelemetryStore,
+): PluginContextInput {
+  return { ...context, telemetry };
 }

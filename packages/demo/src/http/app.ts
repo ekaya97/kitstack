@@ -1,9 +1,10 @@
 import type { DemoApp } from "../app/index.js";
 import { authenticateMcpRequest, McpAuthError } from "../auth/mcp.js";
-import { handleProxyRequest } from "../proxy/index.js";
 import type { DemoHttpRequest, DemoHttpResponse } from "./index.js";
 import { handleLiveVoiceStart, type LiveVoiceHttpOptions } from "./voice.js";
 import type { TwilioOpenAIBridge, VoiceWebSocket } from "../voice/realtime.js";
+import type { ProxyResult } from "../proxy/index.js";
+import type { VoiceStatusResult } from "../voice/index.js";
 
 const JSON_HEADERS = { "content-type": "application/json" };
 const MCP_SERVER_INFO = { name: "kitstack-demo", version: "0.1.0" };
@@ -76,6 +77,10 @@ export async function handleDemoAppRequest(
 ): Promise<DemoHttpResponse> {
   const path = request.path.split("?", 1)[0];
   try {
+    await app.plugins.dispatch("http:demo-routes", {
+      method: request.method,
+      path,
+    }, pluginContext(app, request, bodySessionId(request.body)));
     if (request.method === "POST" && path === "/mcp") {
       try {
         await authenticateMcpRequest(new Request("http://demo.local/mcp", {
@@ -89,15 +94,15 @@ export async function handleDemoAppRequest(
     }
     if (request.method === "POST" && path === "/t/voice/start") {
       const sessionId = stringField(request.body, "session_id");
-      return json(200, await app.voice.start(sessionId));
+      return json(200, await app.plugins.dispatch("trigger:voice-http", { operation: "start", sessionId }, pluginContext(app, request, sessionId)));
     }
     if (request.method === "POST" && path === "/t/voice/status") {
       const sessionId = stringField(request.body, "session_id");
-      const current = app.voice.status(sessionId);
+      const current = await app.plugins.dispatch<{ operation: string; sessionId: string }, VoiceStatusResult>("channel:voice", { operation: "status", sessionId }, pluginContext(app, request, sessionId));
       // The simulator's first poll represents completion of its scripted
       // German turns; subsequent polls are read-only.
       return json(200, current.status === "calling"
-        ? await app.voice.advance(sessionId)
+        ? await app.plugins.dispatch<{ operation: string; sessionId: string }, VoiceStatusResult>("channel:voice", { operation: "advance", sessionId }, pluginContext(app, request, sessionId))
         : current);
     }
     if (request.method === "POST" && path === "/t/voice/live/start") {
@@ -146,20 +151,7 @@ export async function handleDemoAppRequest(
         headers: toHeaders(request.headers),
         body: JSON.stringify(request.body ?? {}),
       });
-      const result = await handleProxyRequest(proxyRequest, {
-        registry: app.apps,
-        telemetry: app.telemetry,
-        upstream: async (upstreamRequest) => {
-          const body = await upstreamRequest.clone().json() as { model?: string };
-          return new Response(JSON.stringify({
-            id: `demo-${crypto.randomUUID()}`,
-            object: "chat.completion",
-            model: body.model ?? "gpt-4o-mini",
-            choices: [{ index: 0, message: { role: "assistant", content: "Demo extraction complete." }, finish_reason: "stop" }],
-            usage: { prompt_tokens: 12, completion_tokens: 6, total_tokens: 18 },
-          }), { status: 200, headers: JSON_HEADERS });
-        },
-      });
+      const result = await app.plugins.dispatch<{ request: Request }, ProxyResult>("proxy:demo-openai-compatible", { request: proxyRequest }, pluginContext(app, request, request.body?.session_id as string | undefined));
       return responseFromWeb(result.response);
     }
     if (request.method === "GET" && path === "/api/demo/observability") {
@@ -170,6 +162,12 @@ export async function handleDemoAppRequest(
       return json(200, {
         events,
         aggregate,
+        plugins: app.plugins.list().map((plugin) => ({
+          id: plugin.id,
+          kind: plugin.kind,
+          version: plugin.version,
+          status: "ready",
+        })),
         mcpAuthMode: app.mcpAuthMode,
         ...(liveVoice ? { liveCall: liveVoice.capability } : {}),
       });
@@ -214,23 +212,55 @@ async function mcp(app: DemoApp, body: Record<string, unknown>): Promise<DemoHtt
   const name = stringField(params, "name");
   const args = params.arguments && typeof params.arguments === "object" ? params.arguments as Record<string, unknown> : {};
   let value: unknown;
-  if (name === "prepare_debrief") value = await app.debrief.prepareDebrief(stringField(args, "goal"));
-  else if (name === "get_session") value = app.debrief.getSession(stringField(args, "session_id"));
-  else if (name === "get_debrief") value = app.debrief.getDebrief(stringField(args, "session_id"));
-  else if (name === "teach_from_correction") value = await app.debrief.teachFromCorrection(stringField(args, "session_id"), stringField(args, "correction"));
-  else if (name === "approve_memory") value = await app.debrief.approveMemory({ sessionId: stringField(args, "session_id"), memoryId: stringField(args, "memory_id") });
-  else if (name === "publish_memory") value = await app.debrief.publishMemory({ sessionId: stringField(args, "session_id"), memoryId: stringField(args, "memory_id") });
-  else if (name === "start_voice_call") value = await app.voice.start(stringField(args, "session_id"));
+  if (name === "prepare_debrief") value = await kitDispatch(app, { operation: "prepare", goal: stringField(args, "goal") }, args);
+  else if (name === "get_session") value = await kitDispatch(app, { operation: "get_session", sessionId: stringField(args, "session_id") }, args);
+  else if (name === "get_debrief") value = await kitDispatch(app, { operation: "get_debrief", sessionId: stringField(args, "session_id") }, args);
+  else if (name === "teach_from_correction") value = await kitDispatch(app, { operation: "teach", sessionId: stringField(args, "session_id"), correction: stringField(args, "correction") }, args);
+  else if (name === "approve_memory") value = await kitDispatch(app, { operation: "approve", sessionId: stringField(args, "session_id"), memoryId: stringField(args, "memory_id") }, args);
+  else if (name === "publish_memory") value = await kitDispatch(app, { operation: "publish", sessionId: stringField(args, "session_id"), memoryId: stringField(args, "memory_id") }, args);
+  else if (name === "start_voice_call") value = await app.plugins.dispatch("trigger:voice-http", { operation: "start", sessionId: stringField(args, "session_id") }, pluginContext(app, undefined, stringField(args, "session_id")));
   else if (name === "get_voice_status") {
     const sessionId = stringField(args, "session_id");
-    const current = app.voice.status(sessionId);
-    value = current.status === "calling" ? await app.voice.advance(sessionId) : current;
+    const current = await app.plugins.dispatch<{ operation: string; sessionId: string }, VoiceStatusResult>("channel:voice", { operation: "status", sessionId }, pluginContext(app, undefined, sessionId));
+    value = current.status === "calling" ? await app.plugins.dispatch<{ operation: string; sessionId: string }, VoiceStatusResult>("channel:voice", { operation: "advance", sessionId }, pluginContext(app, undefined, sessionId)) : current;
   }
-  else if (name === "confirm_debrief") value = args.outcome === "partial"
-    ? await app.voice.complete(stringField(args, "session_id"), "partial")
-    : await app.voice.complete(stringField(args, "session_id"), "confirmed");
+  else if (name === "confirm_debrief") {
+    const sessionId = stringField(args, "session_id");
+    value = await app.plugins.dispatch("trigger:voice-http", {
+      operation: "complete",
+      sessionId,
+      outcome: args.outcome === "partial" ? "partial" : "confirmed",
+    }, pluginContext(app, undefined, sessionId));
+  }
   else return json(400, { jsonrpc: "2.0", id: body.id ?? null, error: { code: -32602, message: `Unknown tool ${name}` } });
   return json(200, { jsonrpc: "2.0", id: body.id ?? null, result: { content: [{ type: "text", text: JSON.stringify(value) }] } });
+}
+
+async function kitDispatch(
+  app: DemoApp,
+  input: Record<string, unknown>,
+  args: Record<string, unknown>,
+): Promise<unknown> {
+  const sessionId = typeof input.sessionId === "string" ? input.sessionId : undefined;
+  return app.plugins.dispatch("kit:debrief", input, pluginContext(app, undefined, sessionId ?? (typeof args.session_id === "string" ? args.session_id : undefined)));
+}
+
+function bodySessionId(body: Record<string, unknown> | undefined): string | undefined {
+  return typeof body?.session_id === "string" ? body.session_id : undefined;
+}
+
+function pluginContext(app: DemoApp, request?: DemoAppRouteRequest, sessionId?: string) {
+  const headers = request?.headers ?? {};
+  const read = (name: string) => Object.entries(headers).find(([key]) => key.toLowerCase() === name)?.[1];
+  const stableSessionId = sessionId ?? read("x-session-id") ?? `http-${crypto.randomUUID()}`;
+  return {
+    orgId: app.orgId,
+    appId: app.appId,
+    sessionId: stableSessionId,
+    traceId: read("x-trace-id") ?? stableSessionId,
+    parentId: read("x-parent-id") ?? null,
+    telemetry: app.telemetry,
+  };
 }
 
 function stringField(body: Record<string, unknown> | undefined, name: string, fallback?: string): string {

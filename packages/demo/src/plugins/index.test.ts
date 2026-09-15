@@ -48,7 +48,7 @@ describe("PluginRegistry", () => {
     expect(events).toHaveLength(1);
   });
 
-  it("creates the five concrete demo registrations and no connector", async () => {
+  it("creates the concrete demo capability registrations and no connector", async () => {
     const store = await makeTelemetry();
     const registry = await createDemoPluginRegistry({
       orgId: "org-demo",
@@ -62,17 +62,25 @@ describe("PluginRegistry", () => {
     });
 
     expect(registry.list().map((item) => item.id)).toEqual([
+      "persistence:libsql",
       "kit:debrief",
       "memory:default",
       "instructions:debrief-baseline",
+      "ai:demo-compatible",
+      "http:demo-routes",
       "trigger:voice-http",
+      "channel:voice",
       "proxy:demo-openai-compatible",
     ]);
     expect(registry.list().map((item) => item.kind)).toEqual([
+      "persistence",
       "kit",
       "memory",
       "instructions",
+      "ai",
+      "http",
       "trigger",
+      "channel",
       "proxy",
     ]);
     expect(registry.list().some((item) => item.kind === ("connector" as DemoPlugin["kind"]))).toBe(false);
@@ -91,13 +99,17 @@ describe("PluginRegistry", () => {
     });
 
     const events = await store.query({ type: "plugin.registered" });
-    expect(events).toHaveLength(5);
+    expect(events).toHaveLength(9);
     expect(events.every((event) => event.appId === null)).toBe(true);
     expect(events.map((event) => event.pluginId)).toEqual([
+      "persistence:libsql",
       "kit:debrief",
       "memory:default",
       "instructions:debrief-baseline",
+      "ai:demo-compatible",
+      "http:demo-routes",
       "trigger:voice-http",
+      "channel:voice",
       "proxy:demo-openai-compatible",
     ]);
   });

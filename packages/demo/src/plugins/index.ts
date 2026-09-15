@@ -1,15 +1,28 @@
 import type { TelemetryStore } from "../telemetry/index.js";
 
 export const DEMO_PLUGIN_IDS = [
+  "persistence:libsql",
   "kit:debrief",
   "memory:default",
   "instructions:debrief-baseline",
+  "ai:demo-compatible",
+  "http:demo-routes",
   "trigger:voice-http",
+  "channel:voice",
   "proxy:demo-openai-compatible",
 ] as const;
 
 export type DemoPluginId = (typeof DEMO_PLUGIN_IDS)[number];
-export type DemoPluginKind = "kit" | "memory" | "instructions" | "trigger" | "proxy";
+export type DemoPluginKind =
+  | "persistence"
+  | "kit"
+  | "memory"
+  | "instructions"
+  | "ai"
+  | "http"
+  | "trigger"
+  | "channel"
+  | "proxy";
 
 export interface DemoPlugin<Input = unknown, Output = unknown> {
   readonly id: string;
@@ -126,7 +139,47 @@ export class PluginRegistry {
     }
 
     const pluginContext = createPluginContext(context, this);
-    return plugin.invoke(input, pluginContext) as Output | Promise<Output>;
+    const startedAt = Date.now();
+    try {
+      const output = await plugin.invoke(input, pluginContext) as Output;
+      await this.options.telemetry.append({
+        id: this.options.createEventId(),
+        timestamp: this.options.now(),
+        orgId: context.orgId,
+        appId: context.appId ?? null,
+        sessionId: context.sessionId,
+        parentId: context.parentId ?? null,
+        traceId: context.traceId,
+        channel: channelForPlugin(plugin.kind),
+        pluginId: plugin.id,
+        type: "plugin.invoked",
+        operation: "invoke",
+        latencyMs: Date.now() - startedAt,
+        outcome: "success",
+      });
+      return output;
+    } catch (error) {
+      try {
+        await this.options.telemetry.append({
+          id: this.options.createEventId(),
+          timestamp: this.options.now(),
+          orgId: context.orgId,
+          appId: context.appId ?? null,
+          sessionId: context.sessionId,
+          parentId: context.parentId ?? null,
+          traceId: context.traceId,
+          channel: channelForPlugin(plugin.kind),
+          pluginId: plugin.id,
+          type: "plugin.invoked",
+          operation: "invoke",
+          latencyMs: Date.now() - startedAt,
+          outcome: "error",
+        });
+      } catch {
+        // Preserve the plugin failure if telemetry itself is unavailable.
+      }
+      throw error;
+    }
   }
 }
 
@@ -151,7 +204,7 @@ export interface CreateDemoPluginRegistryOptions extends PluginRegistryOptions {
 }
 
 /**
- * Bootstrap exactly the plugins required by the sales voice demo.
+ * Bootstrap the concrete capability plugins required by the sales voice demo.
  * Connectors intentionally have no registration point in this context.
  */
 export async function createDemoPluginRegistry(
@@ -168,10 +221,14 @@ export function createDemoPlugins(
   handlers: CreateDemoPluginRegistryOptions["handlers"] = {},
 ): DemoPlugin[] {
   return [
+    createPlugin("persistence:libsql", "persistence", handlers["persistence:libsql"]),
     createPlugin("kit:debrief", "kit", handlers["kit:debrief"]),
     createPlugin("memory:default", "memory", handlers["memory:default"]),
     createPlugin("instructions:debrief-baseline", "instructions", handlers["instructions:debrief-baseline"]),
+    createPlugin("ai:demo-compatible", "ai", handlers["ai:demo-compatible"]),
+    createPlugin("http:demo-routes", "http", handlers["http:demo-routes"]),
     createPlugin("trigger:voice-http", "trigger", handlers["trigger:voice-http"]),
+    createPlugin("channel:voice", "channel", handlers["channel:voice"]),
     createPlugin("proxy:demo-openai-compatible", "proxy", handlers["proxy:demo-openai-compatible"]),
   ];
 }
@@ -187,4 +244,10 @@ function createPlugin(
     version: "0.1.0",
     invoke: handler ?? ((input) => input),
   };
+}
+
+function channelForPlugin(kind: DemoPluginKind): "mcp" | "proxy" | "voice" | "trigger" | "system" | "chat" {
+  if (kind === "proxy" || kind === "ai") return "proxy";
+  if (kind === "trigger" || kind === "channel") return "voice";
+  return "system";
 }

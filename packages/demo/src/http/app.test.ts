@@ -122,6 +122,11 @@ describe("composed demo HTTP surface", () => {
       method: "GET", path: "/api/demo/observability", query: { appId: "null" },
     });
     const events = (observability.body as any).events as Array<Record<string, unknown>>;
+    expect((observability.body as any).plugins).toEqual(expect.arrayContaining([
+      expect.objectContaining({ id: "persistence:libsql", kind: "persistence", status: "ready" }),
+      expect.objectContaining({ id: "ai:demo-compatible", kind: "ai", status: "ready" }),
+      expect.objectContaining({ id: "http:demo-routes", kind: "http", status: "ready" }),
+    ]));
     expect(events.some((event) => event.sessionId === first.sessionId && event.memoryIds)).toBe(true);
     expect(events.some((event) => event.sessionId === secondPrepared.sessionId && event.instructionVersions)).toBe(true);
     expect(JSON.stringify(events)).not.toMatch(/transcript|audio|completion/i);

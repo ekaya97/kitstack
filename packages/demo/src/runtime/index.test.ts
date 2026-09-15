@@ -9,18 +9,22 @@ afterEach(async () => {
 });
 
 describe("DemoRuntime", () => {
-  it("bootstraps a dedicated telemetry store and all five demo plugins", async () => {
+  it("bootstraps a dedicated telemetry store and all demo capability plugins", async () => {
     runtime = await createDemoRuntime({ url: ":memory:", orgId: "org-test" });
 
     expect(runtime.orgId).toBe("org-test");
     expect(runtime.plugins.list().map((plugin) => plugin.id)).toEqual([
+      "persistence:libsql",
       "kit:debrief",
       "memory:default",
       "instructions:debrief-baseline",
+      "ai:demo-compatible",
+      "http:demo-routes",
       "trigger:voice-http",
+      "channel:voice",
       "proxy:demo-openai-compatible",
     ]);
-    expect((await runtime.telemetry.query({ type: "plugin.registered" }))).toHaveLength(5);
+    expect((await runtime.telemetry.query({ type: "plugin.registered" }))).toHaveLength(9);
   });
 
   it("creates stable request identity from transport headers and runtime identity", async () => {

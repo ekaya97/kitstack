@@ -163,6 +163,18 @@ describe("T-0158 sales voice demo dogfood", () => {
     expect(observabilityBody.aggregate.totalResponseTokens).toBe(6);
     expect(observabilityBody.aggregate.totalEstimatedCostUsd).toBeGreaterThan(0);
     expect(observabilityBody.aggregate.byChannel.map((dimension) => dimension.key)).toEqual(expect.arrayContaining(["proxy", "voice", "system"]));
+    const invokedPlugins = new Set(observabilityBody.events.filter((event) => event.type === "plugin.invoked").map((event) => event.pluginId));
+    expect([...invokedPlugins]).toEqual(expect.arrayContaining([
+      "http:demo-routes",
+      "kit:debrief",
+      "memory:default",
+      "persistence:libsql",
+      "instructions:debrief-baseline",
+      "trigger:voice-http",
+      "channel:voice",
+      "proxy:demo-openai-compatible",
+      "ai:demo-compatible",
+    ]));
     expect(JSON.stringify(observabilityBody.events)).not.toMatch(/transcript|audio|completion complete/i);
 
     const reset = await request({
@@ -213,6 +225,7 @@ describe("T-0158 sales voice demo dogfood", () => {
 
 interface EventRow {
   type?: string;
+  pluginId?: string | null;
   appId?: string | null;
   sessionId?: string | null;
   parentId?: string | null;
