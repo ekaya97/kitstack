@@ -1,6 +1,8 @@
 import { describe, expect, it, vi } from "vitest";
 import { jwtVerify } from "jose";
 import { platformAdapter } from "../platform-adapter";
+import { readAppResource } from "../app-resources";
+import { DEBRIEF_SHELL_S3_KEY } from "../platform-adapter";
 import type { KitRegistryItem, UserKitDbItem } from "../types";
 
 vi.mock("../tool-dispatcher", () => ({
@@ -38,6 +40,29 @@ function response(body: unknown, status = 200): Response {
 }
 
 describe("platform debrief adapter", () => {
+  it("resolves the published debrief shell from KitAssets without Lambda", async () => {
+    vi.mocked(readAppResource).mockResolvedValueOnce({
+      uri: "ui://kitstack/app",
+      mimeType: "text/html;profile=mcp-app",
+      text: "<!doctype html><html><body>debrief shell</body></html>",
+    });
+    const invokeKitLambda = vi.fn();
+    const adapter = platformAdapter({
+      getAllTools: vi.fn(async () => []),
+      getUserKitDbs: vi.fn(async () => []),
+      invokeKitLambda,
+    });
+
+    await expect(adapter.getShellHtml("debrief")).resolves.toContain("debrief shell");
+    expect(readAppResource).toHaveBeenCalledWith(
+      "ui://kitstack/app",
+      "system",
+      new Set(["debrief"]),
+      DEBRIEF_SHELL_S3_KEY,
+    );
+    expect(invokeKitLambda).not.toHaveBeenCalled();
+  });
+
   it("injects the virtual debrief kit with the current kit contracts", async () => {
     const getAllTools = vi.fn(async () => [existingTool]);
     const getUserKitDbs = vi.fn(async () => [userDb]);

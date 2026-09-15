@@ -69,7 +69,24 @@ same kit operation; the business policy does not move into the transport.
 ```bash
 npm run typecheck
 npm test
+npm run build
 ```
+
+## Publish the View shell
+
+The repeatable production asset step builds the kit with the SDK and uploads
+the shell, View modules, shared CDN chunks, manifest, and Lambda bundle to the
+linked `KitAssets` bucket:
+
+```bash
+npm run publish:assets
+```
+
+The router resolves the debrief shell from the fixed registry-compatible key
+`apps/kits/debrief/shell.html`; the generated shell loads View assets from
+`https://cdn.kitstack.co/apps/kits/debrief/debrief/`. The router's `getCdnUrl()`
+supplies the CDN origin in MCP App CSP metadata. Existing kits continue to use
+their registry-provided shell keys.
 
 The local demo host binds this boundary through its registered persistence,
 memory, instruction, AI, telemetry, trigger, and channel plugins. The kit

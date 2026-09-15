@@ -23,6 +23,8 @@ import { zodToJsonSchema } from "../../../sdk/src/runtime/zod-to-json-schema";
 
 const APP_SHELL_URI = "ui://kitstack/app";
 const DEBRIEF_KIT_ID = "debrief";
+/** Published by kits/debrief/scripts/publish-assets.ts to KitAssets. */
+export const DEBRIEF_SHELL_S3_KEY = "apps/kits/debrief/shell.html";
 const INTERNAL_TOKEN_TTL_SECONDS = 60;
 const VOICE_REQUEST_TIMEOUT_MS = 8_000;
 
@@ -220,10 +222,20 @@ export function platformAdapter(deps: PlatformAdapterDeps): KitServerAdapter {
 
     async getShellHtml(kitId: string): Promise<string> {
       if (kitId === DEBRIEF_KIT_ID) {
-        if (!getDebriefShellHtml) {
+        if (getDebriefShellHtml) {
+          return getDebriefShellHtml();
+        }
+
+        const resource = await readAppResource(
+          APP_SHELL_URI,
+          "system",
+          new Set([DEBRIEF_KIT_ID]),
+          DEBRIEF_SHELL_S3_KEY,
+        );
+        if (!resource?.text) {
           throw new Error("Sales debrief View shell is not published yet (T-0195)");
         }
-        return getDebriefShellHtml();
+        return resource.text;
       }
 
       const shellS3Key = await getKitShellS3Key(kitId);
