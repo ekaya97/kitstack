@@ -17,6 +17,7 @@ export interface MemoryRecord {
   memoryId: string;
   versionId: string;
   orgId: string;
+  customerId: string | null;
   kitId: string;
   sessionId: string | null;
   correction: string;
@@ -36,11 +37,13 @@ export interface MemoryContext {
   traceId: string;
   parentId: string | null;
   kitId: string;
+  customerId?: string | null;
 }
 
 export interface MemoryReadQuery {
   orgId: string;
   kitId: string;
+  customerId?: string;
   sessionId?: string;
   /** Structured context keys that must match when supplied. */
   context?: Record<string, string>;
@@ -62,6 +65,7 @@ const CREATE_SCHEMA_SQL = `
     memory_id TEXT NOT NULL,
     version_id TEXT NOT NULL UNIQUE,
     org_id TEXT NOT NULL,
+    customer_id TEXT,
     kit_id TEXT NOT NULL,
     session_id TEXT,
     correction TEXT NOT NULL,
@@ -77,6 +81,8 @@ const CREATE_SCHEMA_SQL = `
     ON demo_memories (org_id, kit_id, status, created_at, memory_id, version_id);
   CREATE INDEX IF NOT EXISTS demo_memories_session_idx
     ON demo_memories (org_id, kit_id, session_id, status, created_at);
+  CREATE INDEX IF NOT EXISTS demo_memories_customer_idx
+    ON demo_memories (org_id, kit_id, customer_id, status, created_at);
 `;
 
 /**
@@ -103,7 +109,11 @@ export class MemoryStore {
     this.createMemoryId = options.createMemoryId ?? (() => `memory-${crypto.randomUUID()}`);
     this.createVersionId = options.createVersionId ?? (() => `version-${crypto.randomUUID()}`);
     this.createEventId = options.createEventId ?? (() => `evt-${crypto.randomUUID()}`);
-    this.initialized = client.executeMultiple(CREATE_SCHEMA_SQL).then(() => undefined);
+    this.initialized = client.executeMultiple(CREATE_SCHEMA_SQL).then(async () => {
+      const columns = await client.execute("PRAGMA table_info(demo_memories)");
+      const names = new Set(columns.rows.map((row) => String((row as MemoryRow).name)));
+      if (!names.has("customer_id")) await client.execute("ALTER TABLE demo_memories ADD COLUMN customer_id TEXT");
+    });
   }
 
   async writeCandidate(
@@ -118,14 +128,15 @@ export class MemoryStore {
     await this.client.execute({
       sql: `
         INSERT INTO demo_memories (
-          memory_id, version_id, org_id, kit_id, session_id, correction,
+          memory_id, version_id, org_id, customer_id, kit_id, session_id, correction,
           skill, context_json, status, created_at, approved_at, published_at
-        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, 'candidate', ?, NULL, NULL)
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, 'candidate', ?, NULL, NULL)
       `,
       args: [
         memoryId,
         versionId,
         context.orgId,
+        context.customerId ?? null,
         context.kitId,
         context.sessionId,
         input.correction,
@@ -139,6 +150,7 @@ export class MemoryStore {
       memoryId,
       versionId,
       orgId: context.orgId,
+      customerId: context.customerId ?? null,
       kitId: context.kitId,
       sessionId: context.sessionId,
       correction: input.correction,
@@ -170,6 +182,10 @@ export class MemoryStore {
     await this.initialized;
     const clauses = ["org_id = ?", "kit_id = ?", "status IN ('approved', 'published')"];
     const args: InValue[] = [query.orgId, query.kitId];
+    if (query.customerId !== undefined) {
+      clauses.push("customer_id = ?");
+      args.push(query.customerId);
+    }
     if (query.sessionId !== undefined) {
       clauses.push("session_id = ?");
       args.push(query.sessionId);
@@ -245,6 +261,7 @@ export class MemoryStore {
       orgId: context.orgId,
       appId: context.appId,
       sessionId: context.sessionId,
+      customerId: context.customerId ?? null,
       parentId: context.parentId,
       traceId: context.traceId,
       channel: "system",
@@ -264,6 +281,7 @@ export class MemoryStore {
       orgId: context.orgId,
       appId: context.appId,
       sessionId: context.sessionId,
+      customerId: context.customerId ?? null,
       parentId: context.parentId,
       traceId: context.traceId,
       channel: "system",
@@ -310,6 +328,7 @@ function mapMemory(row: MemoryRow): MemoryRecord {
     orgId: stringValue(row.org_id),
     kitId: stringValue(row.kit_id),
     sessionId: nullableString(row.session_id),
+    customerId: nullableString(row.customer_id),
     correction: stringValue(row.correction),
     skill: stringValue(row.skill),
     context: decodeContext(row.context_json),

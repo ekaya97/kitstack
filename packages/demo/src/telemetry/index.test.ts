@@ -101,6 +101,15 @@ describe("TelemetryStore", () => {
     expect((await telemetry.aggregate({ appId: null })).totalEvents).toBe(1);
   });
 
+  it("scopes metadata queries by customer without retaining customer payloads", async () => {
+    const telemetry = await makeStore();
+    await telemetry.append(event({ id: "customer-a", customerId: "customer-1" }));
+    await telemetry.append(event({ id: "customer-b", customerId: "customer-2" }));
+
+    expect((await telemetry.query({ customerId: "customer-1" })).map((item) => item.id)).toEqual(["customer-a"]);
+    expect((await telemetry.query({ orgId: "org-demo", customerId: "customer-2" }))[0]).toMatchObject({ customerId: "customer-2" });
+  });
+
   it("keeps parent-child traces in append order rather than timestamp order", async () => {
     const telemetry = await makeStore();
     await telemetry.append(event({

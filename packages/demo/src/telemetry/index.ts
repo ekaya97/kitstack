@@ -30,6 +30,7 @@ export interface TelemetryEventInput {
   id: string;
   timestamp: string;
   orgId: string;
+  customerId?: string | null;
   /** Boot events can happen before an app token exists. */
   appId: string | null;
   sessionId?: string | null;
@@ -60,6 +61,7 @@ export interface TelemetryEvent extends TelemetryEventInput {
 
 export interface TelemetryQuery {
   orgId?: string;
+  customerId?: string;
   /** `null` explicitly queries boot events without an app token. */
   appId?: string | null;
   sessionId?: string;
@@ -110,6 +112,7 @@ const CREATE_SCHEMA_SQL = `
     id TEXT NOT NULL UNIQUE,
     timestamp TEXT NOT NULL,
     org_id TEXT NOT NULL,
+    customer_id TEXT,
     app_id TEXT,
     session_id TEXT,
     parent_id TEXT,
@@ -136,6 +139,8 @@ const CREATE_SCHEMA_SQL = `
     ON telemetry_events (app_id, sequence);
   CREATE INDEX IF NOT EXISTS telemetry_events_session_idx
     ON telemetry_events (session_id, sequence);
+  CREATE INDEX IF NOT EXISTS telemetry_events_customer_idx
+    ON telemetry_events (org_id, customer_id, sequence);
   CREATE INDEX IF NOT EXISTS telemetry_events_parent_idx
     ON telemetry_events (parent_id, sequence);
 `;
@@ -158,6 +163,7 @@ export class TelemetryStore {
       const names = new Set(columns.rows.map((row) => String((row as Row).name)));
       if (!names.has("provider")) await client.execute("ALTER TABLE telemetry_events ADD COLUMN provider TEXT");
       if (!names.has("call_id")) await client.execute("ALTER TABLE telemetry_events ADD COLUMN call_id TEXT");
+      if (!names.has("customer_id")) await client.execute("ALTER TABLE telemetry_events ADD COLUMN customer_id TEXT");
     });
   }
 
@@ -169,16 +175,17 @@ export class TelemetryStore {
     await this.client.execute({
       sql: `
         INSERT INTO telemetry_events (
-          id, timestamp, org_id, app_id, session_id, parent_id, trace_id,
+          id, timestamp, org_id, customer_id, app_id, session_id, parent_id, trace_id,
           channel, plugin_id, kit_id, type, operation, model, provider, call_id,
           request_tokens, response_tokens, latency_ms, estimated_cost_usd,
           outcome, instruction_versions, memory_ids
-        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
       `,
       args: [
         input.id,
         input.timestamp,
         input.orgId,
+        input.customerId ?? null,
         input.appId,
         input.sessionId ?? null,
         input.parentId ?? null,
@@ -332,6 +339,10 @@ function buildWhere(query: TelemetryQuery): { where: string; args: InValue[] } {
     clauses.push(query.appId === null ? "app_id IS NULL" : "app_id = ?");
     if (query.appId !== null) args.push(query.appId);
   }
+  if (query.customerId !== undefined) {
+    clauses.push("customer_id = ?");
+    args.push(query.customerId);
+  }
   if (query.sessionId !== undefined) {
     clauses.push("session_id = ?");
     args.push(query.sessionId);
@@ -368,6 +379,7 @@ function mapEvent(row: Row): TelemetryEvent {
     id: stringValue(row.id),
     timestamp: stringValue(row.timestamp),
     orgId: stringValue(row.org_id),
+    customerId: nullableString(row.customer_id),
     appId: nullableString(row.app_id),
     sessionId: nullableString(row.session_id),
     parentId: nullableString(row.parent_id),

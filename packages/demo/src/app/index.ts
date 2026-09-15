@@ -1,7 +1,8 @@
 import { createClient, type Client } from "@libsql/client";
 import { createAppRegistry, type AppRegistry } from "../auth/index.js";
 import type { McpAuthMode } from "../auth/mcp.js";
-import { DebriefService, type MemoryStoreLike } from "../debrief/index.js";
+import { DebriefService, type DebriefSession, type MemoryStoreLike } from "../debrief/index.js";
+import { createDebriefPersistence, type DebriefPersistence } from "../debrief/persistence.js";
 import { createInstructionPlugin, type InstructionPlugin } from "../instructions/index.js";
 import { createMemoryStore, type MemoryContext, type MemoryReadQuery, type MemoryStore, type MemoryWriteInput } from "../memory/index.js";
 import { createDemoPluginRegistry, type DemoPluginContext, type PluginContextInput, type PluginRegistry } from "../plugins/index.js";
@@ -52,6 +53,8 @@ export async function createDemoApp(options: CreateDemoAppOptions = {}): Promise
   const telemetry = await createTelemetryStore({ client });
   const apps = createAppRegistry({ secret: options.secret ?? "demo-secret-at-least-32-characters-long" });
   const memory = createMemoryStore(client, telemetry);
+  const debriefStore = createDebriefPersistence(client);
+  const initialSessions = await debriefStore.loadSessions(orgId, "kit:debrief");
   const instructions = createInstructionPlugin({ kitId: "kit:debrief", context: "prebrief" });
   let plugins!: PluginRegistry;
   let debrief!: DebriefService;
@@ -169,7 +172,48 @@ export async function createDemoApp(options: CreateDemoAppOptions = {}): Promise
   };
 
   plugins = await createDemoPluginRegistry({ orgId, appId, telemetry, handlers: pluginHandlers });
-  debrief = new DebriefService(memoryBoundary, instructionBoundary, telemetry, { orgId, appId });
+  const persistenceBoundary: DebriefPersistence = {
+    loadSessions: (scopeOrgId, kitId) => debriefStore.loadSessions(scopeOrgId, kitId),
+    saveSession: (session) => plugins.dispatch("persistence:libsql", {
+      operation: "debrief.session.save",
+      run: () => debriefStore.saveSession(session),
+    }, sessionPluginContext(session, telemetry)),
+    upsertCustomer: (scopeOrgId, identity, scope) => plugins.dispatch("persistence:libsql", {
+      operation: "debrief.customer.upsert",
+      run: () => debriefStore.upsertCustomer(scopeOrgId, identity),
+    }, {
+      orgId: scopeOrgId,
+      appId,
+      sessionId: scope?.sessionId ?? "customer-context",
+      traceId: scope?.traceId ?? scope?.sessionId ?? "customer-context",
+      telemetry,
+    }),
+    getCustomer: (scopeOrgId, customerId) => debriefStore.getCustomer(scopeOrgId, customerId),
+    listCustomerEvents: (scopeOrgId, customerId, kitId) => debriefStore.listCustomerEvents(scopeOrgId, customerId, kitId),
+    appendCustomerEvent: (event) => plugins.dispatch("persistence:libsql", {
+      operation: "debrief.customer_event.append",
+      run: () => debriefStore.appendCustomerEvent(event),
+    }, sessionPluginContext(event, telemetry)),
+    getDraft: (scopeOrgId, sessionId) => debriefStore.getDraft(scopeOrgId, sessionId),
+    saveDraft: (draft) => plugins.dispatch("persistence:libsql", {
+      operation: "debrief.draft.save",
+      run: () => debriefStore.saveDraft(draft),
+    }, sessionPluginContext(draft, telemetry)),
+    reset: (scopeOrgId, kitId) => plugins.dispatch("persistence:libsql", {
+      operation: "debrief.reset",
+      run: () => debriefStore.reset(scopeOrgId, kitId),
+    }, {
+      orgId: scopeOrgId,
+      appId,
+      sessionId: "demo-reset",
+      traceId: "demo-reset",
+      telemetry,
+    }),
+  };
+  debrief = new DebriefService(memoryBoundary, instructionBoundary, telemetry, { orgId, appId }, undefined, {
+    persistence: persistenceBoundary,
+    initialSessions,
+  });
   voice = new VoiceSimulator({ debrief, telemetry, orgId, appId });
 
   return {
@@ -180,12 +224,29 @@ export async function createDemoApp(options: CreateDemoAppOptions = {}): Promise
         operation: "reset",
         context: { orgId, appId, sessionId: "demo-reset", traceId: "demo-reset", parentId: null, kitId: "kit:debrief" },
       }, { orgId, appId, sessionId: "demo-reset", traceId: "demo-reset", telemetry });
+      await plugins.dispatch("persistence:libsql", {
+        operation: "debrief.reset",
+        run: () => debriefStore.reset(orgId, "kit:debrief"),
+      }, { orgId, appId, sessionId: "demo-reset", traceId: "demo-reset", telemetry });
       await telemetry.reset();
     },
     async close() {
       await telemetry.close();
       client.close();
     },
+  };
+}
+
+function sessionPluginContext(
+  value: { orgId: string; appId?: string | null; sessionId: string },
+  telemetry: TelemetryStore,
+): PluginContextInput {
+  return {
+    orgId: value.orgId,
+    appId: value.appId ?? null,
+    sessionId: value.sessionId,
+    traceId: value.sessionId,
+    telemetry,
   };
 }
 
