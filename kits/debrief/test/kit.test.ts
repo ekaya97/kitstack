@@ -17,7 +17,14 @@ describe("debrief kit boundary", () => {
     const prepare = kit.tools.find((tool) => tool.name === "prepare_debrief");
     if (!prepare?.handler) throw new Error("prepare_debrief handler was not registered");
 
-    const result = await prepare.handler({} as never, { goal: "test" }, {
+    const result = await prepare.handler({} as never, {
+      goal: "test",
+      company: "Acme",
+      contact_name: "Jane Doe",
+      location: "Köln Café",
+      callback_at: "22:05",
+      callback_timezone: "Europe/Berlin",
+    }, {
       userId: "test-user",
       kitId: "debrief",
     });

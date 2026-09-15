@@ -1,6 +1,6 @@
 import { defineTool, kit, type KitContext, type KitToolResult } from "@kitstackco/sdk";
 import { z } from "zod";
-import type { DebriefOperations, DebriefToolHandler } from "../contracts";
+import type { DebriefOperations, DebriefToolHandler, PrepareDebriefInput } from "../contracts";
 
 export type DebriefToolName =
   | "prepare_debrief"
@@ -44,7 +44,15 @@ export function createDebriefTools(
     tool(
       "prepare_debrief",
       "Prepare a sales debrief session and earmark the outbound voice call.",
-      z.object({ goal: z.string().min(1).describe("The outcome to achieve in the sales debrief") }),
+      z.object({
+        goal: z.string().min(1).describe("The outcome to achieve in the sales debrief"),
+        company: z.string().min(1).describe("The customer company"),
+        contact_name: z.string().min(1).describe("The customer contact name"),
+        location: z.string().min(1).describe("Where the call or meeting takes place"),
+        callback_at: z.string().min(1).describe("When the phone should ring: ISO timestamp or HH:mm"),
+        callback_timezone: z.string().min(1).describe("IANA timezone for callback_at, for example Europe/Berlin"),
+        buffer_minutes: z.number().int().min(0).max(1440).optional().default(0).describe("Optional scheduling buffer after callback_at"),
+      }),
       handlers,
     ),
     tool(
@@ -89,7 +97,15 @@ export function createDebriefToolHandlers(
 ): Record<DebriefToolName, DebriefToolHandler> {
   return {
     prepare_debrief: async (_db, args, ctx) => kit.json(
-      await operations.prepareDebrief(String(args.goal), ctx),
+      await operations.prepareDebrief({
+        goal: String(args.goal),
+        company: String(args.company),
+        contact_name: String(args.contact_name),
+        location: String(args.location),
+        callback_at: String(args.callback_at),
+        callback_timezone: String(args.callback_timezone),
+        buffer_minutes: typeof args.buffer_minutes === "number" ? args.buffer_minutes : 0,
+      } satisfies PrepareDebriefInput, ctx),
     ),
     get_session: async (_db, args, ctx) => kit.json(
       await operations.getSession(String(args.session_id), ctx),
