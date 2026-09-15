@@ -92,21 +92,19 @@ to one task so its in-process session state remains coherent across the
 prebrief, phone call, and debrief sequence. Telemetry and memory use the
 configured remote libSQL/Turso database.
 
-Create the stage env file from the tracked template. `.env.demo` is ignored by
-Git and is the file to edit for this deployment; do not use the existing
-`.env.eneskaya` or `.env.production` files unless you intentionally want to
-overwrite those stages.
+Use `.env.production` for this deployment. It is ignored by Git and already
+contains the existing KitStack production-stage values; fill in the new demo
+voice keys added at the end of that file. Do not print or commit this file.
 
 ```sh
-cp .env.example .env.demo
-# Edit .env.demo with the Turso, domain, operator, Twilio, and OpenAI values.
-./infra/sync-secrets.sh demo
-npx sst deploy --stage demo
+# Edit .env.production with the Turso, domain, operator, Twilio, and OpenAI values.
+./infra/sync-secrets.sh production
+npx sst deploy --stage production
 ```
 
-The sync script reads the same `.env.demo` file and only updates keys present
+The sync script reads the same `.env.production` file and only updates keys present
 in it. Empty values intentionally clear a secret; missing keys are skipped.
-Use `./infra/sync-secrets.sh demo .env.demo --clear-missing` only when you
+Use `./infra/sync-secrets.sh production .env.production --clear-missing` only when you
 explicitly want absent keys cleared.
 
 The service domain must be hosted in Route 53 (or replace the SST domain
