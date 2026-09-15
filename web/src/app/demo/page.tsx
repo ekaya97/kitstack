@@ -2,7 +2,7 @@
 
 import { FormEvent, useCallback, useEffect, useMemo, useState } from "react";
 
-type Tab = "apps" | "usage" | "trace";
+type Tab = "overview" | "apps" | "usage" | "trace";
 type Event = {
   id: string;
   timestamp: string;
@@ -35,10 +35,12 @@ type Aggregate = {
   errorCount: number;
 };
 type App = { id: string; name: string; org: string; scopes: string[]; createdAt: string; token?: string; expiresAt?: string };
+type ObservabilityResponse = { events?: Event[]; aggregate?: Aggregate; mcpAuthMode?: string; authMode?: string };
 
 const API = process.env.NEXT_PUBLIC_DEMO_API_URL || "http://localhost:3001";
 const ADMIN_TOKEN = process.env.NEXT_PUBLIC_DEMO_ADMIN_TOKEN || "demo-admin-token";
 const tabs: { id: Tab; label: string }[] = [
+  { id: "overview", label: "Overview" },
   { id: "apps", label: "Apps" },
   { id: "usage", label: "Usage" },
   { id: "trace", label: "Session Trace" },
@@ -51,30 +53,40 @@ export default function DemoPage() {
   const [apps, setApps] = useState<App[]>([]);
   const [selectedSession, setSelectedSession] = useState("");
   const [loading, setLoading] = useState(true);
+  const [refreshing, setRefreshing] = useState(false);
   const [error, setError] = useState("");
   const [notice, setNotice] = useState("");
+  const [authLabel, setAuthLabel] = useState("MCP auth mode not reported");
 
-  const load = useCallback(async () => {
-    setLoading(true);
+  const load = useCallback(async (initial = false) => {
+    if (initial) setLoading(true);
+    else setRefreshing(true);
     setError("");
     try {
       const response = await fetch(`${API}/api/demo/observability?limit=1000`);
       if (!response.ok) throw new Error(`Observability request failed (${response.status})`);
-      const data = await response.json() as { events?: Event[]; aggregate?: Aggregate };
+      const data = await response.json() as ObservabilityResponse;
       setEvents(data.events ?? []);
       setAggregate(data.aggregate ?? null);
-      if (!selectedSession && data.events?.length) {
-        const first = data.events.find((event) => event.sessionId)?.sessionId;
-        if (first) setSelectedSession(first);
+      const first = data.events?.find((event) => event.sessionId)?.sessionId;
+      if (first) setSelectedSession((current) => current || first);
+      const reportedAuthMode = data.mcpAuthMode ?? data.authMode;
+      if (typeof reportedAuthMode === "string" && reportedAuthMode.trim()) {
+        setAuthLabel(formatAuthLabel(reportedAuthMode));
       }
     } catch (cause) {
       setError(cause instanceof Error ? cause.message : "Could not connect to the demo API.");
     } finally {
-      setLoading(false);
+      if (initial) setLoading(false);
+      else setRefreshing(false);
     }
-  }, [selectedSession]);
+  }, []);
 
-  useEffect(() => { void load(); }, [load]);
+  useEffect(() => {
+    void load(true);
+    const interval = window.setInterval(() => { void load(); }, 5000);
+    return () => window.clearInterval(interval);
+  }, [load]);
 
   async function reset() {
     if (!window.confirm("Clear demo sessions, memory, and telemetry?")) return;
@@ -101,26 +113,68 @@ export default function DemoPage() {
             <h1 className="mt-2 font-serif text-[38px] leading-none tracking-tight">Developer observability</h1>
             <p className="mt-2 max-w-xl text-[14px] text-ks-muted">Watch the debrief agent learn across a prebrief, voice call, and replay.</p>
           </div>
-          <button onClick={reset} className="ks-btn !px-4 !py-2 !text-[12px]">Reset demo</button>
+          <div className="flex flex-wrap gap-2">
+            <button onClick={() => void load()} disabled={refreshing} className="ks-btn !px-4 !py-2 !text-[12px]">{refreshing ? "Refreshing…" : "Refresh"}</button>
+            <button onClick={reset} className="ks-btn !px-4 !py-2 !text-[12px]">Reset demo</button>
+          </div>
         </header>
 
         <div className="mb-5 flex flex-wrap items-center gap-2">
           {tabs.map((item) => <button key={item.id} onClick={() => setTab(item.id)} className={`ks-btn !rounded-lg !px-3 !py-2 !text-[12px] ${tab === item.id ? "!border-ks-ink !bg-ks-ink !text-white" : ""}`}>{item.label}</button>)}
-          <span className="ml-auto font-mono text-[10px] text-ks-muted">API {API}</span>
+          <span className="ml-auto font-mono text-[10px] text-ks-muted">{authLabel} · API {API}</span>
         </div>
 
         <div className="mb-6 rounded-xl border border-ks-accent/30 bg-ks-accent-soft px-4 py-3 text-[12px] text-ks-accent-deep">
-          Demo access defaults to auth-none for loopback. For a tunnel, run the API with app-token mode and configure the matching admin token; never use this surface with production data or real secrets.
+          Demo access: <strong>{authLabel}</strong>. For a tunnel, run the API with app-token mode and configure the matching admin token; never use this surface with production data or real secrets.
         </div>
         {notice && <div className="mb-4 rounded-lg border border-green-200 bg-green-50 px-4 py-3 text-[12px] text-green-800">{notice}</div>}
         {error && <div role="alert" className="mb-4 rounded-lg border border-red-200 bg-red-50 px-4 py-3 text-[12px] text-red-800">{error} <button className="ml-2 underline" onClick={() => void load()}>Retry</button></div>}
-        {loading ? <Loading /> : tab === "apps" ? <AppsView apps={apps} events={events} setApps={setApps} /> : tab === "usage" ? <UsageView events={events} aggregate={aggregate} /> : <TraceView events={events} sessions={sessions} selectedSession={selectedSession} setSelectedSession={setSelectedSession} />}
+        {loading ? <Loading /> : tab === "overview" ? <OverviewView events={events} aggregate={aggregate} /> : tab === "apps" ? <AppsView apps={apps} events={events} setApps={setApps} authLabel={authLabel} /> : tab === "usage" ? <UsageView events={events} aggregate={aggregate} /> : <TraceView events={events} sessions={sessions} selectedSession={selectedSession} setSelectedSession={setSelectedSession} />}
       </div>
     </main>
   );
 }
 
-function AppsView({ apps, events, setApps }: { apps: App[]; events: Event[]; setApps: (apps: App[]) => void }) {
+function OverviewView({ events, aggregate }: { events: Event[]; aggregate: Aggregate | null }) {
+  const sessions = new Set(events.map((event) => event.sessionId).filter(Boolean));
+  const memoryReferences = events.reduce((count, event) => count + (event.memoryIds?.length ?? 0), 0);
+  const instructionReferences = events.reduce((count, event) => count + (event.instructionVersions?.length ?? 0), 0);
+  const voiceCalls = new Set(events.filter((event) => event.channel === "voice" && event.sessionId).map((event) => event.sessionId)).size;
+  const errors = aggregate?.errorCount ?? events.filter((event) => event.outcome === "error").length;
+  const cost = aggregate?.totalEstimatedCostUsd ?? events.reduce((total, event) => total + (event.estimatedCostUsd ?? 0), 0);
+
+  return <section>
+    <div className="mb-5 grid grid-cols-2 gap-3 lg:grid-cols-6">
+      <Metric label="Sessions" value={sessions.size} />
+      <Metric label="Memory refs" value={memoryReferences} />
+      <Metric label="Instruction refs" value={instructionReferences} />
+      <Metric label="Voice calls" value={voiceCalls} />
+      <Metric label="Estimated cost" value={`$${cost.toFixed(4)}`} />
+      <Metric label="Errors" value={errors} />
+    </div>
+    <div className="grid gap-5 lg:grid-cols-[1.2fr_0.8fr]">
+      <div className="ks-card p-5">
+        <h2 className="font-serif text-[24px]">Demo run health</h2>
+        <p className="mt-1 text-[12px] text-ks-muted">A quick read on whether the prebrief → voice call → replay loop is producing observable evidence.</p>
+        <div className="mt-5 grid gap-3 text-[12px] sm:grid-cols-3">
+          <Status label="Telemetry" value={events.length ? "Receiving events" : "Waiting for events"} healthy={Boolean(events.length)} />
+          <Status label="Memory / instructions" value={memoryReferences || instructionReferences ? "References captured" : "No references yet"} healthy={Boolean(memoryReferences || instructionReferences)} />
+          <Status label="Outcome" value={errors ? `${errors} error${errors === 1 ? "" : "s"}` : "No errors"} healthy={!errors} />
+        </div>
+      </div>
+      <div className="ks-card p-5">
+        <h2 className="font-serif text-[24px]">Presenter flow</h2>
+        <ol className="mt-3 space-y-2 text-[12px] text-ks-muted">
+          <li><span className="font-mono text-ks-accent">01</span> Register the caller app and issue its token in Apps.</li>
+          <li><span className="font-mono text-ks-accent">02</span> Run the prebrief and debrief tools from the connected MCP client.</li>
+          <li><span className="font-mono text-ks-accent">03</span> Return here to watch cost, references, and the session trace update.</li>
+        </ol>
+      </div>
+    </div>
+  </section>;
+}
+
+function AppsView({ apps, events, setApps, authLabel }: { apps: App[]; events: Event[]; setApps: (apps: App[]) => void; authLabel: string }) {
   const [name, setName] = useState("Sales voice demo");
   const [scopes, setScopes] = useState("inference, mcp");
   const [busy, setBusy] = useState(false);
@@ -140,13 +194,13 @@ function AppsView({ apps, events, setApps }: { apps: App[]; events: Event[]; set
   }
   return <section className="grid gap-5 lg:grid-cols-[300px_1fr]">
     <form onSubmit={register} className="ks-card h-fit p-5"><h2 className="font-serif text-[24px]">Register an app</h2><p className="mt-1 mb-4 text-[12px] text-ks-muted">Issue a short-lived developer token for the demo proxy.</p><label className="mb-3 block text-[11px] text-ks-muted">Name<input className="ks-input mt-1" value={name} onChange={(event) => setName(event.target.value)} /></label><label className="mb-4 block text-[11px] text-ks-muted">Scopes<input className="ks-input mt-1" value={scopes} onChange={(event) => setScopes(event.target.value)} /></label>{error && <p className="mb-3 text-[11px] text-red-700">{error}</p>}<button disabled={busy} className="ks-btn ks-btn-primary w-full justify-center !py-2 !text-[12px]">{busy ? "Registering…" : "Register + issue token"}</button></form>
-    <div className="space-y-3">{apps.length === 0 ? <Empty title="No apps in this browser session" detail="Register the app Claude or your local caller will use." /> : apps.map((app) => <AppCard key={app.id} app={app} eventCount={events.filter((event) => event.appId === app.id).length} />)}</div>
+    <div className="space-y-3">{apps.length === 0 ? <Empty title="No apps in this browser session" detail="Register the app Claude or your local caller will use." /> : apps.map((app) => <AppCard key={app.id} app={app} eventCount={events.filter((event) => event.appId === app.id).length} authLabel={authLabel} />)}</div>
   </section>;
 }
 
-function AppCard({ app, eventCount }: { app: App; eventCount: number }) {
+function AppCard({ app, eventCount, authLabel }: { app: App; eventCount: number; authLabel: string }) {
   const [revealed, setRevealed] = useState(false);
-  return <article className="ks-card p-5"><div className="flex flex-wrap justify-between gap-3"><div><h3 className="font-sans text-[15px] font-semibold">{app.name}</h3><p className="font-mono text-[10px] text-ks-muted">{app.id} · {app.org}</p></div><span className="ks-chip ks-chip-soft">auth-none demo</span></div><div className="mt-4 grid gap-3 text-[12px] sm:grid-cols-3"><div><div className="text-ks-muted">Scopes</div><div className="mt-1 flex flex-wrap gap-1">{app.scopes.map((scope) => <span key={scope} className="ks-chip !text-[10px]">{scope}</span>)}</div></div><div><div className="text-ks-muted">Token expires</div><div className="mt-1 font-mono text-[11px]">{app.expiresAt ? new Date(app.expiresAt).toLocaleString() : "—"}</div></div><div><div className="text-ks-muted">Events</div><div className="mt-1 font-mono">{eventCount}</div></div></div>{app.token && <div className="mt-4 rounded-lg bg-ks-paper-warm p-3"><div className="mb-2 text-[11px] text-ks-muted">Token shown only here; it is not stored in localStorage.</div><code className="block break-all font-mono text-[10px]">{revealed ? app.token : `${app.token.slice(0, 12)}••••••••••••`}</code><button onClick={() => setRevealed(!revealed)} className="mt-2 text-[11px] text-ks-accent underline">{revealed ? "Mask token" : "Reveal token once"}</button></div>}</article>;
+  return <article className="ks-card p-5"><div className="flex flex-wrap justify-between gap-3"><div><h3 className="font-sans text-[15px] font-semibold">{app.name}</h3><p className="font-mono text-[10px] text-ks-muted">{app.id} · {app.org}</p></div><span className="ks-chip ks-chip-soft">{authLabel}</span></div><div className="mt-4 grid gap-3 text-[12px] sm:grid-cols-3"><div><div className="text-ks-muted">Scopes</div><div className="mt-1 flex flex-wrap gap-1">{app.scopes.map((scope) => <span key={scope} className="ks-chip !text-[10px]">{scope}</span>)}</div></div><div><div className="text-ks-muted">Token expires</div><div className="mt-1 font-mono text-[11px]">{app.expiresAt ? new Date(app.expiresAt).toLocaleString() : "—"}</div></div><div><div className="text-ks-muted">Events</div><div className="mt-1 font-mono">{eventCount}</div></div></div>{app.token && <div className="mt-4 rounded-lg bg-ks-paper-warm p-3"><div className="mb-2 text-[11px] text-ks-muted">Token shown only here; it is not stored in localStorage.</div><code className="block break-all font-mono text-[10px]">{revealed ? app.token : `${app.token.slice(0, 12)}••••••••••••`}</code><button onClick={() => setRevealed(!revealed)} className="mt-2 text-[11px] text-ks-accent underline">{revealed ? "Mask token" : "Reveal token once"}</button></div>}</article>;
 }
 
 function UsageView({ events, aggregate }: { events: Event[]; aggregate: Aggregate | null }) {
@@ -169,5 +223,7 @@ function TraceView({ events, sessions, selectedSession, setSelectedSession }: { 
 }
 
 function Metric({ label, value }: { label: string; value: string | number }) { return <div className="ks-card p-4"><div className="font-mono text-[10px] uppercase tracking-wider text-ks-muted">{label}</div><div className="mt-1 font-serif text-[25px]">{value}</div></div>; }
+function Status({ label, value, healthy }: { label: string; value: string; healthy: boolean }) { return <div className="rounded-lg border border-ks-hair p-3"><div className="flex items-center gap-2 text-ks-muted"><span className={`h-2 w-2 rounded-full ${healthy ? "bg-green-500" : "bg-amber-500"}`} />{label}</div><div className="mt-1 font-medium">{value}</div></div>; }
+function formatAuthLabel(mode: string) { return `MCP ${mode === "auth-none" ? "auth-none (loopback)" : mode}`; }
 function Loading() { return <div className="flex items-center justify-center py-24"><div className="h-6 w-6 animate-spin rounded-full border-2 border-ks-hair border-t-ks-accent" /></div>; }
 function Empty({ title, detail }: { title: string; detail: string }) { return <div className="ks-card p-10 text-center"><h2 className="font-serif text-[24px]">{title}</h2><p className="mt-1 text-[12px] text-ks-muted">{detail}</p></div>; }
