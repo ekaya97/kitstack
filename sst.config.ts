@@ -6,9 +6,15 @@ export default $config({
       removal: input?.stage === "production" ? "retain" : "remove",
       home: "aws",
       providers: {
+        // Prefer explicitly exported short-lived credentials (for example
+        // from `aws configure export-credentials`) over a profile. Pulumi's
+        // profile option otherwise refreshes an expired SSO cache even when
+        // valid AWS_ACCESS_KEY_ID/AWS_SESSION_TOKEN values are present.
         aws: {
-          profile: process.env.AWS_PROFILE || "enkaprojects",
           region: "eu-central-1",
+          ...(process.env.AWS_ACCESS_KEY_ID && process.env.AWS_SECRET_ACCESS_KEY
+            ? {}
+            : { profile: process.env.AWS_PROFILE || "enkaprojects" }),
         },
       },
     };
