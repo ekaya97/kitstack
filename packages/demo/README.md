@@ -28,12 +28,15 @@ Open `/demo` in the web app. Set `NEXT_PUBLIC_DEMO_API_URL` when the server is
 not on the default port. The demo database defaults to `.kitstack/demo.db`.
 
 The `/demo` page is the KitStack control-plane dashboard for this unreleased
-demo. Use `Overview` for presenter metrics, `Apps` for registration and token
-issuance, `Usage` for per-app cost/latency/outcomes, and `Session Trace` for
-the prebrief → voice → feedback event chain. It refreshes automatically while
-Claude is calling the MCP tools. The authenticated product dashboard links to
-this surface as `Demo control plane`; the older marketplace/admin dashboards
-are not wired to this local telemetry store.
+demo. Use `Runtime / Registry` for kits, plugins, app/customer/session links,
+scheduler jobs, and provider health. Use `Usage / Observability / FinOps` for
+app/kit/plugin/customer/session/time filters, proxy/AI usage, cost/latency
+rollups, memory/instruction references, and the metadata-only trace. The
+existing `Overview`, `Apps`, `Plugins`, `Usage`, and `Session Trace` tabs remain
+available. It refreshes automatically while Claude is calling the MCP tools.
+The authenticated product dashboard links to this surface as `Demo control
+plane`; the older marketplace/admin dashboards are not wired to this local
+telemetry store.
 
 For a local process MCP client, use the standard stdio harness instead of the
 HTTP server:
@@ -64,7 +67,9 @@ Claude Code-style local discovery.
 
 The process uses the same `DemoApp` debrief, instruction, memory, telemetry,
 and simulator services as the HTTP demo route. A supplied app/runtime remains
-the test seam; no auth behavior is changed by this adapter.
+the test seam; no auth behavior is changed by this adapter. The interactive
+prebrief, confirmation, and customer-timeline Views are exposed by the HTTP
+MCP/router path; stdio currently provides the tool-only local harness.
 
 For Claude, add a custom MCP connector pointing at the public HTTPS tunnel's
 `/mcp` endpoint. Local HTTP defaults to auth-none. Before exposing a tunnel,
