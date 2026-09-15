@@ -1,15 +1,48 @@
 import type { DemoApp } from "../app/index.js";
+import { authenticateMcpRequest, McpAuthError } from "../auth/mcp.js";
 import { handleProxyRequest } from "../proxy/index.js";
 import type { DemoHttpRequest, DemoHttpResponse } from "./index.js";
 
-const TOOLS = [
-  "prepare_debrief",
-  "get_session",
-  "get_debrief",
-  "confirm_debrief",
-  "teach_from_correction",
-] as const;
 const JSON_HEADERS = { "content-type": "application/json" };
+const MCP_SERVER_INFO = { name: "kitstack-demo", version: "0.1.0" };
+const MCP_PROTOCOL_VERSION = "2025-11-25";
+const MCP_TOOLS = [
+  {
+    name: "prepare_debrief",
+    description: "Prepare a sales debrief using current instructions and approved memories.",
+    inputSchema: { type: "object", properties: { goal: { type: "string" } }, required: ["goal"] },
+  },
+  {
+    name: "get_session",
+    description: "Read the complete state of a prepared debrief session.",
+    inputSchema: { type: "object", properties: { session_id: { type: "string" } }, required: ["session_id"] },
+  },
+  {
+    name: "get_debrief",
+    description: "Read the compact status summary for a debrief session.",
+    inputSchema: { type: "object", properties: { session_id: { type: "string" } }, required: ["session_id"] },
+  },
+  {
+    name: "confirm_debrief",
+    description: "Confirm a completed debrief, or record a partial outcome.",
+    inputSchema: { type: "object", properties: { session_id: { type: "string" }, outcome: { type: "string", enum: ["confirmed", "partial"] } }, required: ["session_id", "outcome"] },
+  },
+  {
+    name: "teach_from_correction",
+    description: "Store operator feedback as a candidate memory for a later run.",
+    inputSchema: { type: "object", properties: { session_id: { type: "string" }, correction: { type: "string" } }, required: ["session_id", "correction"] },
+  },
+  {
+    name: "approve_memory",
+    description: "Approve a candidate memory taught during this debrief.",
+    inputSchema: { type: "object", properties: { session_id: { type: "string" }, memory_id: { type: "string" } }, required: ["session_id", "memory_id"] },
+  },
+  {
+    name: "publish_memory",
+    description: "Publish an approved memory so a later debrief can retrieve it.",
+    inputSchema: { type: "object", properties: { session_id: { type: "string" }, memory_id: { type: "string" } }, required: ["session_id", "memory_id"] },
+  },
+] as const;
 
 export interface DemoAppRouteRequest extends DemoHttpRequest {
   body?: Record<string, unknown>;
@@ -22,7 +55,17 @@ export async function handleDemoAppRequest(
 ): Promise<DemoHttpResponse> {
   const path = request.path.split("?", 1)[0];
   try {
-    if (request.method === "POST" && path === "/mcp") return mcp(app, request.body ?? {});
+    if (request.method === "POST" && path === "/mcp") {
+      try {
+        await authenticateMcpRequest(new Request("http://demo.local/mcp", {
+          method: "POST",
+          headers: toHeaders(request.headers),
+        }), { mode: app.mcpAuthMode, registry: app.apps });
+      } catch (error) {
+        return mcpAuthResponse(error);
+      }
+      return mcp(app, request.body ?? {});
+    }
     if (request.method === "POST" && path === "/t/voice/start") {
       const sessionId = stringField(request.body, "session_id");
       return json(200, await app.voice.start(sessionId));
@@ -112,9 +155,18 @@ export async function handleDemoAppRequest(
 
 async function mcp(app: DemoApp, body: Record<string, unknown>): Promise<DemoHttpResponse> {
   const method = typeof body.method === "string" ? body.method : "tools/list";
+  if (method === "initialize") {
+    return json(200, { jsonrpc: "2.0", id: body.id ?? null, result: {
+      protocolVersion: MCP_PROTOCOL_VERSION,
+      capabilities: { tools: {} },
+      serverInfo: MCP_SERVER_INFO,
+    } });
+  }
+  if (method === "notifications/initialized") return { status: 204, headers: {}, body: null };
+  if (method === "ping") return json(200, { jsonrpc: "2.0", id: body.id ?? null, result: {} });
   if (method === "tools/list") {
     return json(200, { jsonrpc: "2.0", id: body.id ?? null, result: {
-      tools: TOOLS.map((name) => ({ name, description: `Debrief tool ${name}`, inputSchema: { type: "object" } })),
+      tools: MCP_TOOLS,
     } });
   }
   if (method !== "tools/call") return json(400, { jsonrpc: "2.0", id: body.id ?? null, error: { code: -32601, message: "Method not found" } });
@@ -126,6 +178,8 @@ async function mcp(app: DemoApp, body: Record<string, unknown>): Promise<DemoHtt
   else if (name === "get_session") value = app.debrief.getSession(stringField(args, "session_id"));
   else if (name === "get_debrief") value = app.debrief.getDebrief(stringField(args, "session_id"));
   else if (name === "teach_from_correction") value = await app.debrief.teachFromCorrection(stringField(args, "session_id"), stringField(args, "correction"));
+  else if (name === "approve_memory") value = await app.debrief.approveMemory({ sessionId: stringField(args, "session_id"), memoryId: stringField(args, "memory_id") });
+  else if (name === "publish_memory") value = await app.debrief.publishMemory({ sessionId: stringField(args, "session_id"), memoryId: stringField(args, "memory_id") });
   else if (name === "confirm_debrief") value = args.outcome === "partial"
     ? await app.debrief.markPartial(stringField(args, "session_id"))
     : await app.debrief.confirmDebrief(stringField(args, "session_id"));
@@ -164,6 +218,16 @@ function query(values: DemoHttpRequest["query"]): { appId?: string | null; sessi
 }
 
 function json<T>(status: number, body: T): DemoHttpResponse<T> { return { status, headers: JSON_HEADERS, body }; }
+
+function mcpAuthResponse(error: unknown): DemoHttpResponse {
+  if (!(error instanceof McpAuthError)) return json(500, { error: "mcp_auth_misconfigured" });
+  const status = error.code === "insufficient_scope" ? 403 : error.code === "misconfigured" ? 500 : 401;
+  return {
+    status,
+    headers: status === 401 ? { ...JSON_HEADERS, "www-authenticate": "Bearer" } : JSON_HEADERS,
+    body: { error: error.code, message: error.message },
+  };
+}
 
 async function responseFromWeb(response: Response): Promise<DemoHttpResponse> {
   let body: unknown;

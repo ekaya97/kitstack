@@ -1,5 +1,6 @@
 import { createClient, type Client } from "@libsql/client";
 import { createAppRegistry, type AppRegistry } from "../auth/index.js";
+import type { McpAuthMode } from "../auth/mcp.js";
 import { DebriefService } from "../debrief/index.js";
 import { createInstructionPlugin, type InstructionPlugin } from "../instructions/index.js";
 import { createMemoryStore, type MemoryStore } from "../memory/index.js";
@@ -18,6 +19,7 @@ export interface DemoApp {
   readonly debrief: DebriefService;
   readonly voice: VoiceSimulator;
   readonly plugins: PluginRegistry;
+  readonly mcpAuthMode: McpAuthMode;
   reset(): Promise<void>;
   close(): Promise<void>;
 }
@@ -27,11 +29,14 @@ export interface CreateDemoAppOptions {
   orgId?: string;
   appId?: string | null;
   secret?: string;
+  /** Explicit MCP auth mode. Defaults to none for loopback-only development. */
+  mcpAuthMode?: McpAuthMode;
 }
 
 export async function createDemoApp(options: CreateDemoAppOptions = {}): Promise<DemoApp> {
   const orgId = options.orgId ?? "org-demo";
   const appId = options.appId ?? null;
+  const mcpAuthMode = options.mcpAuthMode ?? "none";
   const client = createClient({ url: options.url ?? ":memory:" });
   const telemetry = await createTelemetryStore({ client });
   const apps = createAppRegistry({ secret: options.secret ?? "demo-secret-at-least-32-characters-long" });
@@ -42,7 +47,7 @@ export async function createDemoApp(options: CreateDemoAppOptions = {}): Promise
   const voice = new VoiceSimulator({ debrief, telemetry, orgId, appId });
 
   return {
-    client, orgId, appId, telemetry, apps, memory, instructions, debrief, voice, plugins,
+    client, orgId, appId, telemetry, apps, memory, instructions, debrief, voice, plugins, mcpAuthMode,
     async reset() {
       debrief.clearSessions();
       await memory.reset({ orgId, appId, sessionId: "demo-reset", traceId: "demo-reset", parentId: null, kitId: "kit:debrief" });

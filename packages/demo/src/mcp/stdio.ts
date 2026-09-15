@@ -57,6 +57,24 @@ const TOOL_DEFINITIONS = [
       required: ["session_id", "correction"],
     },
   },
+  {
+    name: "approve_memory",
+    description: "Approve a candidate memory taught during this debrief.",
+    inputSchema: {
+      type: "object",
+      properties: { session_id: { type: "string" }, memory_id: { type: "string" } },
+      required: ["session_id", "memory_id"],
+    },
+  },
+  {
+    name: "publish_memory",
+    description: "Publish an approved memory for retrieval by a later debrief.",
+    inputSchema: {
+      type: "object",
+      properties: { session_id: { type: "string" }, memory_id: { type: "string" } },
+      required: ["session_id", "memory_id"],
+    },
+  },
 ] as const;
 
 export type DemoMcpToolName = (typeof TOOL_DEFINITIONS)[number]["name"];
@@ -217,11 +235,23 @@ async function callTool(
       value = outcome === "partial"
         ? await app.debrief.markPartial(requiredString(args, "session_id"))
         : await app.debrief.confirmDebrief(requiredString(args, "session_id"));
-    } else {
+    } else if (name === "approve_memory") {
+      value = await app.debrief.approveMemory({
+        sessionId: requiredString(args, "session_id"),
+        memoryId: requiredString(args, "memory_id"),
+      });
+    } else if (name === "publish_memory") {
+      value = await app.debrief.publishMemory({
+        sessionId: requiredString(args, "session_id"),
+        memoryId: requiredString(args, "memory_id"),
+      });
+    } else if (name === "teach_from_correction") {
       value = await app.debrief.teachFromCorrection(
         requiredString(args, "session_id"),
         requiredString(args, "correction"),
       );
+    } else {
+      return rpcError(request.id, -32602, `Unknown tool ${name}`);
     }
     return rpcResult(request.id, { content: [{ type: "text", text: JSON.stringify(value) }] });
   } catch (error) {

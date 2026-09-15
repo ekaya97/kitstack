@@ -7,6 +7,7 @@ import {
 } from "node:http";
 import { pathToFileURL, URL } from "node:url";
 import { createDemoApp, type DemoApp } from "./app/index.js";
+import type { McpAuthMode } from "./auth/mcp.js";
 import { handleDemoAppRequest } from "./http/app.js";
 
 const DEFAULT_PORT = 3001;
@@ -46,7 +47,10 @@ export interface DemoServerAddress {
  * is the default voice provider and provider recording/retention stay off.
  */
 export async function createDemoServer(options: DemoServerOptions = {}): Promise<DemoServer> {
-  const app = options.app ?? await createDemoApp(options.appOptions);
+  const app = options.app ?? await createDemoApp({
+    ...options.appOptions,
+    mcpAuthMode: options.appOptions?.mcpAuthMode ?? readMcpAuthMode(process.env.KITSTACK_DEMO_MCP_AUTH),
+  });
   const ownsApp = options.app === undefined;
   const maxBodyBytes = options.maxBodyBytes ?? DEFAULT_MAX_BODY_BYTES;
   if (!Number.isInteger(maxBodyBytes) || maxBodyBytes <= 0) {
@@ -129,7 +133,7 @@ async function handleIncomingRequest(
     });
     response.statusCode = result.status;
     for (const [name, value] of Object.entries(result.headers)) response.setHeader(name, value);
-    response.end(JSON.stringify(result.body));
+    response.end(result.status === 204 ? undefined : JSON.stringify(result.body));
   } catch (error) {
     const status = error instanceof BodyTooLargeError ? 413 : 400;
     response.statusCode = status;
@@ -170,6 +174,12 @@ function queryParams(url: URL): Record<string, string | undefined> {
 function parsePort(value: string | undefined): number | undefined {
   if (value === undefined || !/^\d+$/.test(value)) return undefined;
   return Number(value);
+}
+
+function readMcpAuthMode(value: string | undefined): McpAuthMode {
+  if (value === undefined || value === "") return "none";
+  if (value === "none" || value === "app-token") return value;
+  throw new Error("KITSTACK_DEMO_MCP_AUTH must be none or app-token");
 }
 
 function address(server: Server): DemoServerAddress {

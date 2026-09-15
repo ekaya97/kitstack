@@ -10,6 +10,48 @@ afterEach(async () => {
 });
 
 describe("composed demo HTTP surface", () => {
+  it("protects MCP with an app token when explicitly enabled", async () => {
+    app = await createDemoApp({ url: ":memory:", mcpAuthMode: "app-token" });
+    const missing = await handleDemoAppRequest(app, {
+      method: "POST", path: "/mcp", body: { id: 1, method: "tools/list" },
+    });
+    expect(missing.status).toBe(401);
+    expect(missing.headers["www-authenticate"]).toBe("Bearer");
+
+    const registered = await handleDemoAppRequest(app, {
+      method: "POST", path: "/v1/apps/register",
+      body: { name: "Authenticated Claude", org: app.orgId, scopes: ["mcp"] },
+    });
+    const appId = (registered.body as any).id as string;
+    const issued = await handleDemoAppRequest(app, { method: "POST", path: `/v1/apps/${appId}/token` });
+    const token = (issued.body as any).token as string;
+    const authenticated = await handleDemoAppRequest(app, {
+      method: "POST", path: "/mcp",
+      headers: { authorization: `Bearer ${token}` },
+      body: { id: 2, method: "tools/list" },
+    });
+    expect(authenticated.status).toBe(200);
+    expect((authenticated.body as any).result.tools).toHaveLength(7);
+  });
+
+  it("serves the standard HTTP MCP lifecycle", async () => {
+    app = await createDemoApp({ url: ":memory:" });
+    const initialized = await handleDemoAppRequest(app, {
+      method: "POST", path: "/mcp", body: { id: 1, method: "initialize" },
+    });
+    expect(initialized.body).toMatchObject({
+      result: { protocolVersion: "2025-11-25", capabilities: { tools: {} } },
+    });
+    const ping = await handleDemoAppRequest(app, {
+      method: "POST", path: "/mcp", body: { id: 2, method: "ping" },
+    });
+    expect(ping.body).toMatchObject({ id: 2, result: {} });
+    const notification = await handleDemoAppRequest(app, {
+      method: "POST", path: "/mcp", body: { jsonrpc: "2.0", method: "notifications/initialized" },
+    });
+    expect(notification.status).toBe(204);
+  });
+
   it("supports Claude tool discovery and a two-run route dogfood flow", async () => {
     app = await createDemoApp({ url: ":memory:" });
     const list = await handleDemoAppRequest(app, {
@@ -17,7 +59,7 @@ describe("composed demo HTTP surface", () => {
     });
     const tools = (list.body as { result: { tools: Array<{ name: string }> } }).result.tools;
     expect(tools.map((tool) => tool.name)).toEqual([
-      "prepare_debrief", "get_session", "get_debrief", "confirm_debrief", "teach_from_correction",
+      "prepare_debrief", "get_session", "get_debrief", "confirm_debrief", "teach_from_correction", "approve_memory", "publish_memory",
     ]);
 
     const prepared = await handleDemoAppRequest(app, {

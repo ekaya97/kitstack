@@ -49,17 +49,26 @@ and simulator services as the HTTP demo route. A supplied app/runtime remains
 the test seam; no auth behavior is changed by this adapter.
 
 For Claude, add a custom MCP connector pointing at the public HTTPS tunnel's
-`/mcp` endpoint. The demo uses auth-none; expose it only through a temporary,
-controlled tunnel and never use production data or real secrets. The external
-smoke helper remains blocked until HTTPS/WSS and Claude MCP URLs are provided.
+`/mcp` endpoint. Local HTTP defaults to auth-none. Before exposing a tunnel,
+use the explicit app-token gate:
+
+```sh
+KITSTACK_DEMO_MCP_AUTH=app-token npm run demo:server
+```
+
+Register an app and issue its token from `/demo`, then configure that bearer
+token on the connector. Auth-none is for loopback only; never expose the
+unauthenticated mode through a public tunnel or use production data/secrets.
+The external smoke helper remains blocked until HTTPS/WSS and Claude MCP URLs
+are provided.
 
 ## Dogfood sequence
 
 1. In Claude chat, call `prepare_debrief` with a concrete sales goal.
 2. Call `/t/voice/start`, then `/t/voice/status`; the deterministic German
    interview reaches confirmation.
-3. Mark the result partial, call `teach_from_correction`, then approve and
-   publish the candidate through the demo harness.
+3. Mark the result partial, call `teach_from_correction`, then call
+   `approve_memory` and `publish_memory` for the returned memory ID.
 4. Prepare a second debrief. Its memory IDs show the approved correction from
    run 1; complete and confirm the second call.
 5. Use `/demo` Usage and Session Trace to inspect app identity, token events,

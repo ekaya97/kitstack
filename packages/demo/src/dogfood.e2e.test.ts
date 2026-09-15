@@ -72,9 +72,17 @@ describe("T-0158 sales voice demo dogfood", () => {
       skill: "debrief",
     });
 
-    const approved = await app.debrief.approve(first.sessionId, correction.memoryId);
+    const approved = await callTool<{ memoryId: string; status: string }>(
+      2,
+      "approve_memory",
+      { session_id: first.sessionId, memory_id: correction.memoryId },
+    );
     expect(approved).toMatchObject({ memoryId: correction.memoryId, status: "approved" });
-    const published = await app.debrief.publish(first.sessionId, correction.memoryId);
+    const published = await callTool<{ memoryId: string; status: string }>(
+      3,
+      "publish_memory",
+      { session_id: first.sessionId, memory_id: correction.memoryId },
+    );
     expect(published).toMatchObject({ memoryId: correction.memoryId, status: "published" });
 
     const proxy = await request({
@@ -109,7 +117,7 @@ describe("T-0158 sales voice demo dogfood", () => {
     expect(JSON.stringify(firstTraceBody)).not.toMatch(/transcript|audio/i);
 
     const second = await callTool<{ sessionId: string; instructionVersion: string; memoryIds: string[] }>(
-      2,
+      4,
       "prepare_debrief",
       { goal: "Improve German sales qualification" },
     );
@@ -126,7 +134,7 @@ describe("T-0158 sales voice demo dogfood", () => {
     expect(secondStatus.body).toMatchObject({ status: "awaiting_confirmation" });
 
     const confirmed = await callTool<{ sessionId: string; state: string }>(
-      3,
+      5,
       "confirm_debrief",
       { session_id: second.sessionId, outcome: "confirmed" },
     );
@@ -166,7 +174,7 @@ describe("T-0158 sales voice demo dogfood", () => {
     expect(await app.telemetry.query({ orgId: app.orgId })).toEqual([]);
 
     const repeat = await callTool<{ sessionId: string; memoryIds: string[] }>(
-      4,
+      6,
       "prepare_debrief",
       { goal: "Improve German sales qualification" },
     );
