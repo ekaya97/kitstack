@@ -40,6 +40,19 @@ export { defineView } from "./define-view";
 export { defineLoader } from "./define-loader";
 export { defineAgent } from "./define-agent";
 
+// Plugins
+export {
+  PluginRegistry,
+  PluginRegistryError,
+  type Plugin,
+  type PluginContext,
+  type PluginManifest,
+  type PluginRegisteredEvent,
+  type PluginRegistrationHook,
+  type PluginRegistryEvent,
+  type PluginRegistryOptions,
+} from "./plugins";
+
 // Result helpers
 export { kit, type KitResultFragment } from "./result";
 
