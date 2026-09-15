@@ -28,12 +28,31 @@ export const DEBRIEF_SHELL_S3_KEY = "apps/kits/debrief/shell.html";
 const INTERNAL_TOKEN_TTL_SECONDS = 60;
 const VOICE_REQUEST_TIMEOUT_MS = 8_000;
 
-/** Metadata exposed before T-0195 publishes the debrief shell bundle. */
-export const DEBRIEF_VIEW_METADATA: ResolvedView = {
-  slug: "prebrief",
-  name: "Sales Prebrief",
-  description: "before the scheduled sales call, to review customer context, history, objective, timing, and privacy status",
-};
+/**
+ * Metadata exposed by the virtual debrief bridge.
+ *
+ * The generated kit bundle is the source of truth for the View implementations,
+ * but the cloud router must still advertise all Views before it can load the
+ * bundle. Keeping this contract here also lets the bridge work when registry
+ * seeding is delayed or unavailable during a deploy.
+ */
+export const DEBRIEF_VIEW_METADATA: ResolvedView[] = [
+  {
+    slug: "prebrief",
+    name: "Sales Prebrief",
+    description: "before the scheduled sales call, to review customer context, history, objective, timing, and privacy status",
+  },
+  {
+    slug: "confirmation",
+    name: "Debrief Confirmation",
+    description: "after the call, to review and edit the structured debrief before saving confirmed events",
+  },
+  {
+    slug: "customer-timeline",
+    name: "Customer Timeline",
+    description: "after confirmation, to review the customer's newest structured events",
+  },
+];
 
 const DEBRIEF_TOOLS = createDebriefTools().map((tool) => ({
   name: tool.name,
@@ -89,7 +108,7 @@ export function platformAdapter(deps: PlatformAdapterDeps): KitServerAdapter {
 
   const debriefKit: ResolvedKit = {
     ...DEBRIEF_KIT,
-    views: [...(debriefViews ?? [DEBRIEF_VIEW_METADATA])],
+    views: [...(debriefViews ?? DEBRIEF_VIEW_METADATA)],
   };
 
   return {

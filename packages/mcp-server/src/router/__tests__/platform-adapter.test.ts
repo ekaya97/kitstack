@@ -81,6 +81,9 @@ describe("platform debrief adapter", () => {
       "prepare_debrief",
       "get_session",
       "get_debrief",
+      "get_debrief_for_confirmation",
+      "update_debrief_draft",
+      "confirm_debrief_draft",
       "confirm_debrief",
       "teach_from_correction",
     ]);
@@ -88,11 +91,23 @@ describe("platform debrief adapter", () => {
       type: "object",
       required: ["goal", "company", "contact_name", "location", "callback_at", "callback_timezone"],
     });
-    expect(debrief?.views).toEqual([{
-      slug: "prebrief",
-      name: "Sales Prebrief",
-      description: expect.stringContaining("customer context"),
-    }]);
+    expect(debrief?.views).toEqual([
+      {
+        slug: "prebrief",
+        name: "Sales Prebrief",
+        description: expect.stringContaining("customer context"),
+      },
+      {
+        slug: "confirmation",
+        name: "Debrief Confirmation",
+        description: expect.stringContaining("structured debrief"),
+      },
+      {
+        slug: "customer-timeline",
+        name: "Customer Timeline",
+        description: expect.stringContaining("newest structured events"),
+      },
+    ]);
   });
 
   it("forwards debrief calls with a short-lived signed internal identity", async () => {
