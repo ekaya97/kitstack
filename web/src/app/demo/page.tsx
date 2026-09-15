@@ -1,8 +1,9 @@
 "use client";
 
 import { FormEvent, useCallback, useEffect, useMemo, useState } from "react";
+import { PluginObservabilityView, type PluginDescriptor } from "./plugin-observability";
 
-type Tab = "overview" | "apps" | "usage" | "trace";
+type Tab = "overview" | "apps" | "plugins" | "usage" | "trace";
 type Event = {
   id: string;
   timestamp: string;
@@ -58,6 +59,8 @@ type LiveCallCapability = {
 type ObservabilityResponse = {
   events?: Event[];
   aggregate?: Aggregate;
+  /** Optional future registry snapshot; current backend derives rows from events. */
+  plugins?: PluginDescriptor[];
   mcpAuthMode?: string;
   authMode?: string;
   voiceSessions?: VoiceSession[];
@@ -78,6 +81,7 @@ const ADMIN_TOKEN = process.env.NEXT_PUBLIC_DEMO_ADMIN_TOKEN || "demo-admin-toke
 const tabs: { id: Tab; label: string }[] = [
   { id: "overview", label: "Overview" },
   { id: "apps", label: "Apps" },
+  { id: "plugins", label: "Plugins" },
   { id: "usage", label: "Usage" },
   { id: "trace", label: "Session Trace" },
 ];
@@ -87,6 +91,7 @@ export default function DemoPage() {
   const [events, setEvents] = useState<Event[]>([]);
   const [aggregate, setAggregate] = useState<Aggregate | null>(null);
   const [apps, setApps] = useState<App[]>([]);
+  const [plugins, setPlugins] = useState<PluginDescriptor[]>([]);
   const [selectedSession, setSelectedSession] = useState("");
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
@@ -106,6 +111,7 @@ export default function DemoPage() {
       const data = await response.json() as ObservabilityResponse;
       setEvents(data.events ?? []);
       setAggregate(data.aggregate ?? null);
+      setPlugins(data.plugins ?? []);
       setVoiceSessions(data.voiceSessions ?? []);
       setLiveCall(data.liveCall ?? null);
       const first = data.voiceSessions?.[0]?.sessionId ?? data.events?.find((event) => event.sessionId)?.sessionId;
@@ -169,7 +175,7 @@ export default function DemoPage() {
         </div>
         {notice && <div className="mb-4 rounded-lg border border-green-200 bg-green-50 px-4 py-3 text-[12px] text-green-800">{notice}</div>}
         {error && <div role="alert" className="mb-4 rounded-lg border border-red-200 bg-red-50 px-4 py-3 text-[12px] text-red-800">{error} <button className="ml-2 underline" onClick={() => void load()}>Retry</button></div>}
-        {loading ? <Loading /> : tab === "overview" ? <OverviewView events={events} aggregate={aggregate} voiceSessions={voiceSessions} liveCall={liveCall} selectedSession={selectedSession} setSelectedSession={setSelectedSession} /> : tab === "apps" ? <AppsView apps={apps} events={events} setApps={setApps} authLabel={authLabel} /> : tab === "usage" ? <UsageView events={events} aggregate={aggregate} /> : <TraceView events={events} sessions={sessions} selectedSession={selectedSession} setSelectedSession={setSelectedSession} />}
+        {loading ? <Loading /> : tab === "overview" ? <OverviewView events={events} aggregate={aggregate} voiceSessions={voiceSessions} liveCall={liveCall} selectedSession={selectedSession} setSelectedSession={setSelectedSession} /> : tab === "apps" ? <AppsView apps={apps} events={events} setApps={setApps} authLabel={authLabel} /> : tab === "plugins" ? <PluginObservabilityView events={events} plugins={plugins} /> : tab === "usage" ? <UsageView events={events} aggregate={aggregate} /> : <TraceView events={events} sessions={sessions} selectedSession={selectedSession} setSelectedSession={setSelectedSession} />}
       </div>
     </main>
   );

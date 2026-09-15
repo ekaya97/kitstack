@@ -21,6 +21,7 @@ describe("demo observability page", () => {
     expect(screen.getByText("Developer observability")).toBeTruthy();
     await waitFor(() => expect(screen.getByText("No apps in this browser session")).toBeTruthy());
     expect(screen.getByRole("button", { name: "Overview" })).toBeTruthy();
+    expect(screen.getByRole("button", { name: "Plugins" })).toBeTruthy();
     expect(screen.getByRole("button", { name: "Usage" })).toBeTruthy();
     expect(screen.getByRole("button", { name: "Session Trace" })).toBeTruthy();
     expect(screen.getAllByText("MCP app-token").length).toBeGreaterThan(0);
