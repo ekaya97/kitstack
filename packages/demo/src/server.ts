@@ -13,7 +13,7 @@ import { handleDemoAppRequest } from "./http/app.js";
 const DEFAULT_PORT = 3001;
 const DEFAULT_MAX_BODY_BYTES = 1024 * 1024;
 const CORS_HEADERS = {
-  "access-control-allow-headers": "authorization, content-type, x-demo-reset-token, x-request-id, x-session-id, x-trace-id, x-parent-id",
+  "access-control-allow-headers": "authorization, content-type, x-demo-admin-token, x-demo-reset-token, x-request-id, x-session-id, x-trace-id, x-parent-id",
   "access-control-allow-methods": "GET,POST,OPTIONS",
   "access-control-allow-origin": "*",
 };
@@ -50,6 +50,7 @@ export async function createDemoServer(options: DemoServerOptions = {}): Promise
   const app = options.app ?? await createDemoApp({
     ...options.appOptions,
     mcpAuthMode: options.appOptions?.mcpAuthMode ?? readMcpAuthMode(process.env.KITSTACK_DEMO_MCP_AUTH),
+    adminToken: options.appOptions?.adminToken ?? process.env.KITSTACK_DEMO_ADMIN_TOKEN,
   });
   const ownsApp = options.app === undefined;
   const maxBodyBytes = options.maxBodyBytes ?? DEFAULT_MAX_BODY_BYTES;

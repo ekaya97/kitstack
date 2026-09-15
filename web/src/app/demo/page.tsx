@@ -37,6 +37,7 @@ type Aggregate = {
 type App = { id: string; name: string; org: string; scopes: string[]; createdAt: string; token?: string; expiresAt?: string };
 
 const API = process.env.NEXT_PUBLIC_DEMO_API_URL || "http://localhost:3001";
+const ADMIN_TOKEN = process.env.NEXT_PUBLIC_DEMO_ADMIN_TOKEN || "demo-admin-token";
 const tabs: { id: Tab; label: string }[] = [
   { id: "apps", label: "Apps" },
   { id: "usage", label: "Usage" },
@@ -79,7 +80,7 @@ export default function DemoPage() {
     if (!window.confirm("Clear demo sessions, memory, and telemetry?")) return;
     setNotice("");
     try {
-      const response = await fetch(`${API}/api/demo/reset`, { method: "POST", headers: { "x-demo-reset-token": "demo-reset" } });
+      const response = await fetch(`${API}/api/demo/reset`, { method: "POST", headers: { "x-demo-reset-token": "demo-reset", "x-demo-admin-token": ADMIN_TOKEN } });
       if (!response.ok) throw new Error(`Reset failed (${response.status})`);
       setSelectedSession("");
       setNotice("Demo data cleared. App registrations and tokens were preserved.");
@@ -109,7 +110,7 @@ export default function DemoPage() {
         </div>
 
         <div className="mb-6 rounded-xl border border-ks-accent/30 bg-ks-accent-soft px-4 py-3 text-[12px] text-ks-accent-deep">
-          Demo access is auth-none for local use and public tunnels. Never use this surface with production data or real secrets.
+          Demo access defaults to auth-none for loopback. For a tunnel, run the API with app-token mode and configure the matching admin token; never use this surface with production data or real secrets.
         </div>
         {notice && <div className="mb-4 rounded-lg border border-green-200 bg-green-50 px-4 py-3 text-[12px] text-green-800">{notice}</div>}
         {error && <div role="alert" className="mb-4 rounded-lg border border-red-200 bg-red-50 px-4 py-3 text-[12px] text-red-800">{error} <button className="ml-2 underline" onClick={() => void load()}>Retry</button></div>}
@@ -127,10 +128,10 @@ function AppsView({ apps, events, setApps }: { apps: App[]; events: Event[]; set
   async function register(event: FormEvent) {
     event.preventDefault(); setBusy(true); setError("");
     try {
-      const response = await fetch(`${API}/v1/apps/register`, { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ name, org: "org-demo", scopes: scopes.split(",").map((scope) => scope.trim()).filter(Boolean) }) });
+      const response = await fetch(`${API}/v1/apps/register`, { method: "POST", headers: { "content-type": "application/json", "x-demo-admin-token": ADMIN_TOKEN }, body: JSON.stringify({ name, org: "org-demo", scopes: scopes.split(",").map((scope) => scope.trim()).filter(Boolean) }) });
       if (!response.ok) throw new Error(`Registration failed (${response.status})`);
       const app = await response.json() as App;
-      const tokenResponse = await fetch(`${API}/v1/apps/${encodeURIComponent(app.id)}/token`, { method: "POST" });
+      const tokenResponse = await fetch(`${API}/v1/apps/${encodeURIComponent(app.id)}/token`, { method: "POST", headers: { "x-demo-admin-token": ADMIN_TOKEN } });
       if (!tokenResponse.ok) throw new Error(`Token issuance failed (${tokenResponse.status})`);
       const token = await tokenResponse.json() as { token: string; expiresInSeconds: number };
       setApps([{ ...app, token: token.token, expiresAt: new Date(Date.now() + token.expiresInSeconds * 1000).toISOString() }, ...apps]);

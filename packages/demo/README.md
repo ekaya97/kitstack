@@ -53,12 +53,16 @@ For Claude, add a custom MCP connector pointing at the public HTTPS tunnel's
 use the explicit app-token gate:
 
 ```sh
-KITSTACK_DEMO_MCP_AUTH=app-token npm run demo:server
+KITSTACK_DEMO_MCP_AUTH=app-token \
+KITSTACK_DEMO_ADMIN_TOKEN='set-a-long-random-demo-token' \
+npm run demo:server
 ```
 
-Register an app and issue its token from `/demo`, then configure that bearer
-token on the connector. Auth-none is for loopback only; never expose the
-unauthenticated mode through a public tunnel or use production data/secrets.
+Set the same value as `NEXT_PUBLIC_DEMO_ADMIN_TOKEN` for the local `/demo`
+operator surface. Register an app and issue its short-lived token from `/demo`,
+then configure that bearer token on the connector. Auth-none is for loopback
+only; never expose the unauthenticated mode through a public tunnel or use
+production data/secrets.
 The external smoke helper remains blocked until HTTPS/WSS and Claude MCP URLs
 are provided.
 

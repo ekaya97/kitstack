@@ -80,6 +80,7 @@ export async function handleDemoAppRequest(
         : current);
     }
     if (request.method === "POST" && path === "/v1/apps/register") {
+      if (!adminAuthorized(app, request)) return json(403, { error: "admin_token_required" });
       const body = request.body ?? {};
       const registered = app.apps.register({
         name: stringField(body, "name"),
@@ -95,6 +96,7 @@ export async function handleDemoAppRequest(
     }
     const tokenMatch = path.match(/^\/v1\/apps\/([^/]+)\/token$/);
     if (request.method === "POST" && tokenMatch) {
+      if (!adminAuthorized(app, request)) return json(403, { error: "admin_token_required" });
       const appId = decodeURIComponent(tokenMatch[1]);
       const token = await app.apps.issue(appId);
       const registered = app.apps.get(appId);
@@ -141,6 +143,7 @@ export async function handleDemoAppRequest(
       return json(200, { session: app.debrief.getSession(sessionId), events: await app.telemetry.query({ sessionId }) });
     }
     if (request.method === "POST" && path === "/api/demo/reset") {
+      if (!adminAuthorized(app, request)) return json(403, { error: "admin_token_required" });
       if (readHeader(request.headers, "x-demo-reset-token") !== "demo-reset") {
         return json(403, { error: "reset_forbidden" });
       }
@@ -227,6 +230,11 @@ function mcpAuthResponse(error: unknown): DemoHttpResponse {
     headers: status === 401 ? { ...JSON_HEADERS, "www-authenticate": "Bearer" } : JSON_HEADERS,
     body: { error: error.code, message: error.message },
   };
+}
+
+function adminAuthorized(app: DemoApp, request: DemoAppRouteRequest): boolean {
+  if (app.mcpAuthMode === "none") return true;
+  return readHeader(request.headers, "x-demo-admin-token") === app.adminToken;
 }
 
 async function responseFromWeb(response: Response): Promise<DemoHttpResponse> {

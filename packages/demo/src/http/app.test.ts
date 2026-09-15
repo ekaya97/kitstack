@@ -17,13 +17,19 @@ describe("composed demo HTTP surface", () => {
     });
     expect(missing.status).toBe(401);
     expect(missing.headers["www-authenticate"]).toBe("Bearer");
+    const unguardedRegistration = await handleDemoAppRequest(app, {
+      method: "POST", path: "/v1/apps/register",
+      body: { name: "Blocked", org: app.orgId, scopes: ["mcp"] },
+    });
+    expect(unguardedRegistration.status).toBe(403);
 
     const registered = await handleDemoAppRequest(app, {
       method: "POST", path: "/v1/apps/register",
+      headers: { "x-demo-admin-token": app.adminToken },
       body: { name: "Authenticated Claude", org: app.orgId, scopes: ["mcp"] },
     });
     const appId = (registered.body as any).id as string;
-    const issued = await handleDemoAppRequest(app, { method: "POST", path: `/v1/apps/${appId}/token` });
+    const issued = await handleDemoAppRequest(app, { method: "POST", path: `/v1/apps/${appId}/token`, headers: { "x-demo-admin-token": app.adminToken } });
     const token = (issued.body as any).token as string;
     const authenticated = await handleDemoAppRequest(app, {
       method: "POST", path: "/mcp",

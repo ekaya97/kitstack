@@ -20,6 +20,7 @@ export interface DemoApp {
   readonly voice: VoiceSimulator;
   readonly plugins: PluginRegistry;
   readonly mcpAuthMode: McpAuthMode;
+  readonly adminToken: string;
   reset(): Promise<void>;
   close(): Promise<void>;
 }
@@ -31,12 +32,16 @@ export interface CreateDemoAppOptions {
   secret?: string;
   /** Explicit MCP auth mode. Defaults to none for loopback-only development. */
   mcpAuthMode?: McpAuthMode;
+  /** Separate operator token required to register/issue apps in app-token mode. */
+  adminToken?: string;
 }
 
 export async function createDemoApp(options: CreateDemoAppOptions = {}): Promise<DemoApp> {
   const orgId = options.orgId ?? "org-demo";
   const appId = options.appId ?? null;
   const mcpAuthMode = options.mcpAuthMode ?? "none";
+  const adminToken = options.adminToken ?? "demo-admin-token";
+  if (!adminToken.trim()) throw new Error("adminToken must not be empty");
   const client = createClient({ url: options.url ?? ":memory:" });
   const telemetry = await createTelemetryStore({ client });
   const apps = createAppRegistry({ secret: options.secret ?? "demo-secret-at-least-32-characters-long" });
@@ -47,7 +52,7 @@ export async function createDemoApp(options: CreateDemoAppOptions = {}): Promise
   const voice = new VoiceSimulator({ debrief, telemetry, orgId, appId });
 
   return {
-    client, orgId, appId, telemetry, apps, memory, instructions, debrief, voice, plugins, mcpAuthMode,
+    client, orgId, appId, telemetry, apps, memory, instructions, debrief, voice, plugins, mcpAuthMode, adminToken,
     async reset() {
       debrief.clearSessions();
       await memory.reset({ orgId, appId, sessionId: "demo-reset", traceId: "demo-reset", parentId: null, kitId: "kit:debrief" });
