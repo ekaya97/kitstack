@@ -20,6 +20,34 @@ npm run dev --workspace kitstack-web
 Open `/demo` in the web app. Set `NEXT_PUBLIC_DEMO_API_URL` when the server is
 not on the default port. The demo database defaults to `.kitstack/demo.db`.
 
+For a local process MCP client, use the standard stdio harness instead of the
+HTTP server:
+
+```sh
+npm run start:stdio --workspace @kitstackco/demo
+```
+
+It reads one JSON-RPC message per line from stdin and writes only JSON-RPC
+responses to stdout. The supported lifecycle is `initialize`,
+`notifications/initialized`, `ping`, `tools/list`, and `tools/call`. Example
+Claude Desktop/Code-style configuration:
+
+```json
+{
+  "mcpServers": {
+    "kitstack-demo": {
+      "command": "npm",
+      "args": ["run", "start:stdio", "--workspace", "@kitstackco/demo"],
+      "cwd": "/Users/eneskaya/dev/kitstack"
+    }
+  }
+}
+```
+
+The process uses the same `DemoApp` debrief, instruction, memory, telemetry,
+and simulator services as the HTTP demo route. A supplied app/runtime remains
+the test seam; no auth behavior is changed by this adapter.
+
 For Claude, add a custom MCP connector pointing at the public HTTPS tunnel's
 `/mcp` endpoint. The demo uses auth-none; expose it only through a temporary,
 controlled tunnel and never use production data or real secrets. The external

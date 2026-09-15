@@ -17,6 +17,7 @@
   },
   "scripts": {
     "test": "vitest run",
-    "start": "tsx src/server.ts"
+    "start": "tsx src/server.ts",
+    "start:stdio": "tsx src/mcp/stdio.ts"
   }
 }
