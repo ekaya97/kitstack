@@ -81,8 +81,6 @@ const CREATE_SCHEMA_SQL = `
     ON demo_memories (org_id, kit_id, status, created_at, memory_id, version_id);
   CREATE INDEX IF NOT EXISTS demo_memories_session_idx
     ON demo_memories (org_id, kit_id, session_id, status, created_at);
-  CREATE INDEX IF NOT EXISTS demo_memories_customer_idx
-    ON demo_memories (org_id, kit_id, customer_id, status, created_at);
 `;
 
 /**
@@ -113,6 +111,10 @@ export class MemoryStore {
       const columns = await client.execute("PRAGMA table_info(demo_memories)");
       const names = new Set(columns.rows.map((row) => String((row as MemoryRow).name)));
       if (!names.has("customer_id")) await client.execute("ALTER TABLE demo_memories ADD COLUMN customer_id TEXT");
+      // Older production databases predate customer-scoped memory. Create the
+      // index only after the compatibility column migration has completed.
+      await client.execute(`CREATE INDEX IF NOT EXISTS demo_memories_customer_idx
+        ON demo_memories (org_id, kit_id, customer_id, status, created_at)`);
     });
   }
 
