@@ -19,6 +19,7 @@
     "db:seed": "tsx web/src/db/seed.ts",
     "dev:db": "turso dev --db-file databases/local.db",
     "build:layer": "packages/sdk/layer/build.sh",
+    "sync:secrets": "./infra/sync-secrets.sh",
     "deploy:kit": "sst shell -- npx tsx"
   },
   "devDependencies": {

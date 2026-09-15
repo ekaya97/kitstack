@@ -92,22 +92,25 @@ to one task so its in-process session state remains coherent across the
 prebrief, phone call, and debrief sequence. Telemetry and memory use the
 configured remote libSQL/Turso database.
 
-Set the service domain before deploying if you want real Twilio calls. The
-domain must be hosted in Route 53 (or replace the SST domain configuration
-with an externally managed ACM certificate/DNS record):
+Create the stage env file from the tracked template. `.env.demo` is ignored by
+Git and is the file to edit for this deployment; do not use the existing
+`.env.eneskaya` or `.env.production` files unless you intentionally want to
+overwrite those stages.
 
 ```sh
-export KITSTACK_DEMO_VOICE_DOMAIN=voice.example.com
-sst secret set TursoDbUrl 'libsql://your-db.turso.io'
-sst secret set TursoAuthToken 'your-turso-token'
-sst secret set DemoAdminToken 'use-a-long-random-operator-token'
-sst secret set DemoAllowedDestination '+491234567890'
-sst secret set TwilioAccountSid 'AC...'
-sst secret set TwilioAuthToken '...'
-sst secret set TwilioFromNumber '+49...'
-sst secret set OpenAiApiKey 'sk-...'
+cp .env.example .env.demo
+# Edit .env.demo with the Turso, domain, operator, Twilio, and OpenAI values.
+./infra/sync-secrets.sh demo
 npx sst deploy --stage demo
 ```
+
+The sync script reads the same `.env.demo` file and only updates keys present
+in it. Empty values intentionally clear a secret; missing keys are skipped.
+Use `./infra/sync-secrets.sh demo .env.demo --clear-missing` only when you
+explicitly want absent keys cleared.
+
+The service domain must be hosted in Route 53 (or replace the SST domain
+configuration with an externally managed ACM certificate/DNS record).
 
 The deployment prints the `DemoVoice` URL. Set
 `KITSTACK_DEMO_VOICE_DOMAIN` consistently for later deploys; it becomes the
