@@ -1,0 +1,9 @@
+{
+  "mcpServers": {
+    "kitstack-sales-demo": {
+      "command": "npm",
+      "args": ["run", "start:stdio", "--workspace", "@kitstackco/demo"],
+      "cwd": "/Users/eneskaya/dev/kitstack"
+    }
+  }
+}

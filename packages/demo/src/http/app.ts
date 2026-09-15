@@ -42,6 +42,16 @@ const MCP_TOOLS = [
     description: "Publish an approved memory so a later debrief can retrieve it.",
     inputSchema: { type: "object", properties: { session_id: { type: "string" }, memory_id: { type: "string" } }, required: ["session_id", "memory_id"] },
   },
+  {
+    name: "start_voice_call",
+    description: "Start the deterministic German sales voice call for a prepared debrief.",
+    inputSchema: { type: "object", properties: { session_id: { type: "string" } }, required: ["session_id"] },
+  },
+  {
+    name: "get_voice_status",
+    description: "Poll the sales voice call until it reaches confirmation.",
+    inputSchema: { type: "object", properties: { session_id: { type: "string" } }, required: ["session_id"] },
+  },
 ] as const;
 
 export interface DemoAppRouteRequest extends DemoHttpRequest {
@@ -183,9 +193,15 @@ async function mcp(app: DemoApp, body: Record<string, unknown>): Promise<DemoHtt
   else if (name === "teach_from_correction") value = await app.debrief.teachFromCorrection(stringField(args, "session_id"), stringField(args, "correction"));
   else if (name === "approve_memory") value = await app.debrief.approveMemory({ sessionId: stringField(args, "session_id"), memoryId: stringField(args, "memory_id") });
   else if (name === "publish_memory") value = await app.debrief.publishMemory({ sessionId: stringField(args, "session_id"), memoryId: stringField(args, "memory_id") });
+  else if (name === "start_voice_call") value = await app.voice.start(stringField(args, "session_id"));
+  else if (name === "get_voice_status") {
+    const sessionId = stringField(args, "session_id");
+    const current = app.voice.status(sessionId);
+    value = current.status === "calling" ? await app.voice.advance(sessionId) : current;
+  }
   else if (name === "confirm_debrief") value = args.outcome === "partial"
-    ? await app.debrief.markPartial(stringField(args, "session_id"))
-    : await app.debrief.confirmDebrief(stringField(args, "session_id"));
+    ? await app.voice.complete(stringField(args, "session_id"), "partial")
+    : await app.voice.complete(stringField(args, "session_id"), "confirmed");
   else return json(400, { jsonrpc: "2.0", id: body.id ?? null, error: { code: -32602, message: `Unknown tool ${name}` } });
   return json(200, { jsonrpc: "2.0", id: body.id ?? null, result: { content: [{ type: "text", text: JSON.stringify(value) }] } });
 }

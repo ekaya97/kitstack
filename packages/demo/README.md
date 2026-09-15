@@ -44,6 +44,9 @@ Claude Desktop/Code-style configuration:
 }
 ```
 
+The repository also includes the equivalent `.mcp.json` registration for
+Claude Code-style local discovery.
+
 The process uses the same `DemoApp` debrief, instruction, memory, telemetry,
 and simulator services as the HTTP demo route. A supplied app/runtime remains
 the test seam; no auth behavior is changed by this adapter.

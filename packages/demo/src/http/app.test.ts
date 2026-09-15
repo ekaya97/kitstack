@@ -37,7 +37,7 @@ describe("composed demo HTTP surface", () => {
       body: { id: 2, method: "tools/list" },
     });
     expect(authenticated.status).toBe(200);
-    expect((authenticated.body as any).result.tools).toHaveLength(7);
+    expect((authenticated.body as any).result.tools).toHaveLength(9);
   });
 
   it("serves the standard HTTP MCP lifecycle", async () => {
@@ -65,7 +65,7 @@ describe("composed demo HTTP surface", () => {
     });
     const tools = (list.body as { result: { tools: Array<{ name: string }> } }).result.tools;
     expect(tools.map((tool) => tool.name)).toEqual([
-      "prepare_debrief", "get_session", "get_debrief", "confirm_debrief", "teach_from_correction", "approve_memory", "publish_memory",
+      "prepare_debrief", "get_session", "get_debrief", "confirm_debrief", "teach_from_correction", "approve_memory", "publish_memory", "start_voice_call", "get_voice_status",
     ]);
 
     const prepared = await handleDemoAppRequest(app, {
@@ -113,7 +113,7 @@ describe("composed demo HTTP surface", () => {
         },
       },
     });
-    expect(JSON.parse(((confirmed.body as any).result.content[0].text)).state).toBe("confirmed");
+    expect(JSON.parse(((confirmed.body as any).result.content[0].text)).status).toBe("confirmed");
 
     const observability = await handleDemoAppRequest(app, {
       method: "GET", path: "/api/demo/observability", query: { appId: "null" },

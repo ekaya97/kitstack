@@ -75,6 +75,24 @@ const TOOL_DEFINITIONS = [
       required: ["session_id", "memory_id"],
     },
   },
+  {
+    name: "start_voice_call",
+    description: "Start the deterministic German sales voice call for a prepared debrief.",
+    inputSchema: {
+      type: "object",
+      properties: { session_id: { type: "string" } },
+      required: ["session_id"],
+    },
+  },
+  {
+    name: "get_voice_status",
+    description: "Poll the sales voice call until it reaches confirmation.",
+    inputSchema: {
+      type: "object",
+      properties: { session_id: { type: "string" } },
+      required: ["session_id"],
+    },
+  },
 ] as const;
 
 export type DemoMcpToolName = (typeof TOOL_DEFINITIONS)[number]["name"];
@@ -232,9 +250,7 @@ async function callTool(
       if (outcome !== "confirmed" && outcome !== "partial") {
         return rpcError(request.id, -32602, "outcome must be confirmed or partial");
       }
-      value = outcome === "partial"
-        ? await app.debrief.markPartial(requiredString(args, "session_id"))
-        : await app.debrief.confirmDebrief(requiredString(args, "session_id"));
+      value = await app.voice.complete(requiredString(args, "session_id"), outcome);
     } else if (name === "approve_memory") {
       value = await app.debrief.approveMemory({
         sessionId: requiredString(args, "session_id"),
@@ -250,6 +266,12 @@ async function callTool(
         requiredString(args, "session_id"),
         requiredString(args, "correction"),
       );
+    } else if (name === "start_voice_call") {
+      value = await app.voice.start(requiredString(args, "session_id"));
+    } else if (name === "get_voice_status") {
+      const sessionId = requiredString(args, "session_id");
+      const current = app.voice.status(sessionId);
+      value = current.status === "calling" ? await app.voice.advance(sessionId) : current;
     } else {
       return rpcError(request.id, -32602, `Unknown tool ${name}`);
     }

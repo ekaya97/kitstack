@@ -34,12 +34,12 @@ describe("T-0158 sales voice demo dogfood", () => {
     expect(first.memoryIds).toEqual([]);
     expect(first.instructionVersion).toMatch(/^sha256:[a-f0-9]{64}$/);
 
-    const firstStart = await request({
-      method: "POST",
-      path: "/t/voice/start",
-      body: { session_id: first.sessionId },
-    });
-    expect(firstStart.body).toMatchObject({
+    const firstStart = await callTool<{ sessionId: string; provider: string; status: string }>(
+      2,
+      "start_voice_call",
+      { session_id: first.sessionId },
+    );
+    expect(firstStart).toMatchObject({
       sessionId: first.sessionId,
       provider: "simulator",
       locale: "de-DE",
@@ -48,23 +48,28 @@ describe("T-0158 sales voice demo dogfood", () => {
       status: "calling",
     });
 
-    const firstStatus = await request({
-      method: "POST",
-      path: "/t/voice/status",
-      body: { session_id: first.sessionId },
-    });
-    expect(firstStatus.body).toMatchObject({
+    const firstStatus = await callTool<{ sessionId: string; status: string; debriefState: string }>(
+      3,
+      "get_voice_status",
+      { session_id: first.sessionId },
+    );
+    expect(firstStatus).toMatchObject({
       sessionId: first.sessionId,
       status: "awaiting_confirmation",
       debriefState: "awaiting_confirmation",
     });
 
-    const firstPartial = await app.voice.complete(first.sessionId, "partial");
+    const firstPartial = await callTool<{ status: string; debriefState: string }>(
+      4,
+      "confirm_debrief",
+      { session_id: first.sessionId, outcome: "partial" },
+    );
     expect(firstPartial).toMatchObject({ status: "partial", debriefState: "partial" });
 
-    const correction = await app.debrief.teachFromCorrection(
-      first.sessionId,
-      "Ask for the next meeting before discussing price.",
+    const correction = await callTool<{ memoryId: string; status: string; correction: string; skill: string }>(
+      5,
+      "teach_from_correction",
+      { session_id: first.sessionId, correction: "Ask for the next meeting before discussing price." },
     );
     expect(correction).toMatchObject({
       status: "candidate",
@@ -73,13 +78,13 @@ describe("T-0158 sales voice demo dogfood", () => {
     });
 
     const approved = await callTool<{ memoryId: string; status: string }>(
-      2,
+      6,
       "approve_memory",
       { session_id: first.sessionId, memory_id: correction.memoryId },
     );
     expect(approved).toMatchObject({ memoryId: correction.memoryId, status: "approved" });
     const published = await callTool<{ memoryId: string; status: string }>(
-      3,
+      7,
       "publish_memory",
       { session_id: first.sessionId, memory_id: correction.memoryId },
     );
@@ -117,7 +122,7 @@ describe("T-0158 sales voice demo dogfood", () => {
     expect(JSON.stringify(firstTraceBody)).not.toMatch(/transcript|audio/i);
 
     const second = await callTool<{ sessionId: string; instructionVersion: string; memoryIds: string[] }>(
-      4,
+      8,
       "prepare_debrief",
       { goal: "Improve German sales qualification" },
     );
@@ -125,20 +130,25 @@ describe("T-0158 sales voice demo dogfood", () => {
     expect(second.instructionVersion).toBe(first.instructionVersion);
     expect(second.memoryIds).toContain(correction.memoryId);
 
-    await request({ method: "POST", path: "/t/voice/start", body: { session_id: second.sessionId } });
-    const secondStatus = await request({
-      method: "POST",
-      path: "/t/voice/status",
-      body: { session_id: second.sessionId },
-    });
-    expect(secondStatus.body).toMatchObject({ status: "awaiting_confirmation" });
+    const secondStart = await callTool<{ sessionId: string; status: string }>(
+      9,
+      "start_voice_call",
+      { session_id: second.sessionId },
+    );
+    expect(secondStart.status).toBe("calling");
+    const secondStatus = await callTool<{ sessionId: string; status: string; debriefState: string }>(
+      10,
+      "get_voice_status",
+      { session_id: second.sessionId },
+    );
+    expect(secondStatus).toMatchObject({ status: "awaiting_confirmation" });
 
-    const confirmed = await callTool<{ sessionId: string; state: string }>(
-      5,
+    const confirmed = await callTool<{ sessionId: string; status: string }>(
+      11,
       "confirm_debrief",
       { session_id: second.sessionId, outcome: "confirmed" },
     );
-    expect(confirmed).toMatchObject({ sessionId: second.sessionId, state: "confirmed" });
+    expect(confirmed).toMatchObject({ sessionId: second.sessionId, status: "confirmed" });
 
     const observability = await request({
       method: "GET",
@@ -174,20 +184,29 @@ describe("T-0158 sales voice demo dogfood", () => {
     expect(await app.telemetry.query({ orgId: app.orgId })).toEqual([]);
 
     const repeat = await callTool<{ sessionId: string; memoryIds: string[] }>(
-      6,
+      12,
       "prepare_debrief",
       { goal: "Improve German sales qualification" },
     );
     expect(repeat.sessionId).not.toBe(first.sessionId);
     expect(repeat.memoryIds).toEqual([]);
-    await request({ method: "POST", path: "/t/voice/start", body: { session_id: repeat.sessionId } });
-    const repeatStatus = await request({
-      method: "POST",
-      path: "/t/voice/status",
-      body: { session_id: repeat.sessionId },
-    });
-    expect(repeatStatus.body).toMatchObject({ status: "awaiting_confirmation" });
-    const repeatConfirmed = await app.voice.complete(repeat.sessionId, "confirmed");
+    const repeatStart = await callTool<{ sessionId: string; status: string }>(
+      13,
+      "start_voice_call",
+      { session_id: repeat.sessionId },
+    );
+    expect(repeatStart.status).toBe("calling");
+    const repeatStatus = await callTool<{ sessionId: string; status: string; debriefState: string }>(
+      14,
+      "get_voice_status",
+      { session_id: repeat.sessionId },
+    );
+    expect(repeatStatus).toMatchObject({ status: "awaiting_confirmation" });
+    const repeatConfirmed = await callTool<{ status: string; debriefState: string }>(
+      15,
+      "confirm_debrief",
+      { session_id: repeat.sessionId, outcome: "confirmed" },
+    );
     expect(repeatConfirmed).toMatchObject({ status: "confirmed", debriefState: "confirmed" });
   });
 });
