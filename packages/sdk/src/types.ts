@@ -295,6 +295,190 @@ export interface KitDefinition {
   _placeholders?: Record<string, unknown>;
 }
 
+// --- Agent Definition ---
+
+/** A versioned instruction bundle supplied to an autonomous agent run. */
+export interface AgentInstructions {
+  version: string;
+  content: string;
+}
+
+/** The single trigger identity an agent is allowed to run under. */
+export interface AgentTrigger {
+  id: string;
+  identity: string;
+}
+
+/** Session state shared by a turn source, model connector, and tools. */
+export interface AgentSession<TContext extends Record<string, unknown> = Record<string, unknown>> {
+  id: string;
+  context: TContext;
+}
+
+/** A provider-neutral input produced by the injected turn source. */
+export interface AgentInput {
+  content: string;
+  metadata?: Readonly<Record<string, unknown>>;
+}
+
+/** In-memory conversation entries passed to the model connector. */
+export type AgentMessage =
+  | { role: "user"; content: string }
+  | { role: "assistant"; content: string }
+  | { role: "tool"; toolCallId: string; name: string; result: unknown; isError?: boolean };
+
+/** A finite tool that can be invoked by an agent model response. */
+export interface AgentToolDefinition<TContext extends Record<string, unknown> = Record<string, unknown>> {
+  name: string;
+  description: string;
+  execute: (args: unknown, session: AgentSession<TContext>, signal: AbortSignal) => Promise<unknown>;
+}
+
+/** A model response: either emit a message or request one declared tool. */
+export type AgentModelResponse =
+  | { type: "message"; content: string; terminal?: boolean }
+  | { type: "tool_call"; toolCallId?: string; name: string; args: unknown };
+
+/** Input contract for a provider/model connector. */
+export interface AgentModelTurn<TContext extends Record<string, unknown> = Record<string, unknown>> {
+  session: AgentSession<TContext>;
+  instructions: AgentInstructions;
+  tools: readonly AgentToolDefinition<TContext>[];
+  history: readonly AgentMessage[];
+  input?: AgentInput;
+  signal: AbortSignal;
+}
+
+export interface AgentModelConnector<TContext extends Record<string, unknown> = Record<string, unknown>> {
+  turn: (request: AgentModelTurn<TContext>) => Promise<AgentModelResponse>;
+}
+
+export interface AgentTurnSource<TContext extends Record<string, unknown> = Record<string, unknown>> {
+  next: (request: { session: AgentSession<TContext>; signal: AbortSignal }) => Promise<AgentInput | null>;
+}
+
+/** Output delivered to the injected channel bridge (voice, SMS, etc.). */
+export interface AgentOutput<TContext extends Record<string, unknown> = Record<string, unknown>> {
+  session: AgentSession;
+  content: string;
+  terminal: boolean;
+}
+
+export interface AgentOutputSink<TContext extends Record<string, unknown> = Record<string, unknown>> {
+  emit: (output: AgentOutput<TContext> & { session: AgentSession<TContext> }) => Promise<void>;
+}
+
+/** Metadata-only lifecycle events. These deliberately contain no content, prompts, or tool data. */
+export type AgentLifecycleEvent =
+  | {
+      type: "run_started";
+      kitId: string;
+      agentId: string;
+      triggerId: string;
+      triggerIdentity: string;
+      sessionId: string;
+      instructionsVersion: string;
+      at: number;
+    }
+  | {
+      type: "turn_started";
+      kitId: string;
+      agentId: string;
+      sessionId: string;
+      turn: number;
+      at: number;
+    }
+  | {
+      type: "turn_finished";
+      kitId: string;
+      agentId: string;
+      sessionId: string;
+      turn: number;
+      outcome: "message" | "tool_call" | "error";
+      durationMs: number;
+      at: number;
+    }
+  | {
+      type: "tool_called";
+      kitId: string;
+      agentId: string;
+      sessionId: string;
+      turn: number;
+      toolName: string;
+      outcome: "completed" | "failed" | "rejected";
+      durationMs: number;
+      at: number;
+    }
+  | {
+      type: "run_finished";
+      kitId: string;
+      agentId: string;
+      triggerId: string;
+      sessionId: string;
+      status: AgentRunStatus;
+      turns: number;
+      toolCalls: number;
+      durationMs: number;
+      at: number;
+    };
+
+export interface AgentLifecycleHooks {
+  onEvent?: (event: AgentLifecycleEvent) => void | Promise<void>;
+}
+
+export type AgentRunStatus = "completed" | "cancelled" | "timed_out" | "max_turns" | "failed";
+
+export interface AgentRunError {
+  code:
+    | "AGENT_CANCELLED"
+    | "AGENT_TIMEOUT"
+    | "AGENT_MAX_TURNS"
+    | "AGENT_MODEL_ERROR"
+    | "AGENT_TOOL_ERROR"
+    | "AGENT_UNDECLARED_TOOL"
+    | "AGENT_OUTPUT_ERROR"
+    | "AGENT_SOURCE_ERROR";
+  message: string;
+}
+
+export interface AgentRunResult {
+  status: AgentRunStatus;
+  sessionId: string;
+  kitId: string;
+  agentId: string;
+  triggerId: string;
+  instructionsVersion: string;
+  turns: number;
+  toolCalls: number;
+  outputs: number;
+  durationMs: number;
+  finalOutput?: string;
+  error?: AgentRunError;
+}
+
+export interface DefineAgentConfig<TContext extends Record<string, unknown> = Record<string, unknown>> {
+  id: string;
+  kitId: string;
+  trigger: AgentTrigger;
+  instructions: AgentInstructions;
+  tools: readonly AgentToolDefinition<TContext>[];
+  turnSource: AgentTurnSource<TContext>;
+  model: AgentModelConnector<TContext>;
+  output: AgentOutputSink<TContext>;
+  maxTurns?: number;
+  maxDurationMs?: number;
+  hooks?: AgentLifecycleHooks;
+}
+
+export interface AgentDefinition<TContext extends Record<string, unknown> = Record<string, unknown>>
+  extends Omit<DefineAgentConfig<TContext>, "hooks"> {
+  run: (options: {
+    sessionId: string;
+    context?: TContext;
+    signal?: AbortSignal;
+  }) => Promise<AgentRunResult>;
+}
+
 // --- Protocol types (Router ↔ Kit Lambda) ---
 
 /**

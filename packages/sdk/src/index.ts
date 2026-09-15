@@ -12,6 +12,25 @@ export type {
   LoaderData,
   Infer,
   AuthzRequirement,
+  AgentInstructions,
+  AgentTrigger,
+  AgentSession,
+  AgentInput,
+  AgentMessage,
+  AgentToolDefinition,
+  AgentModelResponse,
+  AgentModelTurn,
+  AgentModelConnector,
+  AgentTurnSource,
+  AgentOutput,
+  AgentOutputSink,
+  AgentLifecycleEvent,
+  AgentLifecycleHooks,
+  AgentRunStatus,
+  AgentRunError,
+  AgentRunResult,
+  DefineAgentConfig,
+  AgentDefinition,
 } from "./types";
 
 // Factory functions
@@ -19,6 +38,7 @@ export { defineKit } from "./define-kit";
 export { defineTool } from "./define-tool";
 export { defineView } from "./define-view";
 export { defineLoader } from "./define-loader";
+export { defineAgent } from "./define-agent";
 
 // Result helpers
 export { kit, type KitResultFragment } from "./result";
