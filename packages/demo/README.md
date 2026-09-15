@@ -84,6 +84,42 @@ production data/secrets.
 The external smoke helper remains blocked until HTTPS/WSS and Claude MCP URLs
 are provided.
 
+## AWS demo deployment
+
+The demo can run as a single SST-managed ECS/Fargate service. This is a demo
+environment, not a production deployment: the service is deliberately pinned
+to one task so its in-process session state remains coherent across the
+prebrief, phone call, and debrief sequence. Telemetry and memory use the
+configured remote libSQL/Turso database.
+
+Set the service domain before deploying if you want real Twilio calls. The
+domain must be hosted in Route 53 (or replace the SST domain configuration
+with an externally managed ACM certificate/DNS record):
+
+```sh
+export KITSTACK_DEMO_VOICE_DOMAIN=voice.example.com
+sst secret set TursoDbUrl 'libsql://your-db.turso.io'
+sst secret set TursoAuthToken 'your-turso-token'
+sst secret set DemoAdminToken 'use-a-long-random-operator-token'
+sst secret set DemoAllowedDestination '+491234567890'
+sst secret set TwilioAccountSid 'AC...'
+sst secret set TwilioAuthToken '...'
+sst secret set TwilioFromNumber '+49...'
+sst secret set OpenAiApiKey 'sk-...'
+npx sst deploy --stage demo
+```
+
+The deployment prints the `DemoVoice` URL. Set
+`KITSTACK_DEMO_VOICE_DOMAIN` consistently for later deploys; it becomes the
+HTTPS/WSS origin used in TwiML and Twilio signature validation. The `/demo`
+dashboard is wired to the service URL by SST and receives the operator token
+as a build-time public demo value. Keep this environment access-controlled.
+
+Without the provider secrets or voice domain, the service still deploys and
+the deterministic simulator remains available. The live-call capability stays
+disabled until all provider settings and public HTTPS/WSS settings are
+present. Verify `GET /healthz` before opening `/demo`.
+
 ## Real phone path: T-0165 target configuration
 
 This is the operator contract for the composed live path. Do not expose a

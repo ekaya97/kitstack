@@ -1,6 +1,7 @@
 import { webBucket, userAssetsBucket, skillBucket, kitBucket, kitCdn } from "./storage";
 import { mcpRouter, userKitDbs, kitLambdaInfra } from "./mcp";
 import * as secrets from "./secrets";
+import { demoVoiceUrl } from "./demo";
 
 export const web = new sst.aws.Nextjs("Web", {
   path: "web",
@@ -55,6 +56,8 @@ export const web = new sst.aws.Nextjs("Web", {
     NEXT_PUBLIC_BETTER_AUTH_URL: $app.stage != "production" ? "http://localhost:3000" : "https://kitstack.co",
     NEXT_PUBLIC_POSTHOG_KEY: process.env.NEXT_PUBLIC_POSTHOG_KEY || "",
     NEXT_PUBLIC_POSTHOG_HOST: "https://eu.i.posthog.com",
+    NEXT_PUBLIC_DEMO_API_URL: process.env.NEXT_PUBLIC_DEMO_API_URL || demoVoiceUrl,
+    NEXT_PUBLIC_DEMO_ADMIN_TOKEN: process.env.NEXT_PUBLIC_DEMO_ADMIN_TOKEN || secrets.demoAdminToken.value,
   },
   domain: $app.stage != "production" ? undefined : {
     name: "kitstack.co",

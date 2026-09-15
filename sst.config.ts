@@ -23,6 +23,7 @@ export default $config({
     await import("./infra/secrets");
     await import("./infra/storage");
     await import("./infra/mcp");
+    await import("./infra/demo");
     await import("./infra/web");
     return {};
   },

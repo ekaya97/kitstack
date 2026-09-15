@@ -26,3 +26,12 @@ export const lemonsqueezyWebhookSecret = new sst.Secret("LemonsqueezyWebhookSecr
 export const posthogKey = new sst.Secret("PosthogKey", "");
 export const posthogHost = new sst.Secret("PosthogHost", "https://eu.i.posthog.com");
 
+// ── Demo voice service ─────────────────────────────────────────
+// Empty placeholders keep simulator-only deployments deployable. Set these
+// before enabling the real Twilio/OpenAI call path.
+export const demoAdminToken = new sst.Secret("DemoAdminToken", "demo-admin-token");
+export const demoAllowedDestination = new sst.Secret("DemoAllowedDestination", "");
+export const twilioAccountSid = new sst.Secret("TwilioAccountSid", "");
+export const twilioAuthToken = new sst.Secret("TwilioAuthToken", "");
+export const twilioFromNumber = new sst.Secret("TwilioFromNumber", "");
+export const openAiApiKey = new sst.Secret("OpenAiApiKey", "");
