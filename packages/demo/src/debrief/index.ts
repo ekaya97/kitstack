@@ -1,4 +1,4 @@
-import type { MemoryRecord, MemoryWriteInput } from "../memory/index.js";
+import type { MemoryContext, MemoryRecord, MemoryWriteInput } from "../memory/index.js";
 import type { InstructionPlugin, ResolvedInstruction } from "../instructions/index.js";
 import type { TelemetryEventInput, TelemetryStore } from "../telemetry/index.js";
 
@@ -33,11 +33,23 @@ export interface DebriefSummary {
   memoryIds: string[];
 }
 
+/** A memory returned by or taught during a particular debrief session. */
+export interface TaughtMemoryOperationInput {
+  sessionId: string;
+  memoryId: string;
+}
+
+/** Public input for moving a taught candidate to the approved state. */
+export interface ApproveMemoryInput extends TaughtMemoryOperationInput {}
+
+/** Public input for publishing an approved taught memory for later runs. */
+export interface PublishMemoryInput extends TaughtMemoryOperationInput {}
+
 export interface MemoryStoreLike {
-  writeCandidate(input: MemoryWriteInput, context: any): Promise<MemoryRecord>;
-  approveCandidate(memoryId: string, context: any): Promise<MemoryRecord>;
-  publishCandidate(memoryId: string, context: any): Promise<MemoryRecord>;
-  readRelevant(query: any, context: any): Promise<MemoryRecord[]>;
+  writeCandidate(input: MemoryWriteInput, context: MemoryContext): Promise<MemoryRecord>;
+  approveCandidate(memoryId: string, context: MemoryContext): Promise<MemoryRecord>;
+  publishCandidate(memoryId: string, context: MemoryContext): Promise<MemoryRecord>;
+  readRelevant(query: any, context: MemoryContext): Promise<MemoryRecord[]>;
 }
 
 export interface TextInference {
@@ -95,8 +107,27 @@ export class DebriefService {
     return record;
   }
 
-  async approve(sessionId: string, memoryId: string): Promise<MemoryRecord> { return this.memory.approveCandidate(memoryId, this.memoryContext(sessionId)); }
-  async publish(sessionId: string, memoryId: string): Promise<MemoryRecord> { return this.memory.publishCandidate(memoryId, this.memoryContext(sessionId)); }
+  /** Approve a candidate that belongs to this debrief's taught/retrieved context. */
+  async approveMemory(input: ApproveMemoryInput): Promise<MemoryRecord> {
+    const session = this.requireTaughtMemory(input);
+    return this.memory.approveCandidate(input.memoryId, this.memoryContext(session.sessionId));
+  }
+
+  /** Publish an approved memory that belongs to this debrief's taught/retrieved context. */
+  async publishMemory(input: PublishMemoryInput): Promise<MemoryRecord> {
+    const session = this.requireTaughtMemory(input);
+    return this.memory.publishCandidate(input.memoryId, this.memoryContext(session.sessionId));
+  }
+
+  /** Backwards-compatible positional form used by the existing local composition. */
+  async approve(sessionId: string, memoryId: string): Promise<MemoryRecord> {
+    return this.approveMemory({ sessionId, memoryId });
+  }
+
+  /** Backwards-compatible positional form used by the existing local composition. */
+  async publish(sessionId: string, memoryId: string): Promise<MemoryRecord> {
+    return this.publishMemory({ sessionId, memoryId });
+  }
 
   getSession(sessionId: string): DebriefSession { const session = this.require(sessionId); return { ...session, memoryIds: [...session.memoryIds] }; }
   getDebrief(sessionId: string): DebriefSummary { const s = this.getSession(sessionId); return { sessionId: s.sessionId, state: s.state, goal: s.goal, instructionVersion: s.instructionVersion, memoryIds: s.memoryIds }; }
@@ -104,6 +135,13 @@ export class DebriefService {
 
   private get kitId(): string { return this.context.kitId ?? "kit:debrief"; }
   private require(id: string): DebriefSession { const session = this.sessions.get(id); if (!session) throw new Error(`Debrief session "${id}" was not found`); return session; }
+  private requireTaughtMemory(input: TaughtMemoryOperationInput): DebriefSession {
+    const session = this.require(input.sessionId);
+    if (!session.memoryIds.includes(input.memoryId)) {
+      throw new Error(`Memory "${input.memoryId}" is not part of debrief session "${input.sessionId}"`);
+    }
+    return session;
+  }
   private async transition(id: string, state: DebriefState): Promise<DebriefSession> { const s = this.require(id); const allowed = s.state === "prepared" && state === "calling" || s.state === "calling" && state === "awaiting_confirmation" || s.state === "awaiting_confirmation" && state === "partial" || (s.state === "awaiting_confirmation" || s.state === "partial") && state === "confirmed"; if (!allowed) throw new Error(`Invalid debrief transition ${s.state} -> ${state}`); s.state = state; s.updatedAt = this.now(); await this.emit(s, state === "confirmed" ? "complete" : "state", state === "partial" ? "partial" : "success"); return this.getSession(id); }
   private memoryContext(sessionId: string) { return { orgId: this.context.orgId, appId: this.context.appId, sessionId, traceId: sessionId, parentId: null, kitId: this.kitId }; }
   private pluginContext(sessionId: string) { return { ...this.memoryContext(sessionId), telemetry: this.telemetry, lookupPlugin: () => undefined }; }

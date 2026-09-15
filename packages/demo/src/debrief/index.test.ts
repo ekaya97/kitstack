@@ -17,7 +17,8 @@ describe("DebriefService", () => {
     await service.markCalling(s.sessionId); await service.awaitConfirmation(s.sessionId);
     const candidate = await service.teachFromCorrection(s.sessionId, "Lead prefers email");
     expect(candidate.status).toBe("candidate");
-    await service.approve(s.sessionId, candidate.memoryId); await service.publish(s.sessionId, candidate.memoryId);
+    await service.approveMemory({ sessionId: s.sessionId, memoryId: candidate.memoryId });
+    await service.publishMemory({ sessionId: s.sessionId, memoryId: candidate.memoryId });
     await service.confirmDebrief(s.sessionId);
     expect(service.getDebrief(s.sessionId).state).toBe("confirmed");
     expect(memory.writeCandidate).toHaveBeenCalledWith(expect.objectContaining({ correction: "Lead prefers email" }), expect.anything());
@@ -34,6 +35,43 @@ describe("DebriefService", () => {
     expect(service.getDebrief(second.sessionId).memoryIds).toContain(candidate.memoryId);
     expect(service.getDebrief(second.sessionId)).not.toHaveProperty("correction");
     expect(telemetry.append).toHaveBeenCalled();
+  });
+
+  it("only transitions memories taught or retrieved by the target session", async () => {
+    const { service, memory } = setup();
+    const session = await service.prepareDebrief("sell");
+
+    await expect(service.approveMemory({ sessionId: session.sessionId, memoryId: "memory-from-another-session" })).rejects.toThrow(
+      `Memory "memory-from-another-session" is not part of debrief session "${session.sessionId}"`,
+    );
+    expect(memory.approveCandidate).not.toHaveBeenCalled();
+  });
+
+  it("passes the session's org and kit identity and emits no memory payload", async () => {
+    const { service, memory, telemetry } = setup();
+    const session = await service.prepareDebrief("sell");
+    await service.markCalling(session.sessionId);
+    await service.awaitConfirmation(session.sessionId);
+    const candidate = await service.teachFromCorrection(session.sessionId, "Use annual pricing");
+
+    await service.approveMemory({ sessionId: session.sessionId, memoryId: candidate.memoryId });
+    await service.publishMemory({ sessionId: session.sessionId, memoryId: candidate.memoryId });
+
+    expect(memory.approveCandidate).toHaveBeenCalledWith(candidate.memoryId, expect.objectContaining({
+      orgId: "o",
+      kitId: "kit:debrief",
+      sessionId: session.sessionId,
+      appId: "a",
+    }));
+    expect(memory.publishCandidate).toHaveBeenCalledWith(candidate.memoryId, expect.objectContaining({
+      orgId: "o",
+      kitId: "kit:debrief",
+      sessionId: session.sessionId,
+      appId: "a",
+    }));
+    for (const [event] of telemetry.append.mock.calls) {
+      expect(event).not.toHaveProperty("correction");
+    }
   });
 
   it("records a provider/start failure", async () => {
