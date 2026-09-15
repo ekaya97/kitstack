@@ -27,6 +27,8 @@ export interface DemoApp {
 
 export interface CreateDemoAppOptions {
   url?: string;
+  /** Optional libSQL/Turso auth token for a remote demo database. */
+  authToken?: string;
   orgId?: string;
   appId?: string | null;
   secret?: string;
@@ -42,7 +44,10 @@ export async function createDemoApp(options: CreateDemoAppOptions = {}): Promise
   const mcpAuthMode = options.mcpAuthMode ?? "none";
   const adminToken = options.adminToken ?? "demo-admin-token";
   if (!adminToken.trim()) throw new Error("adminToken must not be empty");
-  const client = createClient({ url: options.url ?? ":memory:" });
+  const client = createClient({
+    url: options.url ?? ":memory:",
+    ...(options.authToken ? { authToken: options.authToken } : {}),
+  });
   const telemetry = await createTelemetryStore({ client });
   const apps = createAppRegistry({ secret: options.secret ?? "demo-secret-at-least-32-characters-long" });
   const memory = createMemoryStore(client, telemetry);

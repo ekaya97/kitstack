@@ -34,6 +34,8 @@ const CORS_HEADERS = {
 export interface DemoServerOptions {
   /** Use an ephemeral port (0) in tests. Defaults to PORT or 3001. */
   port?: number;
+  /** Defaults to HOST, then 127.0.0.1. Containers should use 0.0.0.0. */
+  host?: string;
   /** Keep request bodies bounded; bodies are parsed and never persisted. */
   maxBodyBytes?: number;
   /** Supplying an app transfers lifecycle ownership to the caller. */
@@ -64,6 +66,8 @@ export interface DemoServerAddress {
 export async function createDemoServer(options: DemoServerOptions = {}): Promise<DemoServer> {
   const app = options.app ?? await createDemoApp({
     ...options.appOptions,
+    url: options.appOptions?.url ?? readDatabaseUrl(),
+    authToken: options.appOptions?.authToken ?? readDatabaseAuthToken(),
     mcpAuthMode: options.appOptions?.mcpAuthMode ?? readMcpAuthMode(process.env.KITSTACK_DEMO_MCP_AUTH),
     adminToken: options.appOptions?.adminToken ?? process.env.KITSTACK_DEMO_ADMIN_TOKEN,
   });
@@ -78,6 +82,11 @@ export async function createDemoServer(options: DemoServerOptions = {}): Promise
   if (!Number.isInteger(requestedPort) || requestedPort < 0 || requestedPort > 65535) {
     if (ownsApp) await app.close();
     throw new Error("port must be an integer between 0 and 65535");
+  }
+  const requestedHost = options.host ?? process.env.HOST ?? "127.0.0.1";
+  if (!requestedHost.trim()) {
+    if (ownsApp) await app.close();
+    throw new Error("host must not be empty");
   }
 
   const liveVoice = options.liveVoice ?? await composeLiveVoiceRoute(app);
@@ -110,7 +119,7 @@ export async function createDemoServer(options: DemoServerOptions = {}): Promise
         };
         server.once("error", onError);
         server.once("listening", onListening);
-        server.listen(requestedPort, "127.0.0.1");
+        server.listen(requestedPort, requestedHost);
       });
       return address(server);
     },
@@ -148,6 +157,11 @@ async function handleIncomingRequest(
 
   try {
     const url = new URL(request.url ?? "/", "http://demo.local");
+    if (request.method?.toUpperCase() === "GET" && url.pathname === "/healthz") {
+      response.statusCode = 200;
+      response.end(JSON.stringify({ status: "ok" }));
+      return;
+    }
     const body = await readJsonBody(request, maxBodyBytes);
     const result = await handleDemoAppRequest(app, {
       method: request.method ?? "GET",
@@ -364,6 +378,16 @@ async function handleUpgrade(
 function parsePort(value: string | undefined): number | undefined {
   if (value === undefined || !/^\d+$/.test(value)) return undefined;
   return Number(value);
+}
+
+function readDatabaseUrl(): string | undefined {
+  const value = process.env.KITSTACK_DEMO_DB_URL?.trim() || process.env.TURSO_DB_URL?.trim();
+  return value || undefined;
+}
+
+function readDatabaseAuthToken(): string | undefined {
+  const value = process.env.KITSTACK_DEMO_DB_AUTH_TOKEN?.trim() || process.env.TURSO_AUTH_TOKEN?.trim();
+  return value || undefined;
 }
 
 function readMcpAuthMode(value: string | undefined): McpAuthMode {
