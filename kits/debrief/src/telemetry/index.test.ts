@@ -29,6 +29,9 @@ function event(overrides: Partial<TelemetryEventInput> = {}): TelemetryEventInpu
     timestamp: "2026-09-14T20:00:00.000Z",
     orgId: "org-demo",
     appId: "app-sales",
+    principal: "user-1",
+    actor: "agent-1",
+    delegation: "delegation-1",
     sessionId: "session-1",
     channel: "chat",
     type: "mcp.tool_call",
@@ -41,7 +44,7 @@ function event(overrides: Partial<TelemetryEventInput> = {}): TelemetryEventInpu
 describe("TelemetryStore", () => {
   it("appends and queries metadata without retaining bodies", async () => {
     const telemetry = await makeStore();
-    const appended = await telemetry.append({
+    await expect(telemetry.append({
       ...event({
         requestTokens: 120,
         responseTokens: 40,
@@ -52,24 +55,29 @@ describe("TelemetryStore", () => {
         instructionVersions: ["interviewer@1"],
         memoryIds: ["memory-1"],
       }),
-      // Runtime callers may still have a body in an object; the store's
-      // explicit insert mapping must ignore it rather than persist it.
+      // Runtime callers must not cross the SDK retention boundary with bodies.
       prompt: "do not retain me",
       completion: "do not retain me",
       audio: "do not retain me",
       transcript: "do not retain me",
       toolPayload: { secret: true },
-    } as TelemetryEventInput & Record<string, unknown>);
+    } as TelemetryEventInput & Record<string, unknown>)).rejects.toThrow(/metadata only/);
 
+    const appended = await telemetry.append(event({
+      requestTokens: 120,
+      responseTokens: 40,
+      latencyMs: 95,
+      estimatedCostUsd: 0.0025,
+      provider: "twilio-openai-realtime",
+      callId: "CA123",
+      instructionVersions: ["interviewer@1"],
+      memoryIds: ["memory-1"],
+    }));
     expect(appended.sequence).toBe(1);
     expect(appended.requestTokens).toBe(120);
     expect(appended.instructionVersions).toEqual(["interviewer@1"]);
     expect(appended.memoryIds).toEqual(["memory-1"]);
-    expect(appended).not.toHaveProperty("prompt");
-    expect(appended).not.toHaveProperty("completion");
-    expect(appended).not.toHaveProperty("audio");
-    expect(appended).not.toHaveProperty("transcript");
-    expect(appended).not.toHaveProperty("toolPayload");
+    expect(appended).toMatchObject({ principal: "user-1", actor: "agent-1", delegation: "delegation-1" });
 
     const rows = await telemetry.query({ sessionId: "session-1" });
     expect(rows).toHaveLength(1);
@@ -81,6 +89,9 @@ describe("TelemetryStore", () => {
       estimatedCostUsd: 0.0025,
       provider: "twilio-openai-realtime",
       callId: "CA123",
+      principal: "user-1",
+      actor: "agent-1",
+      delegation: "delegation-1",
     });
   });
 

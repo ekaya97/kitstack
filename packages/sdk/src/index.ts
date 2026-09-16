@@ -43,6 +43,23 @@ export type {
   AgentDefinition,
 } from "./types";
 
+// Metadata-only telemetry
+export {
+  assertMetadataOnlyTelemetry,
+  createMetadataTelemetrySink,
+  createOtelTelemetryExporter,
+  createTelemetryEvent,
+  isMetadataOnlyTelemetry,
+  type MetadataTelemetrySink,
+  type OtelSpanData,
+  type OtelSpanExporter,
+  type TelemetryAttributeValue,
+  type TelemetryEvent,
+  type TelemetryEventInput,
+  type TelemetryExporter,
+  type TelemetryOutcome,
+} from "./telemetry";
+
 // Factory functions
 export { defineKit } from "./define-kit";
 export { defineTool } from "./define-tool";
