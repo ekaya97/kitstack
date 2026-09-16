@@ -237,6 +237,8 @@ export interface ScheduledCallPollerOptions {
   leaseMs?: number;
   intervalMs?: number;
   startCall: (job: ScheduledCallRecord) => Promise<string | null>;
+  /** Optional trigger-backed invocation used by daemon/channel hosts. */
+  invokeTrigger?: (job: ScheduledCallRecord) => Promise<string | null>;
   onProviderStart?: (job: ScheduledCallRecord, providerCallId: string | null) => Promise<void>;
   onProviderFailure?: (job: ScheduledCallRecord, error: unknown) => Promise<void>;
 }
@@ -261,7 +263,9 @@ export class ScheduledCallPoller {
     const job = await this.options.operations.claimDue({ orgId: this.options.orgId, workerId: this.options.workerId, now: this.now(), leaseMs: this.leaseMs });
     if (!job) return null;
     try {
-      const providerCallId = await this.options.startCall(job);
+      const providerCallId = await (this.options.invokeTrigger
+        ? this.options.invokeTrigger(job)
+        : this.options.startCall(job));
       await this.options.onProviderStart?.(job, providerCallId);
       return await this.options.operations.complete({
         orgId: job.orgId,

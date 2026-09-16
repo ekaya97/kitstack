@@ -23,6 +23,8 @@ import {
   type SessionBinding,
   type VoiceWebSocket,
 } from "../adapters/voice/realtime.js";
+import { dispatchTrigger } from "@kitstackco/sdk";
+import { createScheduledTrigger } from "../triggers/index.js";
 
 const DEFAULT_PORT = 3001;
 const DEFAULT_MAX_BODY_BYTES = 1024 * 1024;
@@ -46,6 +48,8 @@ export interface DemoServerOptions {
   liveVoice?: DemoLiveVoiceRoute;
   /** Optional provider-neutral scheduler seam. T-0189 supplies the live-call adapter. */
   scheduledCallPoller?: ScheduledCallPoller;
+  /** Request mode rejects upgrades; daemon mode owns long-lived channel upgrades. */
+  mode?: "http" | "daemon";
 }
 
 export interface DemoServer {
@@ -92,6 +96,7 @@ export async function createDemoServer(options: DemoServerOptions = {}): Promise
     throw new Error("host must not be empty");
   }
 
+  const mode = options.mode ?? "daemon";
   const liveVoice = options.liveVoice ?? await composeLiveVoiceRoute(app);
   const scheduledCallPoller = options.scheduledCallPoller ?? (liveVoice ? createLiveVoiceScheduler(app, liveVoice) : undefined);
   const webSocketServer = new WebSocketServer({ noServer: true });
@@ -102,7 +107,7 @@ export async function createDemoServer(options: DemoServerOptions = {}): Promise
     void handleIncomingRequest(request, response, app, maxBodyBytes, liveVoice);
   });
   server.on("upgrade", (request, socket, head) => {
-    void handleUpgrade(request, socket, head, webSocketServer, liveVoice);
+    void handleUpgrade(request, socket, head, webSocketServer, mode, liveVoice);
   });
 
   return {
@@ -361,6 +366,13 @@ async function composeLiveVoiceRoute(app: DemoApp): Promise<DemoLiveVoiceRoute |
 }
 
 function createLiveVoiceScheduler(app: DemoApp, liveVoice: DemoLiveVoiceRoute): ScheduledCallPollerType {
+  const scheduledTrigger = createScheduledTrigger(async (_context, payload) => {
+    const session = await app.debrief.hydrateSession(payload.sessionId);
+    if (session.orgId !== app.orgId) throw new Error("Scheduled call organization mismatch");
+    const result = await startScheduledLiveVoiceCall(payload.sessionId, liveVoice.http);
+    return result.callId;
+  });
+
   return new ScheduledCallPoller({
     operations: app.scheduler,
     orgId: app.orgId,
@@ -373,6 +385,34 @@ function createLiveVoiceScheduler(app: DemoApp, liveVoice: DemoLiveVoiceRoute): 
       if (session.orgId !== job.orgId) throw new Error("Scheduled call organization mismatch");
       const result = await startScheduledLiveVoiceCall(job.sessionId, liveVoice.http);
       return result.callId;
+    },
+    invokeTrigger: async (job) => {
+      const invoked = await dispatchTrigger(scheduledTrigger, {
+        kitId: "kit:debrief",
+        payload: { sessionId: job.sessionId },
+        method: "INTERNAL",
+        path: "/t/debrief/scheduler",
+        channel: { kind: "schedule", id: scheduledTrigger.id },
+        session: { id: job.sessionId, traceId: `schedule:${job.sessionId}` },
+      }, {
+        // T-0206 supplies the mandatory audit seam; durable audit storage is a
+        // separate ticket. Existing metadata telemetry keeps this demo path
+        // observable without persisting payloads.
+        audit: async (event) => {
+          await app.telemetry.append({
+            id: crypto.randomUUID(), timestamp: new Date().toISOString(), orgId: app.orgId,
+            appId: app.appId, sessionId: job.sessionId, traceId: `schedule:${job.sessionId}`,
+            channel: "trigger", pluginId: event.triggerId, kitId: "kit:debrief",
+            type: "plugin.invoked", operation: "dispatch",
+            outcome: event.outcome === "success" ? "success" : "error",
+          });
+        },
+      });
+      if (invoked.result.isError) {
+        const block = invoked.result.content[0];
+        throw new Error(block?.type === "text" ? block.text : "Scheduled trigger failed");
+      }
+      return invoked.value ?? null;
     },
     onProviderFailure: async (job, error) => {
       try { await app.debrief.markFailed(job.sessionId, error); } catch { /* Keep the scheduler failure durable. */ }
@@ -414,10 +454,11 @@ async function handleUpgrade(
   socket: NodeJS.WritableStream & { destroy(): void; write(data: string): boolean },
   head: Buffer,
   webSocketServer: WebSocketServer,
+  mode: "http" | "daemon",
   liveVoice?: DemoLiveVoiceRoute,
 ): Promise<void> {
   const path = new URL(request.url ?? "/", "http://demo.local").pathname;
-  if (!liveVoice?.bridge || path !== "/t/voice/media") {
+  if (mode !== "daemon" || !liveVoice?.bridge || path !== "/t/voice/media") {
     socket.write("HTTP/1.1 404 Not Found\r\nConnection: close\r\n\r\n");
     socket.destroy();
     return;

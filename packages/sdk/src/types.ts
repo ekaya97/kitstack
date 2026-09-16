@@ -21,6 +21,23 @@ export interface ChannelContext {
   metadata?: Readonly<Record<string, unknown>>;
 }
 
+/** Channels are transport declarations; a turn carries their metadata. */
+export type ChannelKind =
+  | "mcp"
+  | "http"
+  | "webhook"
+  | "schedule"
+  | "stream"
+  | "voice"
+  | "proxy"
+  | "internal";
+
+export interface ChannelDefinition {
+  readonly id: string;
+  readonly kind: ChannelKind;
+  readonly metadata?: Readonly<Record<string, unknown>>;
+}
+
 /** Request/session correlation fields used by telemetry and audit sinks. */
 export interface SessionContext {
   id: string;

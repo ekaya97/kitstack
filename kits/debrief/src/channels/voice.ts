@@ -25,6 +25,7 @@ export function createVoiceChannel(
 ): DebriefChannel<VoiceMediaFrame, VoiceOutput> {
   return {
     id: VOICE_CHANNEL_ID,
+    kind: "voice",
     open: (sessionId) => transport.open(sessionId),
     receive: (frame) => transport.receive(frame),
     send: (output) => transport.send(output),

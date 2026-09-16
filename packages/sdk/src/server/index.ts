@@ -6,10 +6,26 @@ import type { KitDefinition } from "../types";
 import type { KitServerAdapter, ProtocolHandler } from "./types";
 import type { AuthAdapter } from "./auth/adapter";
 import { none } from "./auth/none";
+import type { IncomingMessage } from "node:http";
+import type { Duplex } from "node:stream";
 
 export type { AuthAdapter, OAuthServerMetadata } from "./auth";
 export { none, kitstack, oauth } from "./auth";
 export type { KitStackAuthConfig, OAuthConfig } from "./auth";
+
+export type ServeMode = "request" | "daemon";
+
+/** Runtime-owned upgrade boundary for long-lived channels such as voice. */
+export interface DaemonUpgrade {
+  readonly request: IncomingMessage;
+  readonly socket: Duplex;
+  readonly head: Buffer;
+}
+
+export interface DaemonOptions {
+  /** Return true after the callback has taken ownership of the socket. */
+  readonly onUpgrade?: (upgrade: DaemonUpgrade) => boolean | Promise<boolean>;
+}
 
 // Re-export shared server components
 export { createProtocolHandler } from "./protocol";
@@ -60,6 +76,10 @@ interface ServeBaseOptions {
    * @default 3001
    */
   port?: number;
+
+  /** Request/response is the default; daemon owns long-lived upgrades. */
+  mode?: ServeMode;
+  daemon?: DaemonOptions;
 }
 
 /**
@@ -116,7 +136,10 @@ export type ServeOptions = ServeSingleOptions | ServeMonolithOptions;
  * ```
  */
 export async function serve(options: ServeOptions): Promise<void> {
-  const { transport = "stdio", port = 3001 } = options;
+  const { transport = "stdio", port = 3001, mode = "request" } = options;
+  if (mode === "daemon" && transport !== "http") {
+    throw new Error('serve({ mode: "daemon" }) requires transport: "http"');
+  }
   const auth = options.auth ?? none();
 
   let adapter: KitServerAdapter;
@@ -170,7 +193,7 @@ export async function serve(options: ServeOptions): Promise<void> {
   if (transport === "stdio") {
     await runStdioTransport(protocol);
   } else {
-    await runHttpTransport(protocol, auth, port);
+    await runHttpTransport(protocol, auth, port, mode, options.daemon);
   }
 }
 
@@ -216,7 +239,9 @@ async function runStdioTransport(protocol: ProtocolHandler): Promise<void> {
 async function runHttpTransport(
   protocol: ProtocolHandler,
   auth: AuthAdapter,
-  port: number
+  port: number,
+  mode: ServeMode,
+  daemon: DaemonOptions | undefined,
 ): Promise<void> {
   const { createServer } = await import("node:http");
 
@@ -278,8 +303,18 @@ async function runHttpTransport(
     res.end();
   });
 
+  server.on("upgrade", (request, socket, head) => {
+    if (mode !== "daemon" || !daemon?.onUpgrade) {
+      socket.destroy();
+      return;
+    }
+    void Promise.resolve(daemon.onUpgrade({ request, socket, head }))
+      .then((owned) => { if (!owned) socket.destroy(); })
+      .catch(() => socket.destroy());
+  });
+
   server.listen(port, () => {
-    process.stderr.write(`\n  KitStack MCP Server (HTTP)\n  http://localhost:${port}\n\n`);
+    process.stderr.write(`\n  KitStack MCP Server (${mode})\n  http://localhost:${port}\n\n`);
   });
 
   await new Promise(() => {});

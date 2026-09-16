@@ -1,4 +1,5 @@
-import type { DebriefTrigger } from "./index";
+import { defineTrigger } from "@kitstackco/sdk";
+import type { DebriefTrigger, DebriefTriggerEvent, DebriefTriggerVerifier } from "./index";
 
 export interface TwilioVoicePayload {
   readonly CallSid?: string;
@@ -8,7 +9,7 @@ export interface TwilioVoicePayload {
 }
 
 export interface TwilioTriggerOptions {
-  readonly verify: DebriefTrigger<TwilioVoicePayload>["verify"];
+  readonly verify: DebriefTriggerVerifier<TwilioVoicePayload>;
 }
 
 /**
@@ -18,14 +19,19 @@ export interface TwilioTriggerOptions {
 export function createTwilioVoiceTrigger(
   options: TwilioTriggerOptions,
 ): DebriefTrigger<TwilioVoicePayload> {
-  return {
+  const normalize = (payload: TwilioVoicePayload) => ({
+    type: "voice.started" as const,
+    source: "twilio.voice",
+    payload,
+  });
+  const trigger = defineTrigger<TwilioVoicePayload, DebriefTriggerEvent<TwilioVoicePayload>>({
     id: "trigger:twilio-voice",
-    identity: "twilio.voice",
-    verify: options.verify,
-    normalize: (payload) => ({
-      type: "voice.started",
-      source: "twilio.voice",
-      payload,
-    }),
-  };
+    kind: "webhook",
+    identity: { type: "service", principal: "twilio.voice" },
+    kits: ["kit:debrief"],
+    channel: { kind: "voice", id: "trigger:twilio-voice" },
+    verify: (request) => options.verify(request.payload, request.headers),
+    handler: async (_context, payload) => normalize(payload),
+  });
+  return { ...trigger, normalize };
 }

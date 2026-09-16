@@ -9,6 +9,7 @@
  * | Flag / Env                | Default              | Description           |
  * |---------------------------|----------------------|-----------------------|
  * | --transport / KITSTACK_TRANSPORT | stdio          | stdio or http         |
+ * | --mode / KITSTACK_SERVE_MODE | request             | request or daemon       |
  * | --port / KITSTACK_PORT    | 3001                 | HTTP port             |
  * | --db / KITSTACK_DB_URL    | file:.kitstack/dev.db| Database URL          |
  * | --db-token / KITSTACK_DB_TOKEN | (none)          | Database auth token   |
@@ -28,6 +29,7 @@ Usage:
 
 Options:
   --transport <mode>  Transport: "stdio" or "http" (default: stdio, env: KITSTACK_TRANSPORT)
+  --mode <mode>       Runtime mode: "request" or "daemon" (default: request, env: KITSTACK_SERVE_MODE)
   --port <number>     HTTP port (default: 3001, env: KITSTACK_PORT)
   --db <url>          Database URL (default: file:.kitstack/dev.db, env: KITSTACK_DB_URL)
   --db-token <token>  Database auth token (env: KITSTACK_DB_TOKEN)
@@ -43,6 +45,7 @@ export async function serve(args: string[]) {
 
   let kitRoot = process.cwd();
   let transport = process.env.KITSTACK_TRANSPORT || "stdio";
+  let mode = process.env.KITSTACK_SERVE_MODE || "request";
   let port = parseInt(process.env.KITSTACK_PORT || "3001", 10);
   let dbUrl = process.env.KITSTACK_DB_URL;
   let dbToken = process.env.KITSTACK_DB_TOKEN;
@@ -53,6 +56,7 @@ export async function serve(args: string[]) {
     switch (flag) {
       case "--config": kitRoot = resolve(next); i++; break;
       case "--transport": transport = next; i++; break;
+      case "--mode": mode = next; i++; break;
       case "--port": port = parseInt(next, 10); i++; break;
       case "--db": dbUrl = next; i++; break;
       case "--db-token": dbToken = next; i++; break;
@@ -66,6 +70,7 @@ export async function serve(args: string[]) {
     kit,
     db: { url: dbUrl ?? "file:.kitstack/dev.db", authToken: dbToken },
     transport: transport as "stdio" | "http",
+    mode: mode as "request" | "daemon",
     port,
   });
 }
