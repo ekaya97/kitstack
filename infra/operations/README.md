@@ -15,10 +15,11 @@ The current deployment is SST v4 on AWS in `eu-central-1`:
 - the debrief voice service as an SST ECS service behind an ALB, when
   `KITSTACK_DEMO_VOICE_DOMAIN` is configured
 
-`T-0211` (the future container artifact/deployment file) is not complete yet.
-The commands below therefore use the current SST source deployment path. Do
-not present `kit build` as an executable production deployment until T-0211
-lands.
+`T-0211` is now available: `kitstack build` emits a signed, hash-addressed
+container context and `kitstack.yaml`. The current stage still deploys through
+SST; the generated artifact is the portable hand-off for a later Fargate or
+Kubernetes adapter. The operational scripts below keep that distinction
+explicit.
 
 ## Operating principles
 
@@ -149,13 +150,36 @@ destructive `DROP` statements. Production provisioning applies the kit's
 migration SQL to the relevant Turso database; migration state is a platform
 concern rather than a local test concern.
 
+The migration helper validates and deploys a pinned kit ref from a temporary
+worktree. It is a release operation, not a standalone SQL editor:
+
+```bash
+bash infra/operations/migrate-stage.sh \
+  --stage production \
+  --ref <candidate-commit-or-tag> \
+  --kit kits/debrief
+```
+
+Review the printed migration hash and plan. To execute the candidate build and
+SST deployment, pass both explicit gates:
+
+```bash
+bash infra/operations/migrate-stage.sh \
+  --stage production \
+  --ref <candidate-commit-or-tag> \
+  --kit kits/debrief \
+  --execute --confirm-migration
+```
+
 For each schema change:
 
-1. Build and test from the candidate commit. Review generated migration files
+1. Run `migrate-stage.sh` in plan mode. Review the printed migration hash and
+   generated migration files
    and confirm the change is additive or has an explicit data-preserving plan.
 2. Verify a recent backup and complete a restore rehearsal into a distinct
    disposable database.
-3. Deploy the candidate to the named stage during an observation window.
+3. Execute `migrate-stage.sh` to build and deploy the candidate to the named
+   stage during an observation window.
 4. Watch migration errors, router errors, latency, and the affected kit's
    read/write operations.
 5. If the code is faulty, roll back code only after checking schema
