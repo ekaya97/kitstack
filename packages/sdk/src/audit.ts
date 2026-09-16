@@ -194,7 +194,7 @@ export function createHttpAuditExporter(options: HttpAuditExporterOptions): Audi
 
   return {
     async export(records, format) {
-      const body = defaultAuditExporter.export(records, format);
+      const body = await defaultAuditExporter.export(records, format);
       const controller = new AbortController();
       const timeout = setTimeout(() => controller.abort(), timeoutMs);
       try {
