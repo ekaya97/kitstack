@@ -120,9 +120,13 @@ describe("platform debrief adapter", () => {
         org: "org-demo",
         kit: "debrief",
         req: "http-request-1",
-        trace: "trace-1",
+        trace: "4bf92f3577b34da6a3ce929d0e0e4736",
       });
       expect(String(input)).toBe("https://voice.example/mcp");
+      const headers = new Headers(init?.headers);
+      expect(headers.get("traceparent")).toBe("00-4bf92f3577b34da6a3ce929d0e0e4736-00f067aa0ba902b7-01");
+      expect(headers.get("x-session-id")).toBe("session-1");
+      expect(headers.get("x-parent-id")).toBe("00f067aa0ba902b7");
       expect(JSON.parse(String(init?.body))).toMatchObject({
         method: "tools/call",
         params: {
@@ -143,7 +147,13 @@ describe("platform debrief adapter", () => {
       voiceServiceUrl: "https://voice.example",
       voiceInternalSecret: SECRET,
       fetch: fetcher,
-      requestContext: { requestId: "http-request-1", traceId: "trace-1" },
+      requestContext: {
+        requestId: "http-request-1",
+        sessionId: "session-1",
+        traceId: "4bf92f3577b34da6a3ce929d0e0e4736",
+        parentId: "00f067aa0ba902b7",
+        traceparent: "00-4bf92f3577b34da6a3ce929d0e0e4736-00f067aa0ba902b7-01",
+      },
     });
 
     const result = await adapter.executeTool("debrief", "prepare_debrief", {
@@ -176,14 +186,28 @@ describe("platform debrief adapter", () => {
 
   it("keeps existing kits on the Lambda dispatch path", async () => {
     const { dispatchToolCall } = await import("../tool-dispatcher");
+    const requestContext = {
+      sessionId: "session-1",
+      traceId: "4bf92f3577b34da6a3ce929d0e0e4736",
+      parentId: "00f067aa0ba902b7",
+    };
     const adapter = platformAdapter({
       getAllTools: vi.fn(async () => [existingTool]),
       getUserKitDbs: vi.fn(async () => [userDb]),
       invokeKitLambda: vi.fn(),
+      requestContext,
     });
 
     const result = await adapter.executeTool("crm", "list_contacts", {}, "user-1");
     expect(result.content[0]).toEqual({ type: "text", text: "crm result" });
-    expect(dispatchToolCall).toHaveBeenCalledOnce();
+    expect(dispatchToolCall).toHaveBeenLastCalledWith(
+      "list_contacts",
+      {},
+      "user-1",
+      expect.any(Function),
+      expect.any(Function),
+      requestContext,
+    );
   });
+
 });

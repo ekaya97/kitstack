@@ -20,6 +20,7 @@ import { kitCdnUrl, demoInternalSecret, demoOrgId, demoVoiceServiceUrl } from ".
 import { SignJWT } from "jose";
 import { createDebriefTools } from "../../../../kits/debrief/src/tools";
 import { zodToJsonSchema } from "../../../sdk/src/runtime/zod-to-json-schema";
+import { parseTraceparent, traceparentFromIds } from "./trace-context";
 
 const APP_SHELL_URI = "ui://kitstack/app";
 const DEBRIEF_KIT_ID = "debrief";
@@ -74,7 +75,10 @@ const DEBRIEF_KIT: ResolvedKit = {
 
 export interface PlatformAdapterRequestContext {
   requestId?: string;
+  sessionId?: string;
   traceId?: string;
+  parentId?: string;
+  traceparent?: string;
 }
 
 export interface PlatformAdapterDeps {
@@ -194,7 +198,8 @@ export function platformAdapter(deps: PlatformAdapterDeps): KitServerAdapter {
         args,
         userId,
         getAllTools,
-        invokeKitLambda
+        invokeKitLambda,
+        requestContext,
       );
     },
 
@@ -234,6 +239,7 @@ export function platformAdapter(deps: PlatformAdapterDeps): KitServerAdapter {
         kitId,
         dbUrl: userDb.dbUrl,
         dbToken: userDb.dbToken,
+        ...invocationTraceFields(requestContext),
       }) as any;
 
       return result?.data ?? null;
@@ -289,6 +295,9 @@ async function callDebriefVoiceService(input: DebriefVoiceCallInput): Promise<Ki
 
   const requestId = input.requestContext?.requestId?.trim() || `mcp-${crypto.randomUUID()}`;
   const traceId = input.requestContext?.traceId?.trim() || requestId;
+  const parentId = input.requestContext?.parentId?.trim();
+  const traceparent = parseTraceparent(input.requestContext?.traceparent)?.traceparent
+    ?? traceparentFromIds(traceId, parentId);
   const token = await new SignJWT({
     org: input.orgId,
     kit: DEBRIEF_KIT_ID,
@@ -310,6 +319,9 @@ async function callDebriefVoiceService(input: DebriefVoiceCallInput): Promise<Ki
         "content-type": "application/json",
         "x-request-id": requestId,
         "x-trace-id": traceId,
+        ...(input.requestContext?.sessionId ? { "x-session-id": input.requestContext.sessionId } : {}),
+        ...(parentId ? { "x-parent-id": parentId } : {}),
+        ...(traceparent ? { traceparent } : {}),
       },
       body: JSON.stringify({
         jsonrpc: "2.0",
@@ -343,6 +355,17 @@ async function callDebriefVoiceService(input: DebriefVoiceCallInput): Promise<Ki
   } finally {
     clearTimeout(timeout);
   }
+}
+
+/** Fields understood by the generated kit Lambda handler's KitContext bridge. */
+function invocationTraceFields(
+  context?: PlatformAdapterRequestContext,
+): Record<string, string> {
+  return {
+    ...(context?.sessionId ? { sessionId: context.sessionId } : {}),
+    ...(context?.traceId ? { traceId: context.traceId } : {}),
+    ...(context?.parentId ? { parentId: context.parentId } : {}),
+  };
 }
 
 async function readJson(response: Response): Promise<any> {

@@ -10,6 +10,7 @@ import { verifyAccessToken } from "./oauth/helpers";
 import { handleMcpRequest } from "./mcp-protocol";
 import { getAllRegistryItems, getUserKitDbs } from "../db/dynamo";
 import { mcpRequireAuthorized } from "./authz";
+import { resolveTraceparent } from "./trace-context";
 import { audit } from "./audit";
 import { log, flushLogs } from "./logger";
 import {
@@ -43,13 +44,21 @@ function getAllowedOrigin(requestOrigin: string | undefined): string {
   return ALLOWED_ORIGINS.includes(requestOrigin) ? requestOrigin : ALLOWED_ORIGINS[0];
 }
 
+function headerValue(
+  headers: Record<string, string | undefined>,
+  name: string,
+): string | undefined {
+  const entry = Object.entries(headers).find(([key]) => key.toLowerCase() === name.toLowerCase());
+  return entry?.[1]?.trim() || undefined;
+}
+
 function json(body: unknown, status = 200, origin?: string): APIGatewayProxyStructuredResultV2 {
   return {
     statusCode: status,
     headers: {
       "Content-Type": "application/json",
       "Access-Control-Allow-Origin": getAllowedOrigin(origin),
-      "Access-Control-Allow-Headers": "Authorization, Content-Type",
+      "Access-Control-Allow-Headers": "Authorization, Content-Type, traceparent, x-request-id, x-session-id, x-trace-id, x-parent-id",
       "Access-Control-Allow-Methods": "GET, POST, OPTIONS",
       "Vary": "Origin",
     },
@@ -709,6 +718,11 @@ export async function handler(
       const request = body as JsonRpcRequest;
 
       const mcpStart = Date.now();
+      const requestId = headerValue(httpEvent.headers, "x-request-id") || `${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
+      const traceContext = resolveTraceparent(
+        headerValue(httpEvent.headers, "traceparent"),
+        headerValue(httpEvent.headers, "x-trace-id"),
+      );
       const { response } = await handleMcpRequest(
         request,
         userId,
@@ -716,8 +730,11 @@ export async function handler(
         getUserKitDbs,
         invokeKitLambda,
         {
-          requestId: httpEvent.headers["x-request-id"] || httpEvent.headers["X-Request-Id"] || `${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
-          traceId: httpEvent.headers["x-trace-id"] || httpEvent.headers["X-Trace-Id"],
+          requestId,
+          sessionId: headerValue(httpEvent.headers, "x-session-id") || requestId,
+          traceId: traceContext.traceId,
+          parentId: traceContext.parentId,
+          traceparent: traceContext.traceparent,
         },
       );
 
