@@ -1,5 +1,6 @@
 import type { z } from "zod";
 import type { LibSQLDatabase } from "drizzle-orm/libsql";
+import type { StorageAdapter } from "./storage";
 
 // --- Context ---
 
@@ -93,7 +94,13 @@ export interface ConnectorRegistry {
  * ```
  */
 export interface KitContext {
+  /**
+   * Legacy Drizzle/libSQL binding. Prefer `storage` for new kit code; this
+   * field remains until the maintained kits complete their hard migration.
+   */
   db: StorageBinding;
+  /** Provider-neutral, host-bound storage capability. */
+  storage?: StorageAdapter;
   /** Request parameters supplied by the host for a view or capability call. */
   params: Readonly<Record<string, unknown>>;
   connectors: ConnectorRegistry;

@@ -79,6 +79,12 @@ registers ten plugins and passes the same `DebriefCapabilities` to the kit:
 | Kind | Plugin | Owns |
 |---|---|---|
 | persistence | libSQL | customers, sessions, events, drafts, memory, jobs, telemetry |
+
+Storage is host-bound through the SDK's provider-neutral `ctx.storage` seam.
+The kit includes `createLibsqlStorageAdapter` as its first adapter; it owns
+only the scoped object table and the SQL contract. The existing debrief domain
+persistence is wired through that adapter, while the legacy `ctx.db` path is
+kept for compatibility with the other maintained kits.
 | kit | debrief | the kit definition as a plugin |
 | memory | default | candidate, approved, published entries and retrieval |
 | instructions | debrief-baseline | file-backed versioned instructions |

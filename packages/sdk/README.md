@@ -52,6 +52,16 @@ Zod-parsed arguments. The database is `ctx.db`; identity is available through
 and connector seams on the same context. View loaders use `loader(ctx)` and
 tool data functions use `load(ctx, args)`.
 
+### Storage adapters
+
+New kit code should use the provider-neutral `ctx.storage` capability. It
+exposes optional parameterized SQL and object-store operations, bound by the
+host to an `{ orgId, kitId, tenantId? }` scope. The SDK has no database-driver
+dependency; hosts resolve credentials and construct the adapter at bind time.
+See [`docs/storage-adapters.md`](../../docs/storage-adapters.md) for the
+contract and the debrief kit's libSQL implementation. `ctx.db` is retained as
+a compatibility Drizzle binding while maintained kits migrate.
+
 ## Define an agent
 
 `defineAgent` is a bounded loop scoped to one kit and one trigger. The loop
