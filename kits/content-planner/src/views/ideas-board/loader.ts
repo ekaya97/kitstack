@@ -3,7 +3,7 @@ import { isNull, desc } from "drizzle-orm";
 import { ideas } from "../../schema";
 
 export const loader = defineLoader(async (ctx) => {
-  const rows = await db
+  const rows = await ctx.db
     .select({
       id: ideas.id,
       title: ideas.title,

@@ -33,7 +33,7 @@ export const listExpenses = withToolMetadata(defineTool({
     if (args.min_amount !== undefined) conditions.push(gte(expenses.amountCents, Math.round(args.min_amount * 100)));
     if (args.max_amount !== undefined) conditions.push(lte(expenses.amountCents, Math.round(args.max_amount * 100)));
 
-    const rows = await db
+    const rows = await ctx.db
       .select()
       .from(expenses)
       .where(and(...conditions))

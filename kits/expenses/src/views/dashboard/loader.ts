@@ -15,7 +15,7 @@ export const loader = defineLoader(async (ctx) => {
   const monthEnd = localIso(y, m + 1, 0);
 
   // Current month expenses
-  const [monthExpenses] = await db
+  const [monthExpenses] = await ctx.db
     .select({
       total: sql<number>`coalesce(sum(${expenses.amountCents}), 0)`,
       count: sql<number>`count(*)`,
@@ -24,7 +24,7 @@ export const loader = defineLoader(async (ctx) => {
     .where(sql`${expenses.archivedAt} is null and ${expenses.expenseDate} >= ${monthStart} and ${expenses.expenseDate} <= ${monthEnd}`);
 
   // Current month income
-  const [monthIncome] = await db
+  const [monthIncome] = await ctx.db
     .select({
       total: sql<number>`coalesce(sum(${income.amountCents}), 0)`,
       count: sql<number>`count(*)`,
@@ -38,7 +38,7 @@ export const loader = defineLoader(async (ctx) => {
     const d = new Date(y, m - i, 1);
     const s = localIso(d.getFullYear(), d.getMonth(), 1);
     const e = localIso(d.getFullYear(), d.getMonth() + 1, 0);
-    const [row] = await db
+    const [row] = await ctx.db
       .select({ total: sql<number>`coalesce(sum(${expenses.amountCents}), 0)` })
       .from(expenses)
       .where(sql`${expenses.archivedAt} is null and ${expenses.expenseDate} >= ${s} and ${expenses.expenseDate} <= ${e}`);
@@ -49,7 +49,7 @@ export const loader = defineLoader(async (ctx) => {
   }
 
   // Category breakdown (current month)
-  const categoryBreakdown = await db
+  const categoryBreakdown = await ctx.db
     .select({
       category: expenses.category,
       total: sql<number>`sum(${expenses.amountCents})`,
@@ -61,7 +61,7 @@ export const loader = defineLoader(async (ctx) => {
     .limit(8);
 
   // Recent transactions
-  const recentExpenses = await db
+  const recentExpenses = await ctx.db
     .select({
       id: expenses.id,
       type: sql<string>`'expense'`,

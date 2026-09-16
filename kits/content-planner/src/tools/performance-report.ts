@@ -63,7 +63,7 @@ export const performanceReport = withToolMetadata(defineTool({
     ];
     if (args.channel) contentConditions.push(eq(content.channel, args.channel));
 
-    const rows = await db
+    const rows = await ctx.db
       .select({
         contentId: content.id,
         title: content.title,

@@ -11,7 +11,7 @@ export const pipeline = withToolMetadata(defineTool({
   handler: async (ctx) => {
     const stages = ["lead", "contacted", "proposal", "negotiation", "won", "lost"];
 
-    const rows = await db
+    const rows = await ctx.db
       .select({
         stage: deals.stage,
         count: sql<number>`count(*)`,

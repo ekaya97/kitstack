@@ -21,7 +21,7 @@ export const basketAdd = withToolMetadata(defineTool({
     const now = new Date().toISOString();
     const qty = args.qty ?? 1;
 
-    const existing = await db
+    const existing = await ctx.db
       .select()
       .from(basketLines)
       .where(and(eq(basketLines.userId, ctx.identity.principal), eq(basketLines.productId, p.id)))
@@ -30,7 +30,7 @@ export const basketAdd = withToolMetadata(defineTool({
     let id: string;
     if (existing[0]) {
       id = existing[0].id;
-      await db
+      await ctx.db
         .update(basketLines)
         .set({ qty: existing[0].qty + qty, updatedAt: now })
         .where(eq(basketLines.id, id));

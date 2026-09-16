@@ -10,7 +10,7 @@ export const loader = defineLoader(async (ctx) => {
   const lastDay = new Date(year, month + 1, 0).getDate();
   const end = `${year}-${String(month + 1).padStart(2, "0")}-${String(lastDay).padStart(2, "0")}`;
 
-  const rows = await db
+  const rows = await ctx.db
     .select({
       category: expenses.category,
       total: sql<number>`sum(${expenses.amountCents})`,

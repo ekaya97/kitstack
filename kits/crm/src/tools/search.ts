@@ -15,7 +15,7 @@ export const search = withToolMetadata(defineTool({
     const sections: string[] = [];
 
     // Search contacts
-    const matchedContacts = await db
+    const matchedContacts = await ctx.db
       .select()
       .from(contacts)
       .where(
@@ -39,7 +39,7 @@ export const search = withToolMetadata(defineTool({
     }
 
     // Search companies
-    const matchedCompanies = await db
+    const matchedCompanies = await ctx.db
       .select()
       .from(companies)
       .where(
@@ -61,7 +61,7 @@ export const search = withToolMetadata(defineTool({
     }
 
     // Search interactions
-    const matchedInteractions = await db
+    const matchedInteractions = await ctx.db
       .select()
       .from(interactions)
       .where(

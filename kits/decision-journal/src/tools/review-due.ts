@@ -14,7 +14,7 @@ export const reviewDue = withToolMetadata(defineTool({
     const today = new Date().toISOString().slice(0, 10);
     const ahead = new Date(Date.now() + args.days_ahead * 86400000).toISOString().slice(0, 10);
 
-    const rows = await db
+    const rows = await ctx.db
       .select()
       .from(decisions)
       .where(isNotNull(decisions.reviewDate))

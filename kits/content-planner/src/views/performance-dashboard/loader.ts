@@ -9,7 +9,7 @@ export const loader = defineLoader(async (ctx) => {
   const monthStart = `${y}-${String(m + 1).padStart(2, "0")}-01`;
 
   // Overall stats
-  const [totals] = await db
+  const [totals] = await ctx.db
     .select({
       published: sql<number>`count(*)`,
       impressions: sql<number>`coalesce(sum(${performance.impressions}), 0)`,
@@ -21,7 +21,7 @@ export const loader = defineLoader(async (ctx) => {
     .where(and(isNull(content.archivedAt), inArray(content.status, ["published", "repurposed"])));
 
   // Top performers
-  const topContent = await db
+  const topContent = await ctx.db
     .select({
       id: content.id,
       title: content.title,
@@ -39,7 +39,7 @@ export const loader = defineLoader(async (ctx) => {
     .limit(10);
 
   // Channel breakdown
-  const byChannel = await db
+  const byChannel = await ctx.db
     .select({
       channel: content.channel,
       count: sql<number>`count(distinct ${content.id})`,
@@ -59,7 +59,7 @@ export const loader = defineLoader(async (ctx) => {
     const tStart = `${tm.getFullYear()}-${String(tm.getMonth() + 1).padStart(2, "0")}-01`;
     const tEnd = `${tm.getFullYear()}-${String(tm.getMonth() + 1).padStart(2, "0")}-${new Date(tm.getFullYear(), tm.getMonth() + 1, 0).getDate()}`;
 
-    const [row] = await db
+    const [row] = await ctx.db
       .select({
         published: sql<number>`count(distinct ${content.id})`,
         engagements: sql<number>`coalesce(sum(${performance.engagements}), 0)`,

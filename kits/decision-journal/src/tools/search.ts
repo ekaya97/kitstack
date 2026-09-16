@@ -15,7 +15,7 @@ export const search = withToolMetadata(defineTool({
     const sections: string[] = [];
 
     // Search decisions
-    const matchedDecisions = await db
+    const matchedDecisions = await ctx.db
       .select()
       .from(decisions)
       .where(
@@ -39,7 +39,7 @@ export const search = withToolMetadata(defineTool({
     }
 
     // Search outcomes
-    const matchedOutcomes = await db
+    const matchedOutcomes = await ctx.db
       .select()
       .from(outcomes)
       .where(
@@ -59,7 +59,7 @@ export const search = withToolMetadata(defineTool({
     }
 
     // Search principles
-    const matchedPrinciples = await db
+    const matchedPrinciples = await ctx.db
       .select()
       .from(principles)
       .where(

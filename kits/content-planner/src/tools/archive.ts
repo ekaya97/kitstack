@@ -16,13 +16,13 @@ export const archive = withToolMetadata(defineTool({
 
     switch (args.type) {
       case "idea":
-        await db
+        await ctx.db
           .update(ideas)
           .set({ archivedAt: now, updatedAt: now })
           .where(eq(ideas.id, args.id));
         break;
       case "content":
-        await db
+        await ctx.db
           .update(content)
           .set({ archivedAt: now, updatedAt: now })
           .where(eq(content.id, args.id));

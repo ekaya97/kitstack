@@ -36,7 +36,7 @@ export const createContent = withToolMetadata(defineTool({
     if (args.idea_id) {
       ideaId = args.idea_id;
     } else if (args.idea) {
-      const matches = await db
+      const matches = await ctx.db
         .select()
         .from(ideas)
         .where(like(ideas.title, `%${args.idea}%`))
@@ -53,7 +53,7 @@ export const createContent = withToolMetadata(defineTool({
     if (ideaId) {
       const linked = await ctx.db.select().from(ideas).where(eq(ideas.id, ideaId)).limit(1);
       if (linked.length > 0 && linked[0].status === "captured") {
-        await db
+        await ctx.db
           .update(ideas)
           .set({ status: "developing", updatedAt: now })
           .where(eq(ideas.id, ideaId));
@@ -63,7 +63,7 @@ export const createContent = withToolMetadata(defineTool({
 
     // Ensure topic exists
     if (args.topic) {
-      const existing = await db
+      const existing = await ctx.db
         .select()
         .from(topics)
         .where(like(topics.name, args.topic))
@@ -79,7 +79,7 @@ export const createContent = withToolMetadata(defineTool({
         });
         fragments.push(kit.created(topicId, "topic", `Topic "${args.topic}" added.`));
       } else {
-        await db
+        await ctx.db
           .update(topics)
           .set({
             contentCount: (existing[0].contentCount ?? 0) + 1,

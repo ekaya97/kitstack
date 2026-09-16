@@ -22,7 +22,7 @@ export const suggestTopics = withToolMetadata(defineTool({
     }
 
     // Get performance by topic
-    const topicPerf = await db
+    const topicPerf = await ctx.db
       .select({
         topic: content.tags, // we'll match via tags or content topic
         totalEngagements: sql<number>`coalesce(sum(${performance.engagements}), 0)`,

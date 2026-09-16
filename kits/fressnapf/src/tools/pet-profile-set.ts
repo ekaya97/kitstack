@@ -21,7 +21,7 @@ export const petProfileSet = defineTool({
   }),
   load: async (ctx, args) => {
     const now = new Date().toISOString();
-    const existing = await db
+    const existing = await ctx.db
       .select()
       .from(petProfile)
       .where(eq(petProfile.userId, ctx.identity.principal))

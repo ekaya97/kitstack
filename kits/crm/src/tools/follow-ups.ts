@@ -15,7 +15,7 @@ export const followUps = withToolMetadata(defineTool({
     const ahead = new Date(Date.now() + args.days_ahead * 86400000).toISOString().slice(0, 10);
 
     // Get all interactions that have follow-ups with deadlines
-    const rows = await db
+    const rows = await ctx.db
       .select({
         id: interactions.id,
         contactId: interactions.contactId,

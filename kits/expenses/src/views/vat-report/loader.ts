@@ -21,7 +21,7 @@ export const loader = defineLoader(async (ctx) => {
   }
 
   // Revenue
-  const [incRow] = await db
+  const [incRow] = await ctx.db
     .select({ total: sql<number>`coalesce(sum(${income.amountCents}), 0)` })
     .from(income)
     .where(sql`${income.receivedDate} >= ${qStart} and ${income.receivedDate} <= ${qEnd}`);
@@ -30,7 +30,7 @@ export const loader = defineLoader(async (ctx) => {
   const ustCollected = Math.round(revenue - revenue / 1.19);
 
   // Vorsteuer by rate
-  const vorsteuer = await db
+  const vorsteuer = await ctx.db
     .select({
       vatRate: expenses.vatRate,
       totalVat: sql<number>`coalesce(sum(${expenses.vatCents}), 0)`,

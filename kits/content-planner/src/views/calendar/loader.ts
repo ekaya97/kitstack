@@ -12,7 +12,7 @@ export const loader = defineLoader(async (ctx) => {
   const lastDay = new Date(y, m + 1, 0).getDate();
   const monthEnd = `${y}-${String(m + 1).padStart(2, "0")}-${lastDay}`;
 
-  const rows = await db
+  const rows = await ctx.db
     .select({
       id: content.id,
       title: content.title,

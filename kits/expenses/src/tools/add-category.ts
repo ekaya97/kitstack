@@ -14,7 +14,7 @@ export const addCategory = withToolMetadata(defineTool({
     parent_category: z.string().optional().describe("Parent category if this is a subcategory"),
   }),
   handler: async (ctx, args) => {
-    const existing = await db
+    const existing = await ctx.db
       .select({ id: categories.id })
       .from(categories)
       .where(like(categories.name, args.name))

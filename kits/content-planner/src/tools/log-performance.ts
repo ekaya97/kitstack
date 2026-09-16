@@ -25,7 +25,7 @@ export const logPerformance = withToolMetadata(defineTool({
     // Resolve content
     let contentId: string;
     if (args.content.startsWith("cnt_")) {
-      const exists = await db
+      const exists = await ctx.db
         .select({ id: content.id })
         .from(content)
         .where(eq(content.id, args.content))
@@ -33,7 +33,7 @@ export const logPerformance = withToolMetadata(defineTool({
       if (exists.length === 0) return kit.error(`Content "${args.content}" not found.`);
       contentId = args.content;
     } else {
-      const matches = await db
+      const matches = await ctx.db
         .select({ id: content.id, title: content.title })
         .from(content)
         .where(like(content.title, `%${args.content}%`))

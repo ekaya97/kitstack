@@ -22,7 +22,7 @@ export const updateDeal = withToolMetadata(defineTool({
     if (args.deal.startsWith("deal_")) {
       dealId = args.deal;
     } else {
-      const matches = await db
+      const matches = await ctx.db
         .select({ id: deals.id, title: deals.title })
         .from(deals)
         .where(like(deals.title, `%${args.deal}%`))

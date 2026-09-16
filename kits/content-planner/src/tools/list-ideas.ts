@@ -26,7 +26,7 @@ async function loadIdeas(ctx: KitContext, args: z.infer<typeof listIdeasArgs>) {
   if (args.channel) conditions.push(eq(ideas.targetChannel, args.channel));
   if (args.priority) conditions.push(eq(ideas.priority, args.priority));
 
-  return db
+  return ctx.db
     .select()
     .from(ideas)
     .where(and(...conditions))

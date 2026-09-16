@@ -4,7 +4,7 @@ import { contacts, companies, deals, interactions } from "../../schema";
 
 export const loader = defineLoader(async (ctx) => {
   // Load the most recently contacted person as default
-  const recentInteraction = await db
+  const recentInteraction = await ctx.db
     .select({ contactId: interactions.contactId })
     .from(interactions)
     .orderBy(desc(interactions.createdAt))
@@ -13,7 +13,7 @@ export const loader = defineLoader(async (ctx) => {
   const contactId = recentInteraction[0]?.contactId;
   if (!contactId) return null;
 
-  const [contact] = await db
+  const [contact] = await ctx.db
     .select({
       id: contacts.id,
       firstName: contacts.firstName,
@@ -33,12 +33,12 @@ export const loader = defineLoader(async (ctx) => {
 
   if (!contact) return null;
 
-  const contactDeals = await db
+  const contactDeals = await ctx.db
     .select()
     .from(deals)
     .where(eq(deals.contactId, contactId));
 
-  const contactInteractions = await db
+  const contactInteractions = await ctx.db
     .select()
     .from(interactions)
     .where(eq(interactions.contactId, contactId))

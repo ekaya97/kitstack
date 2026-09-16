@@ -25,7 +25,7 @@ export const updateContact = withToolMetadata(defineTool({
     if (args.contact.startsWith("con_")) {
       contactId = args.contact;
     } else {
-      const matches = await db
+      const matches = await ctx.db
         .select({ id: contacts.id, firstName: contacts.firstName, lastName: contacts.lastName })
         .from(contacts)
         .where(or(like(contacts.firstName, `%${args.contact}%`), like(contacts.lastName, `%${args.contact}%`)))

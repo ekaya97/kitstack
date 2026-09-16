@@ -10,7 +10,7 @@ export const topicAnalysis = withToolMetadata(defineTool({
     "Show topic coverage analysis — which topics are overdue, which are fresh, and how often each has been used.",
   args: z.object({}),
   handler: async (ctx) => {
-    const rows = await db
+    const rows = await ctx.db
       .select()
       .from(topics)
       .orderBy(asc(topics.lastUsedAt));

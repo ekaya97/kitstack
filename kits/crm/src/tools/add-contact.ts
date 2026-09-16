@@ -31,7 +31,7 @@ export const addContact = withToolMetadata(defineTool({
       if (args.company.startsWith("com_")) {
         companyId = args.company;
       } else {
-        const existing = await db
+        const existing = await ctx.db
           .select({ id: companies.id, name: companies.name })
           .from(companies)
           .where(like(companies.name, `%${args.company}%`))

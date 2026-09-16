@@ -3,7 +3,7 @@ import { eq, desc } from "drizzle-orm";
 import { orders, petProfile } from "../../schema";
 
 export const loader = defineLoader(async (ctx) => {
-  const rows = await db
+  const rows = await ctx.db
     .select()
     .from(orders)
     .where(eq(orders.userId, ctx.identity.principal))
@@ -12,7 +12,7 @@ export const loader = defineLoader(async (ctx) => {
   const o = rows[0];
   if (!o) return null;
 
-  const pet = await db
+  const pet = await ctx.db
     .select({ name: petProfile.name })
     .from(petProfile)
     .where(eq(petProfile.userId, ctx.identity.principal))

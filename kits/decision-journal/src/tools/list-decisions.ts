@@ -34,7 +34,7 @@ export const listDecisions = withToolMetadata(defineTool({
       if (to) conditions.push(lte(decisions.decidedAt, to));
     }
 
-    const rows = await db
+    const rows = await ctx.db
       .select()
       .from(decisions)
       .where(and(...conditions))

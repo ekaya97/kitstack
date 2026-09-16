@@ -27,7 +27,7 @@ export const captureIdea = withToolMetadata(defineTool({
 
     // Ensure topic exists in the taxonomy
     if (args.topic) {
-      const existing = await db
+      const existing = await ctx.db
         .select()
         .from(topics)
         .where(like(topics.name, args.topic))
@@ -44,7 +44,7 @@ export const captureIdea = withToolMetadata(defineTool({
         });
         fragments.push(kit.created(topicId, "topic", `Topic "${args.topic}" added.`));
       } else {
-        await db
+        await ctx.db
           .update(topics)
           .set({ lastUsedAt: now })
           .where(eq(topics.id, existing[0].id));

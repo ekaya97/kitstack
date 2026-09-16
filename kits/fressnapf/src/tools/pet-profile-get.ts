@@ -9,7 +9,7 @@ export const petProfileGet = defineTool({
     "Liest das gespeicherte Tierprofil. Nutze es, um mit Rasse/Alter/Bedürfnissen zu argumentieren, bevor du Produkte empfiehlst.",
   args: z.object({}),
   load: async (ctx, _args) => {
-    const rows = await db
+    const rows = await ctx.db
       .select()
       .from(petProfile)
       .where(eq(petProfile.userId, ctx.identity.principal))

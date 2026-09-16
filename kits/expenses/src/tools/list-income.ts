@@ -27,7 +27,7 @@ export const listIncome = withToolMetadata(defineTool({
 
     if (args.source) conditions.push(like(income.source, `%${args.source}%`));
 
-    const rows = await db
+    const rows = await ctx.db
       .select()
       .from(income)
       .where(conditions.length > 0 ? and(...conditions) : undefined)

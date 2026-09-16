@@ -16,7 +16,7 @@ export const addTopic = withToolMetadata(defineTool({
     const now = new Date().toISOString();
 
     // Check for existing
-    const existing = await db
+    const existing = await ctx.db
       .select()
       .from(topics)
       .where(like(topics.name, args.name))

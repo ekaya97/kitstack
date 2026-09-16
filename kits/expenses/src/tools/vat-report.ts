@@ -37,13 +37,13 @@ export const vatReport = withToolMetadata(defineTool({
     const [start, end] = resolvePeriod(period, args.from, args.to);
 
     // Income (revenue) for the period
-    const incomeTotal = await db
+    const incomeTotal = await ctx.db
       .select({ total: sql<number>`coalesce(sum(${income.amountCents}), 0)` })
       .from(income)
       .where(and(gte(income.receivedDate, start), lte(income.receivedDate, end)));
 
     // Expense VAT by rate
-    const vatByRate = await db
+    const vatByRate = await ctx.db
       .select({
         vatRate: expenses.vatRate,
         totalVat: sql<number>`coalesce(sum(${expenses.vatCents}), 0)`,

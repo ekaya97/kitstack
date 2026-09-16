@@ -13,7 +13,7 @@ export const basketRemove = withToolMetadata(defineTool({
     product_id: z.string().describe("Fressnapf-Artikelnummer"),
   }),
   handler: async (ctx, args) => {
-    const existing = await db
+    const existing = await ctx.db
       .select()
       .from(basketLines)
       .where(and(eq(basketLines.userId, ctx.identity.principal), eq(basketLines.productId, args.product_id)))

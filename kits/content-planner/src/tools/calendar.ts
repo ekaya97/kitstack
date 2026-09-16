@@ -62,7 +62,7 @@ async function loadCalendar(
 ) {
   const { start, end, label } = getRange(args.period);
 
-  const rows = await db
+  const rows = await ctx.db
     .select()
     .from(content)
     .where(

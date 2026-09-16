@@ -3,7 +3,7 @@ import { isNull, sql } from "drizzle-orm";
 import { deals, contacts, companies } from "../../schema";
 
 export const loader = defineLoader(async (ctx) => {
-  const rows = await db
+  const rows = await ctx.db
     .select({
       id: deals.id,
       title: deals.title,

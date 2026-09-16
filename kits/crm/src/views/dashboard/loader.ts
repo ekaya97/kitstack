@@ -3,12 +3,12 @@ import { isNull, desc, eq } from "drizzle-orm";
 import { deals, interactions, contacts } from "../../schema";
 
 export const loader = defineLoader(async (ctx) => {
-  const allDeals = await db
+  const allDeals = await ctx.db
     .select()
     .from(deals)
     .where(isNull(deals.archivedAt));
 
-  const recentInteractions = await db
+  const recentInteractions = await ctx.db
     .select({
       id: interactions.id,
       type: interactions.type,

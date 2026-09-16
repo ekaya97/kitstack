@@ -3,7 +3,7 @@ import { isNull, desc, eq } from "drizzle-orm";
 import { decisions, outcomes } from "../../schema";
 
 export const loader = defineLoader(async (ctx) => {
-  const allDecisions = await db
+  const allDecisions = await ctx.db
     .select()
     .from(decisions)
     .where(isNull(decisions.archivedAt))

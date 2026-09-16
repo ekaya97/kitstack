@@ -31,7 +31,7 @@ export const listContacts = withToolMetadata(defineTool({
         conditions.push(eq(contacts.companyId, args.company));
       } else {
         // Resolve company name to ID
-        const matched = await db
+        const matched = await ctx.db
           .select({ id: companies.id })
           .from(companies)
           .where(like(companies.name, `%${args.company}%`))
@@ -42,7 +42,7 @@ export const listContacts = withToolMetadata(defineTool({
       }
     }
 
-    const rows = await db
+    const rows = await ctx.db
       .select({
         id: contacts.id,
         firstName: contacts.firstName,

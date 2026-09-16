@@ -9,7 +9,7 @@ export const listPrinciples = withToolMetadata(defineTool({
   description: "List all personal decision-making principles",
   args: z.object({}),
   handler: async (ctx) => {
-    const rows = await db
+    const rows = await ctx.db
       .select()
       .from(principles)
       .where(isNull(principles.archivedAt))

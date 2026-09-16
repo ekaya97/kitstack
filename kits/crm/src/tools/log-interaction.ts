@@ -25,7 +25,7 @@ export const logInteraction = withToolMetadata(defineTool({
     if (args.contact.startsWith("con_")) {
       contactId = args.contact;
     } else {
-      const matches = await db
+      const matches = await ctx.db
         .select({ id: contacts.id, firstName: contacts.firstName, lastName: contacts.lastName })
         .from(contacts)
         .where(

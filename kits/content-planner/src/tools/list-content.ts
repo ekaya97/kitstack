@@ -75,7 +75,7 @@ async function loadContent(
     conditions.push(lte(content.createdAt, end));
   }
 
-  return db
+  return ctx.db
     .select()
     .from(content)
     .where(and(...conditions))

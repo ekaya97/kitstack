@@ -17,7 +17,7 @@ export const byCategory = withToolMetadata(defineTool({
   handler: async (ctx, args) => {
     const [start, end] = resolvePeriod(args.period, args.from, args.to);
 
-    const rows = await db
+    const rows = await ctx.db
       .select({
         category: expenses.category,
         total: sql<number>`sum(${expenses.amountCents})`,

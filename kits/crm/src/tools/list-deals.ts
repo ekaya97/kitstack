@@ -24,7 +24,7 @@ export const listDeals = withToolMetadata(defineTool({
     if (args.min_value !== undefined) conditions.push(gte(deals.valueCents, args.min_value));
     if (args.max_value !== undefined) conditions.push(lte(deals.valueCents, args.max_value));
 
-    const rows = await db
+    const rows = await ctx.db
       .select()
       .from(deals)
       .where(and(...conditions))

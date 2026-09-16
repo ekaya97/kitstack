@@ -17,13 +17,13 @@ export const getProduct = defineTool({
     const rows = await ctx.db.select().from(products).where(eq(products.id, args.id)).limit(1);
     if (!rows[0]) return null;
     const product = rowToProduct(rows[0]);
-    const topReviews = await db
+    const topReviews = await ctx.db
       .select()
       .from(reviews)
       .where(eq(reviews.productId, args.id))
       .orderBy(desc(reviews.rating), desc(reviews.date))
       .limit(3);
-    await setCurrentProduct(db, ctx.identity.principal, args.id);
+    await setCurrentProduct(ctx.db, ctx.identity.principal, args.id);
     return {
       product,
       reviews: topReviews.map((r) => ({

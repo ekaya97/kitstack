@@ -17,7 +17,7 @@ export const summary = withToolMetadata(defineTool({
   handler: async (ctx, args) => {
     const [start, end] = resolvePeriod(args.period, args.from, args.to);
 
-    const expenseRows = await db
+    const expenseRows = await ctx.db
       .select({
         total: sql<number>`coalesce(sum(${expenses.amountCents}), 0)`,
         count: sql<number>`count(*)`,
@@ -31,7 +31,7 @@ export const summary = withToolMetadata(defineTool({
         lte(expenses.expenseDate, end),
       ));
 
-    const incomeRows = await db
+    const incomeRows = await ctx.db
       .select({
         total: sql<number>`coalesce(sum(${income.amountCents}), 0)`,
         count: sql<number>`count(*)`,
