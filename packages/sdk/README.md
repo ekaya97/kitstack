@@ -145,6 +145,12 @@ serve({
 
 Or `kitstack serve --transport http --port 3001` in a container.
 
+`kitstack build` also emits a generated container context, a single
+Compose-compatible `kitstack.yaml` deployment file, and signed artifact
+metadata. Kit authors do not write Dockerfiles. See
+[`docs/sdk/container-deployment.md`](../../docs/sdk/container-deployment.md)
+for local Compose, Fargate, and Kubernetes operation.
+
 ## Documentation
 
 Docs source lives in `web/content/docs/`. The reference implementation of

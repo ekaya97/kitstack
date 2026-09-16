@@ -94,7 +94,7 @@ Usage:
 Commands:
   init <name>     Scaffold a new kit project
   dev             Start local dev server
-  build           Validate and bundle kit for deployment
+  build           Validate, bundle, and emit a container artifact
   deploy          Deploy kit to KitStack (private)
   serve           Start self-hosted MCP server
   call            Execute kit tools from the command line
