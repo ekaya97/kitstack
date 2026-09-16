@@ -49,6 +49,26 @@ export type {
   AgentDefinition,
 } from "./types";
 
+// Append-only, metadata-only audit storage
+export {
+  HashChainedAuditStore,
+  assertMetadataOnlyAudit,
+  canonicalAuditRecord,
+  hashAuditRecord,
+  type AuditAttributeValue,
+  type AuditAttributes,
+  type AuditEventInput,
+  type AuditOutcome,
+  type AuditPersistence,
+  type AuditQuery,
+  type AuditRecord,
+  type AuditStore,
+  type AuditExportFormat,
+  type AuditExporter,
+  type AuditVerification,
+  type HashChainedAuditStoreOptions,
+} from "./audit";
+
 // Metadata-only telemetry
 export {
   assertMetadataOnlyTelemetry,
@@ -72,6 +92,18 @@ export { defineTool } from "./define-tool";
 export { defineView } from "./define-view";
 export { defineLoader } from "./define-loader";
 export { defineAgent } from "./define-agent";
+export {
+  createEval,
+  type EvalConfig,
+  type EvalDefinition,
+  type EvalDelta,
+  type EvalMeasurement,
+  type EvalReport,
+  type EvalScenario,
+  type EvalScenarioResult,
+  type EvalSurface,
+  type PromotionOptions,
+} from "./eval";
 export { createKitContext, type CreateKitContextOptions } from "./context";
 
 // Connectors

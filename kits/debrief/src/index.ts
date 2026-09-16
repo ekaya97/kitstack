@@ -5,5 +5,6 @@ export * from "./instructions";
 export * from "./memory";
 export * from "./channels";
 export * from "./triggers";
+export * from "./audit";
 
 export { createDebriefKit, default as kit, tools } from "../kit.config";
