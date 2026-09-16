@@ -22,6 +22,7 @@
     "test:authz": "npm test --workspace @kitstackco/authz",
     "test:web": "npm test --workspace kitstack-web",
     "typecheck:kits": "node scripts/typecheck-maintained-kits.mjs",
+    "eval:ci": "tsx scripts/run-evals.ts --promote",
     "demo:server": "npm run start --workspace @kitstackco/debrief-kit",
     "db:generate": "drizzle-kit generate",
     "db:seed": "tsx web/src/db/seed.ts",
