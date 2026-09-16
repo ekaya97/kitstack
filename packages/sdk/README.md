@@ -111,6 +111,24 @@ registry.register({
 The registry rejects duplicate IDs, resolves by ID or kind, and passes
 `requestId`, `traceId`, `parentId`, and an abort signal to every invocation.
 
+## External telemetry
+
+Hosts can export the SDK's metadata-only telemetry to an existing OTel SDK or
+directly to an OTLP/HTTP collector:
+
+```ts
+import { createOtlpHttpTelemetryExporter } from "@kitstackco/sdk";
+
+const exporter = createOtlpHttpTelemetryExporter({
+  endpoint: process.env.OTEL_EXPORTER_OTLP_TRACES_ENDPOINT!,
+  serviceName: "my-kit",
+});
+```
+
+The OTLP serializer allowlists the SDK event fields and rejects content-bearing
+events before making a request. See [`docs/sdk/telemetry-export.md`](../../docs/sdk/telemetry-export.md)
+for wiring the debrief host and handling collector failures.
+
 ## CLI
 
 | Command | Description |
