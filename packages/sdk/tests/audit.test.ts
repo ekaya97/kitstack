@@ -1,5 +1,6 @@
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 import {
+  createHttpAuditExporter,
   HashChainedAuditStore,
   type AuditPersistence,
   type AuditRecord,
@@ -80,5 +81,34 @@ describe("HashChainedAuditStore", () => {
     await expect(store.append(input({ prompt: "never persist this" }))).rejects.toThrow(/metadata only/);
     await expect(store.append(input({ attributes: { transcript: "never persist this" } }))).rejects.toThrow(/metadata only/);
     await expect(store.append(input({ attributes: { nested: { secret: true } } }))).rejects.toThrow(/scalar metadata/);
+  });
+
+  it("delivers the same content-free export to an HTTP SIEM endpoint", async () => {
+    const fetcher = vi.fn(async () => new Response(null, { status: 202 }));
+    const exporter = createHttpAuditExporter({
+      endpoint: "https://siem.example.test/audit",
+      headers: { authorization: "Bearer test" },
+      fetch: fetcher,
+    });
+    const store = new HashChainedAuditStore({ exporter });
+    await store.append(input({ outcome: "denied", errorCode: "missing_grant" }));
+
+    const exported = await store.export("json");
+    expect(fetcher).toHaveBeenCalledWith(
+      new URL("https://siem.example.test/audit"),
+      expect.objectContaining({
+        method: "POST",
+        headers: {
+          "content-type": "application/json",
+          authorization: "Bearer test",
+        },
+        body: exported,
+      }),
+    );
+    expect(exported).not.toContain("prompt");
+  });
+
+  it("rejects non-HTTP endpoints before any export", () => {
+    expect(() => createHttpAuditExporter({ endpoint: "file:///tmp/audit" })).toThrow(/http or https/);
   });
 });

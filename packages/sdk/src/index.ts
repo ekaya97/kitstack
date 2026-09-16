@@ -74,6 +74,7 @@ export {
   HashChainedAuditStore,
   assertMetadataOnlyAudit,
   canonicalAuditRecord,
+  createHttpAuditExporter,
   hashAuditRecord,
   type AuditAttributeValue,
   type AuditAttributes,
@@ -87,6 +88,7 @@ export {
   type AuditExporter,
   type AuditVerification,
   type HashChainedAuditStoreOptions,
+  type HttpAuditExporterOptions,
 } from "./audit";
 
 // Metadata-only telemetry

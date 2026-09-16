@@ -167,6 +167,57 @@ export interface HashChainedAuditStoreOptions {
   readonly createId?: () => string;
 }
 
+export interface HttpAuditExporterOptions {
+  /** HTTPS endpoint owned by the organization's SIEM or ingestion gateway. */
+  readonly endpoint: string;
+  /** Static authentication and routing headers; never include event content. */
+  readonly headers?: Readonly<Record<string, string>>;
+  readonly fetch?: typeof globalThis.fetch;
+  readonly timeoutMs?: number;
+}
+
+/**
+ * Post the SDK's SIEM-shaped export to an external ingestion endpoint.
+ * Serialization remains centralized in the default exporter, so this adapter
+ * cannot accidentally send prompts, completions, audio, or tool arguments.
+ */
+export function createHttpAuditExporter(options: HttpAuditExporterOptions): AuditExporter {
+  const endpoint = new URL(options.endpoint);
+  if (endpoint.protocol !== "https:" && endpoint.protocol !== "http:") {
+    throw new Error("Audit exporter endpoint must use http or https");
+  }
+  const fetcher = options.fetch ?? globalThis.fetch;
+  const timeoutMs = options.timeoutMs ?? 8_000;
+  if (!Number.isFinite(timeoutMs) || timeoutMs <= 0) {
+    throw new Error("Audit exporter timeoutMs must be positive");
+  }
+
+  return {
+    async export(records, format) {
+      const body = defaultAuditExporter.export(records, format);
+      const controller = new AbortController();
+      const timeout = setTimeout(() => controller.abort(), timeoutMs);
+      try {
+        const response = await fetcher(endpoint, {
+          method: "POST",
+          headers: {
+            "content-type": format === "csv" ? "text/csv" : "application/json",
+            ...options.headers,
+          },
+          body,
+          signal: controller.signal,
+        });
+        if (!response.ok) {
+          throw new Error(`Audit exporter responded with HTTP ${response.status}`);
+        }
+        return body;
+      } finally {
+        clearTimeout(timeout);
+      }
+    },
+  };
+}
+
 /**
  * SDK base implementation. Hosts can replace the memory persistence with a
  * database/table adapter while retaining identical chaining and export rules.
