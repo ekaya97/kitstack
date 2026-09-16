@@ -17,10 +17,31 @@ vi.mock("@aws-sdk/util-dynamodb", () => ({
   unmarshall: vi.fn((obj) => obj),
 }));
 
+vi.mock("../router/authz", () => ({
+  getTursoDb: vi.fn(),
+}));
+
+import { getTursoDb } from "../router/authz";
+
+function tursoDb(rows: unknown[] = []) {
+  const query = Object.assign(Promise.resolve(rows), {
+    where: vi.fn(async () => rows),
+  });
+  return {
+    select: vi.fn(() => ({ from: vi.fn(() => query) })),
+    insert: vi.fn(() => ({
+      values: vi.fn(() => ({ onConflictDoUpdate: vi.fn(async () => undefined) })),
+    })),
+  };
+}
+
 beforeEach(() => {
   vi.clearAllMocks();
   vi.stubEnv("KIT_REGISTRY_TABLE", "test-registry");
   vi.stubEnv("USER_KIT_DBS_TABLE", "test-user-kit-dbs");
+  vi.mocked(getTursoDb).mockReturnValue(tursoDb([
+    { kitId: "kit-crm", toolName: "add_contact", toolDescription: "Add a contact" },
+  ]) as any);
 });
 
 import {
@@ -33,32 +54,22 @@ import {
 
 describe("Kit Registry operations", () => {
   it("getAllRegistryItems scans the registry table", async () => {
-    mockSend.mockResolvedValueOnce({
-      Items: [
-        { kitId: "kit-crm", toolName: "add_contact", toolDescription: "Add a contact" },
-      ],
-    });
-
     const items = await getAllRegistryItems();
     expect(items).toHaveLength(1);
     expect(items[0].kitId).toBe("kit-crm");
   });
 
   it("getRegistryItemsForKit queries by kitId", async () => {
-    mockSend.mockResolvedValueOnce({
-      Items: [
-        { kitId: "kit-meeting", toolName: "process_meeting" },
-        { kitId: "kit-meeting", toolName: "list_meetings" },
-      ],
-    });
+    vi.mocked(getTursoDb).mockReturnValue(tursoDb([
+      { kitId: "kit-meeting", toolName: "process_meeting" },
+      { kitId: "kit-meeting", toolName: "list_meetings" },
+    ]) as any);
 
     const items = await getRegistryItemsForKit("kit-meeting");
     expect(items).toHaveLength(2);
   });
 
   it("putRegistryItem puts an item", async () => {
-    mockSend.mockResolvedValueOnce({});
-
     await putRegistryItem({
       kitId: "kit-crm",
       toolName: "add_contact",
@@ -67,7 +78,7 @@ describe("Kit Registry operations", () => {
       kitName: "CRM Kit",
     });
 
-    expect(mockSend).toHaveBeenCalledOnce();
+    expect(vi.mocked(getTursoDb)).toHaveBeenCalledOnce();
   });
 });
 

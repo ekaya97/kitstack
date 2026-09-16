@@ -1,7 +1,13 @@
-import { describe, it, expect, beforeEach } from "vitest";
+import { describe, it, expect, beforeEach, vi } from "vitest";
 import { createTestDb, seedTestSkills } from "@/test/db-helpers";
 import { skills } from "@/db/schema";
 import { eq } from "drizzle-orm";
+
+vi.mock("@/lib/db", () => ({
+  get db() {
+    return db;
+  },
+}));
 import {
   getAllSkills,
   getSkillsByCategory,

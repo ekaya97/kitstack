@@ -1,9 +1,15 @@
-import { describe, it, expect, beforeEach } from "vitest";
+import { describe, it, expect, beforeEach, vi } from "vitest";
 import { createTestDb, seedTestKits } from "@/test/db-helpers";
 import { getAllKits, getKitsByCategory, getKitBySlug } from "../kit.service";
 
 type TestDb = Awaited<ReturnType<typeof createTestDb>>;
 let db: TestDb;
+
+vi.mock("@/lib/db", () => ({
+  get db() {
+    return db;
+  },
+}));
 
 beforeEach(async () => {
   db = await createTestDb();

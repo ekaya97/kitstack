@@ -17,6 +17,7 @@ export async function createTestDb(): Promise<TestDb> {
       slug TEXT NOT NULL UNIQUE,
       name TEXT NOT NULL,
       category TEXT NOT NULL,
+      featured INTEGER DEFAULT 0,
       description TEXT NOT NULL,
       upgrade_hook TEXT,
       tags TEXT NOT NULL,
@@ -27,6 +28,11 @@ export async function createTestDb(): Promise<TestDb> {
       composition TEXT NOT NULL,
       s3_key TEXT,
       download_count INTEGER DEFAULT 0,
+      author TEXT DEFAULT 'kitstack',
+      file_size TEXT,
+      corresponding_kit_slug TEXT,
+      avg_rating REAL DEFAULT 0,
+      review_count INTEGER DEFAULT 0,
       created_at INTEGER,
       updated_at INTEGER
     )
@@ -45,6 +51,12 @@ export async function createTestDb(): Promise<TestDb> {
       db_schema TEXT,
       mcp_tools TEXT,
       mcp_apps TEXT,
+      tagline TEXT,
+      author TEXT DEFAULT 'kitstack',
+      status TEXT DEFAULT 'live',
+      subscriber_count INTEGER DEFAULT 0,
+      avg_rating REAL DEFAULT 0,
+      review_count INTEGER DEFAULT 0,
       created_at INTEGER,
       updated_at INTEGER
     )

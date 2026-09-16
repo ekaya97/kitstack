@@ -20,7 +20,11 @@ export const mcpAuthStoreTable = () => (Resource as any).MCPAuthStore.name;
 
 // --- Auth & Security ---
 
-export const mcpJwtSecret = () => new TextEncoder().encode(Resource.McpJwtSecret.value);
+export const mcpJwtSecret = () => {
+  const secret = Resource.McpJwtSecret.value;
+  if (!secret) throw new Error("MCP_JWT_SECRET is not configured");
+  return new TextEncoder().encode(secret);
+};
 export const mcpAllowedOrigins = (): string[] =>
   (Resource.McpAllowedOrigins.value || "https://kitstack.co,https://www.kitstack.co")
     .split(",")

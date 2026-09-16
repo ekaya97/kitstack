@@ -27,7 +27,7 @@ describe("GET /api/kits", () => {
   });
 
   it("filters by category", async () => {
-    const request = new NextRequest("http://localhost/api/kits?category=Operations");
+    const request = new NextRequest("http://localhost/api/kits?category=Ops");
     const response = await GET(request);
     const data = await response.json();
 

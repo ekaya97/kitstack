@@ -23,7 +23,17 @@ vi.mock("../../db/dynamo", () => ({
   getUserKitDb: vi.fn(),
 }));
 
+vi.mock("../authz", () => ({
+  mcpCheckTuple: vi.fn(async () => true),
+}));
+
+vi.mock("../oauth-store", () => ({
+  getOAuthItem: vi.fn(async () => null),
+  putOAuthItem: vi.fn(async () => undefined),
+}));
+
 import { getUserKitDb } from "../../db/dynamo";
+import { mcpCheckTuple } from "../authz";
 
 beforeEach(() => {
   vi.clearAllMocks();
@@ -43,7 +53,7 @@ describe("dispatchToolCall", () => {
   });
 
   it("returns error when kit is not activated", async () => {
-    vi.mocked(getUserKitDb).mockResolvedValueOnce(null);
+    vi.mocked(mcpCheckTuple).mockResolvedValueOnce(false);
 
     const result = await dispatchToolCall(
       "process_meeting",

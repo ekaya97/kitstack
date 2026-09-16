@@ -7,6 +7,7 @@ export default defineConfig({
     globals: true,
     root: resolve(__dirname),
     include: ["src/**/*.test.ts"],
+    setupFiles: ["src/test/setup.ts"],
   },
   resolve: {
     alias: {

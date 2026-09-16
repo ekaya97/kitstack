@@ -74,6 +74,16 @@ vi.mock("../../db/dynamo", () => ({
   getUserKitDb: vi.fn(async (userId: string, kitId: string) => {
     return mockUserDbs.find((d) => d.userId === userId && d.kitId === kitId) ?? null;
   }),
+  getViewsForKit: vi.fn(async () => []),
+}));
+
+vi.mock("../authz", () => ({
+  mcpCheckTuple: vi.fn(async () => true),
+}));
+
+vi.mock("../oauth-store", () => ({
+  getOAuthItem: vi.fn(async () => null),
+  putOAuthItem: vi.fn(async () => undefined),
 }));
 
 const getTools = async () => mockTools;
