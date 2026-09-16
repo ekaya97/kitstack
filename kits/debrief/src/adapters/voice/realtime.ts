@@ -1,6 +1,6 @@
 import { createHmac, timingSafeEqual } from "node:crypto";
 import WebSocket from "ws";
-import { defineAgent, type AgentInput, type AgentLifecycleEvent, type AgentRunResult, type AgentTurnMetadata } from "@kitstackco/sdk";
+import { defineAgent, type AgentInput, type AgentLifecycleEvent, type AgentRunResult, type AgentTurnMetadata, type Connector } from "@kitstackco/sdk";
 import { jwtVerify, SignJWT } from "jose";
 import type { TelemetryEventInput, TelemetryStore } from "../../telemetry/index.js";
 
@@ -32,6 +32,28 @@ export interface TwilioClientOptions {
   authToken: string;
   apiBaseUrl?: string;
   fetch?: (input: string, init?: RequestInit) => Promise<Response>;
+}
+
+/** Deploy-time config; the auth token is deliberately resolved separately. */
+export interface TwilioConnectorConfig {
+  accountSid: string;
+  apiBaseUrl?: string;
+  fetch?: (input: string, init?: RequestInit) => Promise<Response>;
+}
+
+export interface TwilioSmsRequest {
+  to: string;
+  from: string;
+  body: string;
+}
+
+export interface TwilioSmsResponse {
+  sid: string;
+  status?: string;
+}
+
+export interface TwilioSmsClient {
+  sendMessage(request: TwilioSmsRequest): Promise<TwilioSmsResponse>;
 }
 
 /**
@@ -81,6 +103,69 @@ export function createTwilioCallsClient(options: TwilioClientOptions): TwilioCal
     },
   };
 }
+
+/** Server-side Twilio Messages API client. The auth token stays in closure scope. */
+export function createTwilioSmsClient(options: TwilioClientOptions): TwilioSmsClient {
+  const accountSid = required(options.accountSid, "Twilio account SID");
+  const authToken = required(options.authToken, "Twilio auth token");
+  const apiBaseUrl = (options.apiBaseUrl ?? "https://api.twilio.com").replace(/\/$/, "");
+  const fetcher = options.fetch ?? globalThis.fetch;
+  if (!fetcher) throw new Error("A fetch implementation is required for Twilio SMS");
+
+  return {
+    async sendMessage(request) {
+      const endpoint = `${apiBaseUrl}/2010-04-01/Accounts/${encodeURIComponent(accountSid)}/Messages.json`;
+      const response = await fetcher(endpoint, {
+        method: "POST",
+        headers: {
+          authorization: `Basic ${Buffer.from(`${accountSid}:${authToken}`).toString("base64")}`,
+          "content-type": "application/x-www-form-urlencoded",
+        },
+        body: new URLSearchParams({ To: request.to, From: request.from, Body: request.body }),
+      });
+      if (!response.ok) throw new Error(`Twilio Messages API returned HTTP ${response.status}`);
+      const payload = await response.json() as { sid?: unknown; status?: unknown };
+      if (typeof payload.sid !== "string" || !payload.sid) throw new Error("Twilio Messages API returned no message SID");
+      return { sid: payload.sid, status: typeof payload.status === "string" ? payload.status : undefined };
+    },
+  };
+}
+
+/** Twilio voice connector instance; credentials are resolved by bindConnector at deploy time. */
+export const twilioVoiceConnector: Connector<TwilioConnectorConfig, TwilioCallsClient> = {
+  manifest: {
+    id: "twilio.voice",
+    version: "0.1.0",
+    capabilities: ["voice.call"],
+    requiredScopes: ["telephony.calls.write"],
+  },
+  async bind(config, secrets) {
+    return createTwilioCallsClient({
+      accountSid: config.accountSid,
+      apiBaseUrl: config.apiBaseUrl,
+      fetch: config.fetch,
+      authToken: await secrets.resolve("authToken"),
+    });
+  },
+};
+
+/** Twilio SMS connector instance; it shares the provider binding contract with voice. */
+export const twilioSmsConnector: Connector<TwilioConnectorConfig, TwilioSmsClient> = {
+  manifest: {
+    id: "twilio.sms",
+    version: "0.1.0",
+    capabilities: ["messaging.sms"],
+    requiredScopes: ["telephony.messages.write"],
+  },
+  async bind(config, secrets) {
+    return createTwilioSmsClient({
+      accountSid: config.accountSid,
+      apiBaseUrl: config.apiBaseUrl,
+      fetch: config.fetch,
+      authToken: await secrets.resolve("authToken"),
+    });
+  },
+};
 
 export interface TwimlOptions {
   mediaStreamUrl: string;

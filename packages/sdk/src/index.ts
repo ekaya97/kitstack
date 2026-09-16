@@ -51,6 +51,20 @@ export { defineLoader } from "./define-loader";
 export { defineAgent } from "./define-agent";
 export { createKitContext, type CreateKitContextOptions } from "./context";
 
+// Connectors
+export {
+  bindConnector,
+  createRestOpenApiConnector,
+  type Connector,
+  type ConnectorBinding,
+  type ConnectorManifest,
+  type ConnectorSecretResolver,
+  type ConnectorSecretStore,
+  type RestOpenApiClient,
+  type RestOpenApiConfig,
+  type RestOpenApiRequest,
+} from "./connectors";
+
 // Plugins
 export {
   PluginRegistry,
