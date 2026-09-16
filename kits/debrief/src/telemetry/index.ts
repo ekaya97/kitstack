@@ -3,6 +3,7 @@ import { dirname } from "node:path";
 import { createClient, type Client, type InValue, type ResultSet } from "@libsql/client";
 import {
   createTelemetryEvent,
+  type TelemetryExporter,
   type TelemetryEvent as SdkTelemetryEvent,
   type TelemetryEventInput as SdkTelemetryEventInput,
 } from "@kitstackco/sdk";
@@ -92,6 +93,10 @@ export interface CreateTelemetryStoreOptions {
   dbPath?: string;
   /** Injected client is useful for callers that own the connection lifecycle. */
   client?: Client;
+  /** Optional metadata-only exporter owned and configured by the host. */
+  exporter?: TelemetryExporter;
+  /** Called when external export fails; local persistence remains successful. */
+  onExportError?: (error: Error, event: TelemetryEvent) => void | Promise<void>;
 }
 
 export const DEFAULT_DEMO_DB_PATH = ".kitstack/demo.db";
@@ -150,7 +155,12 @@ export class TelemetryStore {
   private readonly initialized: Promise<void>;
   private readonly ownsClient: boolean;
 
-  constructor(private readonly client: Client, ownsClient = false) {
+  constructor(
+    private readonly client: Client,
+    ownsClient = false,
+    private readonly exporter?: TelemetryExporter,
+    private readonly onExportError?: (error: Error, event: TelemetryEvent) => void | Promise<void>,
+  ) {
     this.ownsClient = ownsClient;
     this.initialized = client.executeMultiple(CREATE_SCHEMA_SQL).then(async () => {
       const columns = await client.execute("PRAGMA table_info(telemetry_events)");
@@ -232,7 +242,17 @@ export class TelemetryStore {
     if (rows.rows.length !== 1) {
       throw new Error(`Telemetry event was not readable after append: ${event.id}`);
     }
-    return mapEvent(rows.rows[0] as Row);
+    const stored = mapEvent(rows.rows[0] as Row);
+    if (this.exporter) {
+      try {
+        await this.exporter.export(stored);
+      } catch (error) {
+        // External observability must not change the demo capability result or
+        // make the local /demo screens unavailable when a collector is down.
+        await this.onExportError?.(error instanceof Error ? error : new Error(String(error)), stored);
+      }
+    }
+    return stored;
   }
 
   /** Query results are always returned in insertion order for stable trees. */
@@ -328,7 +348,7 @@ export async function createTelemetryStore(
   }
 
   if (options.client) {
-    return new TelemetryStore(options.client);
+    return new TelemetryStore(options.client, false, options.exporter, options.onExportError);
   }
 
   const dbPath = options.dbPath ?? DEFAULT_DEMO_DB_PATH;
@@ -342,7 +362,7 @@ export async function createTelemetryStore(
       mkdirSync(dirname(path), { recursive: true });
     }
   }
-  return new TelemetryStore(createClient({ url }), true);
+  return new TelemetryStore(createClient({ url }), true, options.exporter, options.onExportError);
 }
 
 function buildWhere(query: TelemetryQuery): { where: string; args: InValue[] } {

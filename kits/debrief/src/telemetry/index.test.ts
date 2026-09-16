@@ -95,6 +95,36 @@ describe("TelemetryStore", () => {
     });
   });
 
+  it("forwards persisted metadata to the host exporter without losing local reads", async () => {
+    const exported: unknown[] = [];
+    store = await createTelemetryStore({
+      url: ":memory:",
+      exporter: { export: async (value) => { exported.push(value); } },
+    });
+
+    const appended = await store.append(event({ id: "exported-1", latencyMs: 42 }));
+
+    expect(exported).toHaveLength(1);
+    expect(exported[0]).toMatchObject({ id: "exported-1", latencyMs: 42, orgId: "org-demo" });
+    expect(await store.query({ sessionId: "session-1" })).toHaveLength(1);
+    expect(JSON.stringify(exported[0])).not.toMatch(/prompt|completion|audio|transcript|toolPayload/i);
+    expect(appended.id).toBe("exported-1");
+  });
+
+  it("keeps local telemetry available when the host collector is unavailable", async () => {
+    const exportErrors: Error[] = [];
+    store = await createTelemetryStore({
+      url: ":memory:",
+      exporter: { export: async () => { throw new Error("collector unavailable"); } },
+      onExportError: (error) => { exportErrors.push(error); },
+    });
+
+    await store.append(event({ id: "collector-down" }));
+
+    expect(exportErrors.map((error) => error.message)).toEqual(["collector unavailable"]);
+    expect(await store.query({ sessionId: "session-1" })).toHaveLength(1);
+  });
+
   it("supports nullable appId for boot events", async () => {
     const telemetry = await makeStore();
     await telemetry.append(event({

@@ -2,7 +2,9 @@ import { describe, expect, it, vi } from "vitest";
 import {
   assertMetadataOnlyTelemetry,
   createMetadataTelemetrySink,
+  createOtlpHttpTelemetryExporter,
   createOtelTelemetryExporter,
+  createTelemetryExporter,
   createTelemetryEvent,
   isMetadataOnlyTelemetry,
   type TelemetryEventInput,
@@ -105,5 +107,62 @@ describe("SDK metadata telemetry", () => {
       },
     });
     expect(JSON.stringify(spans)).not.toMatch(/prompt|completion|audio|transcript|toolPayload/i);
+  });
+
+  it("posts a content-free OTLP/HTTP trace to the configured collector", async () => {
+    const fetcher = vi.fn(async (_input: string | URL, _init?: RequestInit) => new Response(null, { status: 200 }));
+    const exporter = createOtlpHttpTelemetryExporter({
+      endpoint: "https://collector.example/v1/traces",
+      headers: { authorization: "Bearer collector-token" },
+      serviceName: "debrief-demo",
+      fetch: fetcher,
+    });
+
+    await exporter.export(createTelemetryEvent(event()));
+
+    expect(fetcher).toHaveBeenCalledWith(
+      "https://collector.example/v1/traces",
+      expect.objectContaining({
+        method: "POST",
+        headers: expect.objectContaining({
+          "content-type": "application/json",
+          authorization: "Bearer collector-token",
+        }),
+      }),
+    );
+    const request = fetcher.mock.calls[0]?.[1] ?? {};
+    const body = JSON.parse(String(request.body));
+    expect(body.resourceSpans[0].resource.attributes).toContainEqual({
+      key: "service.name",
+      value: { stringValue: "debrief-demo" },
+    });
+    expect(body.resourceSpans[0].scopeSpans[0].spans[0]).toMatchObject({
+      name: "kit:debrief.realtime_turn",
+      status: { code: 1 },
+    });
+    expect(JSON.stringify(body)).not.toMatch(/prompt|completion|audio|transcript|toolPayload|toolArgs/i);
+  });
+
+  it("rejects untyped content before an external request is made", async () => {
+    const fetcher = vi.fn(async (_input: string | URL, _init?: RequestInit) => new Response(null, { status: 200 }));
+    const exporter = createOtlpHttpTelemetryExporter({
+      endpoint: "https://collector.example/v1/traces",
+      fetch: fetcher,
+    });
+    const eventWithTranscript = {
+      ...createTelemetryEvent(event()),
+      transcript: "must never leave the process",
+    };
+
+    await expect(exporter.export(eventWithTranscript as never)).rejects.toThrow(/metadata only/);
+    expect(fetcher).not.toHaveBeenCalled();
+  });
+
+  it("resolves exactly one host exporter and validates collector URLs", () => {
+    expect(createTelemetryExporter()).toBeUndefined();
+    const exporter = { export: vi.fn() };
+    expect(createTelemetryExporter({ exporter })).toBe(exporter);
+    expect(() => createTelemetryExporter({ exporter, otlp: { endpoint: "https://collector.example" } })).toThrow(/either/);
+    expect(() => createOtlpHttpTelemetryExporter({ endpoint: "file:///tmp/telemetry" })).toThrow(/http or https/);
   });
 });

@@ -1,3 +1,5 @@
+import { createHash } from "node:crypto";
+
 /** Scalar values safe to attach to metadata-only telemetry. */
 export type TelemetryAttributeValue = string | number | boolean | null;
 
@@ -146,6 +148,32 @@ export interface TelemetryExporter {
   export(event: TelemetryEvent): void | Promise<void>;
 }
 
+/** Configuration for the host's external telemetry destination. */
+export interface TelemetryExportConfig {
+  /** A caller-owned OTel SDK exporter or another metadata-only exporter. */
+  exporter?: TelemetryExporter;
+  /** OTLP/HTTP trace endpoint, for example `http://collector:4318/v1/traces`. */
+  otlp?: OtlpHttpTelemetryExporterOptions;
+}
+
+export interface OtlpHttpTelemetryExporterOptions {
+  endpoint: string;
+  headers?: Readonly<Record<string, string>>;
+  serviceName?: string;
+  resourceAttributes?: Readonly<Record<string, TelemetryAttributeValue>>;
+  fetch?: typeof globalThis.fetch;
+  timeoutMs?: number;
+}
+
+/** Resolve one host export configuration without adding an OTel dependency. */
+export function createTelemetryExporter(config?: TelemetryExportConfig): TelemetryExporter | undefined {
+  if (!config) return undefined;
+  if (config.exporter && config.otlp) {
+    throw new Error("Configure either telemetry.exporter or telemetry.otlp, not both");
+  }
+  return config.exporter ?? (config.otlp ? createOtlpHttpTelemetryExporter(config.otlp) : undefined);
+}
+
 /** Minimal SpanData-compatible shape accepted by the OTel adapter seam. */
 export interface OtelSpanData {
   name: string;
@@ -162,6 +190,52 @@ export interface OtelSpanExporter {
     spans: readonly OtelSpanData[],
     result: (result: { code: "success" | "failed"; error?: Error }) => void,
   ): void;
+}
+
+/**
+ * Send metadata-only spans to an OTLP/HTTP collector.
+ *
+ * The payload is assembled from the frozen SDK event fields only. Provider
+ * envelopes, prompt/completion bodies, audio, transcripts, and tool payloads
+ * are never forwarded, even if an untyped caller adds them to an event.
+ */
+export function createOtlpHttpTelemetryExporter(
+  options: OtlpHttpTelemetryExporterOptions,
+): TelemetryExporter {
+  const endpoint = validateCollectorEndpoint(options.endpoint);
+  const fetchImpl = options.fetch ?? globalThis.fetch;
+  if (!fetchImpl) throw new Error("An OTLP exporter requires global fetch or options.fetch");
+  const timeoutMs = options.timeoutMs ?? 10_000;
+  if (!Number.isFinite(timeoutMs) || timeoutMs <= 0) {
+    throw new Error("OTLP exporter timeoutMs must be a positive number");
+  }
+  const serviceName = options.serviceName ?? "kitstack";
+
+  return {
+    async export(event) {
+      assertMetadataOnlyTelemetry(event);
+      const controller = new AbortController();
+      const timer = setTimeout(() => controller.abort(), timeoutMs);
+      try {
+        const response = await fetchImpl(endpoint, {
+          method: "POST",
+          headers: {
+            "content-type": "application/json",
+            ...options.headers,
+          },
+          body: JSON.stringify(toOtlpTraceRequest(event, serviceName, options.resourceAttributes)),
+          signal: controller.signal,
+        });
+        if (!response.ok) {
+          // Do not include the collector response body: it may contain content
+          // from a misconfigured or third-party endpoint.
+          throw new Error(`OTLP collector returned HTTP ${response.status}`);
+        }
+      } finally {
+        clearTimeout(timer);
+      }
+    },
+  };
 }
 
 /**
@@ -241,6 +315,93 @@ function toOtelSpanData(event: TelemetryEvent): OtelSpanData {
     attributes,
     status: { code: event.outcome === "error" ? "ERROR" : event.outcome === "started" ? "UNSET" : "OK" },
   };
+}
+
+interface OtlpAttribute {
+  key: string;
+  value: { stringValue?: string; intValue?: string; doubleValue?: number; boolValue?: boolean; arrayValue?: { values: OtlpAttributeValue[] } };
+}
+
+type OtlpAttributeValue = OtlpAttribute["value"];
+
+function toOtlpTraceRequest(
+  event: TelemetryEvent,
+  serviceName: string,
+  resourceAttributes: Readonly<Record<string, TelemetryAttributeValue>> | undefined,
+): Record<string, unknown> {
+  const span = toOtelSpanData(event);
+  const attributes: OtlpAttribute[] = Object.entries(span.attributes).map(([key, value]) => ({
+    key,
+    value: toOtlpAttributeValue(value),
+  }));
+  const resource: OtlpAttribute[] = [
+    { key: "service.name", value: { stringValue: serviceName } },
+  ];
+  for (const [key, value] of Object.entries(resourceAttributes ?? {})) {
+    if (value !== null) resource.push({ key, value: toOtlpAttributeValue(value) });
+  }
+  const start = toUnixNanoseconds(event.timestamp);
+  const end = start + BigInt(Math.max(0, event.latencyMs ?? 0)) * 1_000_000n;
+  return {
+    resourceSpans: [{
+      resource: { attributes: resource },
+      scopeSpans: [{
+        scope: { name: "@kitstackco/sdk" },
+        spans: [{
+          traceId: normalizeTraceId(event.traceId ?? event.id),
+          spanId: normalizeSpanId(event.id),
+          parentSpanId: event.parentId ? normalizeSpanId(event.parentId) : undefined,
+          name: span.name,
+          startTimeUnixNano: start.toString(),
+          endTimeUnixNano: end.toString(),
+          attributes,
+          status: { code: span.status.code === "ERROR" ? 2 : span.status.code === "OK" ? 1 : 0 },
+        }],
+      }],
+    }],
+  };
+}
+
+function toOtlpAttributeValue(value: TelemetryAttributeValue | readonly string[]): OtlpAttributeValue {
+  if (Array.isArray(value)) {
+    return { arrayValue: { values: value.map((item) => ({ stringValue: item })) } };
+  }
+  if (typeof value === "string") return { stringValue: value };
+  if (typeof value === "boolean") return { boolValue: value };
+  if (typeof value === "number") return { doubleValue: value };
+  return { stringValue: "" };
+}
+
+function toUnixNanoseconds(timestamp: string): bigint {
+  const milliseconds = Date.parse(timestamp);
+  if (!Number.isFinite(milliseconds)) throw new TypeError("Telemetry timestamps must be valid ISO dates");
+  return BigInt(milliseconds) * 1_000_000n;
+}
+
+function normalizeTraceId(value: string): string {
+  return normalizeHexId(value, 32);
+}
+
+function normalizeSpanId(value: string): string {
+  return normalizeHexId(value, 16);
+}
+
+function normalizeHexId(value: string, length: number): string {
+  if (new RegExp(`^[0-9a-fA-F]{${length}}$`).test(value)) return value.toLowerCase();
+  return createHash("sha256").update(value).digest("hex").slice(0, length);
+}
+
+function validateCollectorEndpoint(value: string): string {
+  let endpoint: URL;
+  try {
+    endpoint = new URL(value);
+  } catch {
+    throw new Error("OTLP exporter endpoint must be a valid http(s) URL");
+  }
+  if (endpoint.protocol !== "http:" && endpoint.protocol !== "https:") {
+    throw new Error("OTLP exporter endpoint must use http or https");
+  }
+  return endpoint.toString();
 }
 
 function toHrTime(timestamp: string): [number, number] {

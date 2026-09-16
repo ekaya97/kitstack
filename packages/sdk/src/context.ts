@@ -7,9 +7,9 @@ import type {
   RequestIdentity,
   SessionContext,
   StorageBinding,
-  StorageAdapter,
   TelemetrySink,
 } from "./types";
+import type { StorageAdapter } from "./storage";
 
 /**
  * Options used to create a request-scoped kit context.

@@ -12,6 +12,7 @@ import { createScheduledCallStore } from "../../scheduler/index.js";
 import { createTelemetryStore, type TelemetryStore } from "../../telemetry/index.js";
 import { VoiceSimulator } from "../../adapters/voice/index.js";
 import { createLibsqlStorageAdapter } from "../../storage/libsql.js";
+import { createTelemetryExporter, type TelemetryExportConfig } from "@kitstackco/sdk";
 
 export interface DemoApp {
   readonly client: Client;
@@ -43,6 +44,10 @@ export interface CreateDemoAppOptions {
   mcpAuthMode?: McpAuthMode;
   /** Separate operator token required to register/issue apps in app-token mode. */
   adminToken?: string;
+  /** Optional host-owned OTel/OTLP exporter for the metadata-only telemetry stream. */
+  telemetry?: TelemetryExportConfig;
+  /** Export failures are reported here while local telemetry remains available. */
+  onTelemetryExportError?: (error: Error) => void | Promise<void>;
 }
 
 export async function createDemoApp(options: CreateDemoAppOptions = {}): Promise<DemoApp> {
@@ -55,7 +60,13 @@ export async function createDemoApp(options: CreateDemoAppOptions = {}): Promise
     url: options.url ?? ":memory:",
     ...(options.authToken ? { authToken: options.authToken } : {}),
   });
-  const telemetry = await createTelemetryStore({ client });
+  const telemetry = await createTelemetryStore({
+    client,
+    exporter: createTelemetryExporter(options.telemetry),
+    onExportError: options.onTelemetryExportError
+      ? (error) => options.onTelemetryExportError!(error)
+      : undefined,
+  });
   const storage = createLibsqlStorageAdapter(client, { scope: { orgId, kitId: "kit:debrief" } });
   const apps = createAppRegistry({ secret: options.secret ?? "demo-secret-at-least-32-characters-long" });
   const memory = createMemoryStore(client, telemetry);
