@@ -95,9 +95,13 @@ Commands:
   init <name>     Scaffold a new kit project
   dev             Start local dev server
   build           Validate, bundle, and emit a container artifact
-  deploy          Deploy kit to KitStack (private)
+  deploy          Request or deploy a kit; approve a pending request
   serve           Start self-hosted MCP server
   call            Execute kit tools from the command line
+  eval            Run a kit evaluation
+  grants          List or change authorization grants
+  connectors      Bind an org connector using secret references
+  add skill       Install a versioned skill in the repository
   login           Authenticate with KitStack
 
 Options:
@@ -165,6 +169,29 @@ async function main() {
     case "call": {
       const { call } = await import("./commands/call.js");
       await call(commandArgs);
+      break;
+    }
+    case "eval": {
+      const { runEval } = await import("./commands/eval.js");
+      await runEval(commandArgs);
+      break;
+    }
+    case "grants": {
+      const { runGrants } = await import("./commands/grants.js");
+      await runGrants(commandArgs);
+      break;
+    }
+    case "connectors": {
+      const action = commandArgs[0];
+      if (action !== "bind") throw new Error("Use: kitstack connectors bind <connector-id> ...");
+      const { bindConnectorCommand } = await import("./commands/connectors.js");
+      await bindConnectorCommand(commandArgs.slice(1));
+      break;
+    }
+    case "add": {
+      if (commandArgs[0] !== "skill") throw new Error("Use: kitstack add skill <org/name>@<version>");
+      const { addSkill } = await import("./commands/add.js");
+      await addSkill(commandArgs.slice(1));
       break;
     }
     case "login": {
