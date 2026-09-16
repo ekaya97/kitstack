@@ -2,7 +2,7 @@ import type { APIGatewayProxyEventV2, APIGatewayProxyStructuredResultV2 } from "
 import { LambdaClient, InvokeCommand } from "@aws-sdk/client-lambda";
 import { DynamoDBClient, ScanCommand, UpdateItemCommand } from "@aws-sdk/client-dynamodb";
 import { unmarshall } from "@aws-sdk/util-dynamodb";
-import { getOAuthMetadata } from "./oauth/metadata";
+import { getOAuthMetadata, getProtectedResourceMetadata } from "./oauth/metadata";
 import { handleRegister } from "./oauth/register";
 import { validateAuthorizeRequest, storeAuthorizeSession, issueAuthCode } from "./oauth/authorize";
 import { handleTokenExchange } from "./oauth/token";
@@ -226,6 +226,11 @@ export async function handler(
 
     if (path === "/.well-known/oauth-authorization-server") {
       return json(getOAuthMetadata(serverUrlFromEvent(httpEvent)), 200, origin);
+    }
+
+    if (path === "/.well-known/oauth-protected-resource") {
+      const serverUrl = serverUrlFromEvent(httpEvent);
+      return json(getProtectedResourceMetadata(serverUrl, serverUrl), 200, origin);
     }
 
     if (path === "/register" && method === "POST") {
@@ -509,6 +514,12 @@ export async function handler(
       return json(getOAuthMetadata(devBaseUrl), 200, origin);
     }
 
+    if (path.match(/^\/dev\/[^/]+\/\.well-known\/oauth-protected-resource$/)) {
+      const parts = path.split("/");
+      const devBaseUrl = `${serverUrlFromEvent(httpEvent)}/dev/${parts[2]}`;
+      return json(getProtectedResourceMetadata(devBaseUrl, devBaseUrl), 200, origin);
+    }
+
     // Handle OAuth endpoints under /dev/{sessionId}/*
     if (path.match(/^\/dev\/[^/]+\/(register|authorize|token|revoke)/) ) {
       // Strip /dev/{sessionId} prefix and re-route to the main OAuth handlers
@@ -546,7 +557,7 @@ export async function handler(
           client_id: params.client_id || "",
           redirect_uri: params.redirect_uri || "",
           code_challenge: params.code_challenge || "",
-          code_challenge_method: params.code_challenge_method || "",
+          code_challenge_method: params.code_challenge_method || "S256",
           state: params.state || "",
           scope: params.scope,
         };
