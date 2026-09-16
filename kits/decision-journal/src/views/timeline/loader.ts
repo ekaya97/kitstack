@@ -2,7 +2,7 @@ import { defineLoader } from "@kitstackco/sdk";
 import { isNull, desc, eq } from "drizzle-orm";
 import { decisions, outcomes } from "../../schema";
 
-export const loader = defineLoader(async (db) => {
+export const loader = defineLoader(async (ctx) => {
   const allDecisions = await db
     .select()
     .from(decisions)
@@ -10,7 +10,7 @@ export const loader = defineLoader(async (db) => {
     .orderBy(desc(decisions.decidedAt))
     .limit(50);
 
-  const allOutcomes = await db.select().from(outcomes);
+  const allOutcomes = await ctx.db.select().from(outcomes);
 
   // Build outcome map: decisionId -> latest assessment
   const outcomeMap = new Map<string, string>();

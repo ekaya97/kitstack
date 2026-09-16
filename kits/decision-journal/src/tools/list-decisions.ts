@@ -1,9 +1,10 @@
 import { z } from "zod";
 import { eq, like, isNull, desc, and, gte, lte, SQL } from "drizzle-orm";
 import { defineTool, kit } from "@kitstackco/sdk";
+import { withToolMetadata } from "../tool-metadata";
 import { decisions, outcomes } from "../schema";
 
-export const listDecisions = defineTool({
+export const listDecisions = withToolMetadata(defineTool({
   name: "list_decisions",
   description: "List decisions with optional filters by category, confidence, urgency, or time period",
   args: z.object({
@@ -19,7 +20,7 @@ export const listDecisions = defineTool({
       .describe("Time period: this_month, last_month, this_quarter, this_year, or YYYY-MM-DD..YYYY-MM-DD range"),
     limit: z.number().optional().default(25).describe("Max results (default: 25)"),
   }),
-  handler: async (db, args) => {
+  handler: async (ctx, args) => {
     const conditions: SQL[] = [isNull(decisions.archivedAt)];
 
     if (args.category) conditions.push(eq(decisions.category, args.category));
@@ -44,7 +45,7 @@ export const listDecisions = defineTool({
 
     // Fetch outcome assessments for these decisions
     const decisionIds = rows.map((r) => r.id);
-    const allOutcomes = await db.select().from(outcomes);
+    const allOutcomes = await ctx.db.select().from(outcomes);
     const outcomeMap = new Map<string, string>();
     for (const o of allOutcomes) {
       if (decisionIds.includes(o.decisionId)) {
@@ -59,7 +60,7 @@ export const listDecisions = defineTool({
     }
     return kit.text(table);
   },
-});
+}), "assist", "sensitive");
 
 function resolvePeriod(period: string): { from: string | null; to: string | null } {
   const now = new Date();

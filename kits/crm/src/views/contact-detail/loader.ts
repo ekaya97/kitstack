@@ -2,7 +2,7 @@ import { defineLoader } from "@kitstackco/sdk";
 import { eq, desc, isNull } from "drizzle-orm";
 import { contacts, companies, deals, interactions } from "../../schema";
 
-export const loader = defineLoader(async (db) => {
+export const loader = defineLoader(async (ctx) => {
   // Load the most recently contacted person as default
   const recentInteraction = await db
     .select({ contactId: interactions.contactId })

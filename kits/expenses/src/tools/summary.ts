@@ -1,10 +1,11 @@
 import { z } from "zod";
 import { gte, lte, isNull, and, sql } from "drizzle-orm";
 import { defineTool, kit } from "@kitstackco/sdk";
+import { withToolMetadata } from "../tool-metadata";
 import { expenses, income } from "../schema";
 import { resolvePeriod, fmtEur } from "./helpers";
 
-export const summary = defineTool({
+export const summary = withToolMetadata(defineTool({
   name: "summary",
   description: "Financial summary for a period — total expenses, income, and balance",
   args: z.object({
@@ -13,7 +14,7 @@ export const summary = defineTool({
     from: z.string().optional().describe("Start date (ISO) for custom range"),
     to: z.string().optional().describe("End date (ISO) for custom range"),
   }),
-  handler: async (db, args) => {
+  handler: async (ctx, args) => {
     const [start, end] = resolvePeriod(args.period, args.from, args.to);
 
     const expenseRows = await db
@@ -57,4 +58,4 @@ export const summary = defineTool({
 
     return kit.text(text);
   },
-});
+}), "assist", "sensitive");

@@ -8,11 +8,11 @@ export const petProfileGet = defineTool({
   description:
     "Liest das gespeicherte Tierprofil. Nutze es, um mit Rasse/Alter/Bedürfnissen zu argumentieren, bevor du Produkte empfiehlst.",
   args: z.object({}),
-  load: async (db, _args, ctx) => {
+  load: async (ctx, _args) => {
     const rows = await db
       .select()
       .from(petProfile)
-      .where(eq(petProfile.userId, ctx.userId))
+      .where(eq(petProfile.userId, ctx.identity.principal))
       .limit(1);
     const p = rows[0];
     if (!p) return null;
@@ -25,9 +25,15 @@ export const petProfileGet = defineTool({
       needs: p.needs ? (JSON.parse(p.needs) as string[]) : [],
     };
   },
-  handler: async (db, args, ctx) => {
-    const p = await petProfileGet.load(db, args, ctx);
+  handler: async (ctx, args) => {
+    const p = await petProfileGet.load(ctx, args);
     if (!p) return kit.text("Noch kein Tierprofil hinterlegt. Frag nach Name, Rasse und Alter.");
     return kit.json(p);
   },
+});
+
+Object.assign(petProfileGet, {
+  mode: "assist" as const,
+  classification: "sensitive",
+  annotations: { readOnlyHint: true, destructiveHint: false },
 });

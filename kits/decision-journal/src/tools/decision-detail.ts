@@ -1,22 +1,23 @@
 import { z } from "zod";
 import { eq, like } from "drizzle-orm";
 import { defineTool, kit } from "@kitstackco/sdk";
+import { withToolMetadata } from "../tool-metadata";
 import { decisions, outcomes, principles } from "../schema";
 
-export const decisionDetail = defineTool({
+export const decisionDetail = withToolMetadata(defineTool({
   name: "decision_detail",
   description: "Show a single decision with its full context, outcomes, and linked principles",
   args: z.object({
     decision: z.string().describe("Decision title or ID (dec_xxx)"),
   }),
-  handler: async (db, args) => {
+  handler: async (ctx, args) => {
     // Resolve decision
     let row;
     if (args.decision.startsWith("dec_")) {
-      const rows = await db.select().from(decisions).where(eq(decisions.id, args.decision)).limit(1);
+      const rows = await ctx.db.select().from(decisions).where(eq(decisions.id, args.decision)).limit(1);
       row = rows[0];
     } else {
-      const rows = await db.select().from(decisions)
+      const rows = await ctx.db.select().from(decisions)
         .where(like(decisions.title, `%${args.decision}%`)).limit(1);
       row = rows[0];
     }
@@ -24,11 +25,11 @@ export const decisionDetail = defineTool({
     if (!row) return kit.error(`Decision "${args.decision}" not found.`);
 
     // Get outcomes
-    const decOutcomes = await db.select().from(outcomes)
+    const decOutcomes = await ctx.db.select().from(outcomes)
       .where(eq(outcomes.decisionId, row.id));
 
     // Get linked principles
-    const linkedPrinciples = await db.select().from(principles)
+    const linkedPrinciples = await ctx.db.select().from(principles)
       .where(like(principles.derivedFrom, `%${row.id}%`));
 
     const parts: string[] = [];
@@ -64,4 +65,4 @@ export const decisionDetail = defineTool({
 
     return kit.text(parts.join("\n"));
   },
-});
+}), "assist", "sensitive");

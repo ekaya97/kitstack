@@ -1,4 +1,5 @@
 import { defineTool, kit } from "@kitstackco/sdk";
+import { withToolMetadata } from "../tool-metadata";
 import { z } from "zod";
 import { eq, and, like, sql } from "drizzle-orm";
 import type { SQL } from "drizzle-orm";
@@ -41,7 +42,7 @@ function resolvePeriod(period: string): { start: string; end: string; label: str
 function fmt(d: Date) { return d.toISOString().split("T")[0]; }
 function pad(n: number) { return n.toString().padStart(2, "0"); }
 
-export const timeReport = defineTool({
+export const timeReport = withToolMetadata(defineTool({
   name: "time_report",
   description: "Time summary for a period, broken down by project with billable/unbillable split",
   args: z.object({
@@ -50,7 +51,7 @@ export const timeReport = defineTool({
       .describe("Time period (default: this_month)").optional().default("this_month"),
     billable_only: z.boolean().describe("Show only billable time").optional().default(false),
   }),
-  handler: async (db, args) => {
+  handler: async (ctx, args) => {
     const { start, end, label } = resolvePeriod(args.period);
     const conditions: SQL[] = [
       sql`${timeEntries.entryDate} >= ${start}`,
@@ -59,13 +60,13 @@ export const timeReport = defineTool({
 
     if (args.project) {
       const [p] = args.project.startsWith("prj_")
-        ? await db.select().from(projects).where(eq(projects.id, args.project))
-        : await db.select().from(projects).where(like(projects.name, `%${args.project}%`)).limit(1);
+        ? await ctx.db.select().from(projects).where(eq(projects.id, args.project))
+        : await ctx.db.select().from(projects).where(like(projects.name, `%${args.project}%`)).limit(1);
       if (p) conditions.push(eq(timeEntries.projectId, p.id));
     }
     if (args.billable_only) conditions.push(eq(timeEntries.billable, 1));
 
-    const rows = await db.select({
+    const rows = await ctx.db.select({
       projectName: projects.name,
       totalMinutes: sql<number>`sum(${timeEntries.durationMinutes})`,
       billableMinutes: sql<number>`sum(CASE WHEN ${timeEntries.billable} = 1 THEN ${timeEntries.durationMinutes} ELSE 0 END)`,
@@ -102,4 +103,4 @@ export const timeReport = defineTool({
 
     return kit.text(lines.join("\n"));
   },
-});
+}), "assist", "internal");

@@ -1,10 +1,11 @@
 import { z } from "zod";
 import { eq, gte, lte, isNull, desc, and, like, SQL } from "drizzle-orm";
 import { defineTool, kit } from "@kitstackco/sdk";
+import { withToolMetadata } from "../tool-metadata";
 import { expenses } from "../schema";
 import { resolvePeriod, fmtEur } from "./helpers";
 
-export const listExpenses = defineTool({
+export const listExpenses = withToolMetadata(defineTool({
   name: "list_expenses",
   description: "List expenses with filters by period, category, amount range, or vendor",
   args: z.object({
@@ -18,7 +19,7 @@ export const listExpenses = defineTool({
     max_amount: z.number().optional().describe("Maximum amount in EUR"),
     limit: z.number().optional().default(25).describe("Max results (default 25)"),
   }),
-  handler: async (db, args) => {
+  handler: async (ctx, args) => {
     const conditions: SQL[] = [isNull(expenses.archivedAt)];
 
     if (args.period || args.from || args.to) {
@@ -47,4 +48,4 @@ export const listExpenses = defineTool({
     }
     return kit.text(table);
   },
-});
+}), "assist", "sensitive");

@@ -2,9 +2,9 @@ import { defineLoader } from "@kitstackco/sdk";
 import { eq, gte, lte, sql } from "drizzle-orm";
 import { expenses, income, settings } from "../../schema";
 
-export const loader = defineLoader(async (db) => {
+export const loader = defineLoader(async (ctx) => {
   // Check VAT mode
-  const vatMode = await db.select().from(settings).where(eq(settings.key, "vat_mode")).limit(1);
+  const vatMode = await ctx.db.select().from(settings).where(eq(settings.key, "vat_mode")).limit(1);
   const isKleinunternehmer = vatMode.length > 0 && vatMode[0].value === "kleinunternehmer";
 
   // Current quarter

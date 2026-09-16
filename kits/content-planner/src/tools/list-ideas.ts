@@ -1,8 +1,8 @@
 import { z } from "zod";
 import { eq, like, isNull, desc, and, SQL } from "drizzle-orm";
 import { defineTool, kit } from "@kitstackco/sdk";
+import { withToolMetadata } from "../tool-metadata";
 import type { KitContext } from "@kitstackco/sdk";
-import type { LibSQLDatabase } from "drizzle-orm/libsql";
 import { ideas } from "../schema";
 
 const listIdeasArgs = z.object({
@@ -19,7 +19,7 @@ const listIdeasArgs = z.object({
   limit: z.number().optional().default(25).describe("Maximum number of ideas to return"),
 });
 
-async function loadIdeas(db: LibSQLDatabase, args: z.infer<typeof listIdeasArgs>, ctx: KitContext) {
+async function loadIdeas(ctx: KitContext, args: z.infer<typeof listIdeasArgs>) {
   const conditions: SQL[] = [isNull(ideas.archivedAt)];
   if (args.status) conditions.push(eq(ideas.status, args.status));
   if (args.topic) conditions.push(like(ideas.topic, `%${args.topic}%`));
@@ -34,13 +34,13 @@ async function loadIdeas(db: LibSQLDatabase, args: z.infer<typeof listIdeasArgs>
     .limit(args.limit);
 }
 
-export const listIdeas = defineTool({
+export const listIdeas = withToolMetadata(defineTool({
   name: "list_ideas",
   description: "List content ideas with optional filters for status, topic, channel, or priority.",
   args: listIdeasArgs,
   load: loadIdeas,
-  handler: async (db, args, ctx) => {
-    const rows = await loadIdeas(db, args, ctx);
+  handler: async (ctx, args) => {
+    const rows = await loadIdeas(ctx, args);
     if (rows.length === 0) return kit.text("No ideas found.");
 
     let table = `${rows.length} idea(s):\n\n| Title | Topic | Channel | Priority | Status |\n|-------|-------|---------|----------|--------|\n`;
@@ -49,4 +49,4 @@ export const listIdeas = defineTool({
     }
     return kit.text(table);
   },
-});
+}), "assist", "internal");

@@ -1,9 +1,10 @@
 import { z } from "zod";
 import { defineTool, kit } from "@kitstackco/sdk";
+import { withToolMetadata } from "../tool-metadata";
 import { nanoid } from "nanoid";
 import { income } from "../schema";
 
-export const addIncome = defineTool({
+export const addIncome = withToolMetadata(defineTool({
   name: "add_income",
   description: "Log income received from a client or other source",
   args: z.object({
@@ -14,12 +15,12 @@ export const addIncome = defineTool({
     date: z.string().optional().describe("Date received (ISO format, defaults to today)"),
     payment_method: z.enum(["cash", "card", "transfer", "paypal"]).optional().describe("How it was received"),
   }),
-  handler: async (db, args) => {
+  handler: async (ctx, args) => {
     const now = new Date().toISOString();
     const id = `inc_${nanoid()}`;
     const amountCents = Math.round(args.amount * 100);
 
-    await db.insert(income).values({
+    await ctx.db.insert(income).values({
       id,
       amountCents,
       currency: "EUR",
@@ -36,4 +37,4 @@ export const addIncome = defineTool({
       kit.created(id, "income", `Income from "${args.source}" logged — ${(amountCents / 100).toFixed(2)} EUR.`)
     );
   },
-});
+}), "act", "sensitive");

@@ -1,11 +1,12 @@
 import { z } from "zod";
 import { like, eq, isNull } from "drizzle-orm";
 import { defineTool, kit } from "@kitstackco/sdk";
+import { withToolMetadata } from "../tool-metadata";
 import { nanoid } from "nanoid";
 import { contacts, companies } from "../schema";
 import type { KitResultFragment } from "@kitstackco/sdk";
 
-export const addContact = defineTool({
+export const addContact = withToolMetadata(defineTool({
   name: "add_contact",
   description: "Add a new contact, optionally with a company (creates the company if it doesn't exist)",
   args: z.object({
@@ -20,7 +21,7 @@ export const addContact = defineTool({
     notes: z.string().optional().describe("Notes about the contact"),
     tags: z.string().optional().describe("Comma-separated tags"),
   }),
-  handler: async (db, args) => {
+  handler: async (ctx, args) => {
     const now = new Date().toISOString();
     const fragments: KitResultFragment[] = [];
     let companyId: string | null = null;
@@ -41,7 +42,7 @@ export const addContact = defineTool({
         } else {
           // Implicit company creation
           companyId = `com_${nanoid()}`;
-          await db.insert(companies).values({
+          await ctx.db.insert(companies).values({
             id: companyId,
             name: args.company,
             createdAt: now,
@@ -53,7 +54,7 @@ export const addContact = defineTool({
     }
 
     const contactId = `con_${nanoid()}`;
-    await db.insert(contacts).values({
+    await ctx.db.insert(contacts).values({
       id: contactId,
       companyId,
       firstName: args.first_name,
@@ -74,4 +75,4 @@ export const addContact = defineTool({
 
     return kit.result(fragments);
   },
-});
+}), "act", "sensitive");

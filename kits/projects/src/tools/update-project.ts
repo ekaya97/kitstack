@@ -1,9 +1,10 @@
 import { defineTool, kit } from "@kitstackco/sdk";
+import { withToolMetadata } from "../tool-metadata";
 import { z } from "zod";
 import { eq, like } from "drizzle-orm";
 import { projects } from "../schema";
 
-export const updateProject = defineTool({
+export const updateProject = withToolMetadata(defineTool({
   name: "update_project",
   description: "Update a project's status, priority, dates, budget, or other details",
   args: z.object({
@@ -23,10 +24,10 @@ export const updateProject = defineTool({
     notes: z.string().describe("Updated notes").optional(),
     tags: z.string().describe("Updated comma-separated tags").optional(),
   }),
-  handler: async (db, args) => {
+  handler: async (ctx, args) => {
     const [existing] = args.project.startsWith("prj_")
-      ? await db.select().from(projects).where(eq(projects.id, args.project))
-      : await db.select().from(projects).where(like(projects.name, `%${args.project}%`)).limit(1);
+      ? await ctx.db.select().from(projects).where(eq(projects.id, args.project))
+      : await ctx.db.select().from(projects).where(like(projects.name, `%${args.project}%`)).limit(1);
 
     if (!existing) return kit.notFound("project", args.project);
 
@@ -47,7 +48,7 @@ export const updateProject = defineTool({
     if (args.notes !== undefined) updates.notes = args.notes;
     if (args.tags !== undefined) updates.tags = args.tags;
 
-    await db.update(projects).set(updates).where(eq(projects.id, existing.id));
+    await ctx.db.update(projects).set(updates).where(eq(projects.id, existing.id));
 
     const changes: string[] = [];
     if (args.status !== undefined) changes.push(`status → ${args.status}`);
@@ -63,4 +64,4 @@ export const updateProject = defineTool({
       : `Project "${existing.name}" updated.`;
     return kit.result(kit.updated(existing.id, "project", msg));
   },
-});
+}), "act", "internal");

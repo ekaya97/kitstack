@@ -1,15 +1,16 @@
 import { z } from "zod";
 import { like, or, isNull } from "drizzle-orm";
 import { defineTool, kit } from "@kitstackco/sdk";
+import { withToolMetadata } from "../tool-metadata";
 import { contacts, companies, interactions } from "../schema";
 
-export const search = defineTool({
+export const search = withToolMetadata(defineTool({
   name: "search",
   description: "Full-text search across contacts, companies, and interactions",
   args: z.object({
     query: z.string().describe("Search term"),
   }),
-  handler: async (db, args) => {
+  handler: async (ctx, args) => {
     const q = `%${args.query}%`;
     const sections: string[] = [];
 
@@ -85,4 +86,4 @@ export const search = defineTool({
 
     return kit.text(`Search results for "${args.query}":\n\n${sections.join("\n")}`);
   },
-});
+}), "assist", "sensitive");

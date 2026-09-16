@@ -2,11 +2,11 @@ import { defineLoader } from "@kitstackco/sdk";
 import { eq, desc } from "drizzle-orm";
 import { orders, petProfile } from "../../schema";
 
-export const loader = defineLoader(async (db, ctx) => {
+export const loader = defineLoader(async (ctx) => {
   const rows = await db
     .select()
     .from(orders)
-    .where(eq(orders.userId, ctx.userId))
+    .where(eq(orders.userId, ctx.identity.principal))
     .orderBy(desc(orders.createdAt))
     .limit(1);
   const o = rows[0];
@@ -15,7 +15,7 @@ export const loader = defineLoader(async (db, ctx) => {
   const pet = await db
     .select({ name: petProfile.name })
     .from(petProfile)
-    .where(eq(petProfile.userId, ctx.userId))
+    .where(eq(petProfile.userId, ctx.identity.principal))
     .limit(1);
 
   return {

@@ -2,7 +2,7 @@ import { defineLoader } from "@kitstackco/sdk";
 import { isNull, and, gte, lte, sql } from "drizzle-orm";
 import { expenses } from "../../schema";
 
-export const loader = defineLoader(async (db) => {
+export const loader = defineLoader(async (ctx) => {
   const now = new Date();
   const year = now.getFullYear();
   const month = now.getMonth();

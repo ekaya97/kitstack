@@ -1,18 +1,19 @@
 import { z } from "zod";
 import { asc, desc, sql, eq, isNull } from "drizzle-orm";
 import { defineTool, kit } from "@kitstackco/sdk";
+import { withToolMetadata } from "../tool-metadata";
 import { topics, content, performance } from "../schema";
 
-export const suggestTopics = defineTool({
+export const suggestTopics = withToolMetadata(defineTool({
   name: "suggest_topics",
   description:
     "Suggest topics to write about — prioritizes topics not covered recently and topics with historically high engagement. TRIGGER: user asks for content ideas or what to write about.",
   args: z.object({
     count: z.number().optional().default(5).describe("Number of suggestions to return"),
   }),
-  handler: async (db, args) => {
+  handler: async (ctx, args) => {
     // Get all topics sorted by last used (oldest first = most overdue)
-    const allTopics = await db.select().from(topics).orderBy(asc(topics.lastUsedAt));
+    const allTopics = await ctx.db.select().from(topics).orderBy(asc(topics.lastUsedAt));
 
     if (allTopics.length === 0) {
       return kit.text(
@@ -72,4 +73,4 @@ export const suggestTopics = defineTool({
 
     return kit.text(text);
   },
-});
+}), "assist", "internal");

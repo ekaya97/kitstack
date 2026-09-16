@@ -1,9 +1,10 @@
 import { z } from "zod";
 import { eq, like, isNull } from "drizzle-orm";
 import { defineTool, kit } from "@kitstackco/sdk";
+import { withToolMetadata } from "../tool-metadata";
 import { deals } from "../schema";
 
-export const updateDeal = defineTool({
+export const updateDeal = withToolMetadata(defineTool({
   name: "update_deal",
   description: "Move a deal through stages or update details",
   args: z.object({
@@ -15,7 +16,7 @@ export const updateDeal = defineTool({
     lost_reason: z.string().optional().describe("Reason for losing the deal"),
     notes: z.string().optional().describe("Updated notes"),
   }),
-  handler: async (db, args) => {
+  handler: async (ctx, args) => {
     // Resolve deal
     let dealId: string;
     if (args.deal.startsWith("deal_")) {
@@ -43,9 +44,9 @@ export const updateDeal = defineTool({
     if (args.lost_reason !== undefined) updates.lostReason = args.lost_reason;
     if (args.notes !== undefined) updates.notes = args.notes;
 
-    await db.update(deals).set(updates).where(eq(deals.id, dealId));
+    await ctx.db.update(deals).set(updates).where(eq(deals.id, dealId));
 
     const changes = Object.keys(updates).filter((k) => k !== "updatedAt").join(", ");
     return kit.result(kit.updated(dealId, "deal", `Deal updated: ${changes}.`));
   },
-});
+}), "act", "sensitive");

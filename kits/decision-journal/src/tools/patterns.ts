@@ -1,19 +1,20 @@
 import { z } from "zod";
 import { isNull, gte } from "drizzle-orm";
 import { defineTool, kit } from "@kitstackco/sdk";
+import { withToolMetadata } from "../tool-metadata";
 import { decisions, outcomes } from "../schema";
 
-export const patterns = defineTool({
+export const patterns = withToolMetadata(defineTool({
   name: "patterns",
   description: "Analyze decision-making patterns: category distribution, confidence vs. outcomes, urgency correlation, and hindsight rate",
   args: z.object({
     period: z.string().optional()
       .describe("Time period to analyze: this_month, this_quarter, this_year, or YYYY-MM-DD..YYYY-MM-DD. Defaults to all time."),
   }),
-  handler: async (db, args) => {
+  handler: async (ctx, args) => {
     // Load all decisions and outcomes
-    const allDecisions = await db.select().from(decisions).where(isNull(decisions.archivedAt));
-    const allOutcomes = await db.select().from(outcomes);
+    const allDecisions = await ctx.db.select().from(decisions).where(isNull(decisions.archivedAt));
+    const allOutcomes = await ctx.db.select().from(outcomes);
 
     // Filter by period if specified
     let filtered = allDecisions;
@@ -106,7 +107,7 @@ export const patterns = defineTool({
 
     return kit.text(sections.join("\n"));
   },
-});
+}), "assist", "sensitive");
 
 function resolvePeriod(period: string): { from: string | null; to: string | null } {
   const now = new Date();

@@ -1,9 +1,10 @@
 import { z } from "zod";
 import { eq, like, or } from "drizzle-orm";
 import { defineTool, kit } from "@kitstackco/sdk";
+import { withToolMetadata } from "../tool-metadata";
 import { contacts } from "../schema";
 
-export const updateContact = defineTool({
+export const updateContact = withToolMetadata(defineTool({
   name: "update_contact",
   description: "Update contact details or relationship warmth",
   args: z.object({
@@ -19,7 +20,7 @@ export const updateContact = defineTool({
     notes: z.string().optional().describe("Updated notes"),
     tags: z.string().optional().describe("Updated comma-separated tags"),
   }),
-  handler: async (db, args) => {
+  handler: async (ctx, args) => {
     let contactId: string;
     if (args.contact.startsWith("con_")) {
       contactId = args.contact;
@@ -50,9 +51,9 @@ export const updateContact = defineTool({
     if (args.notes !== undefined) updates.notes = args.notes;
     if (args.tags !== undefined) updates.tags = args.tags;
 
-    await db.update(contacts).set(updates).where(eq(contacts.id, contactId));
+    await ctx.db.update(contacts).set(updates).where(eq(contacts.id, contactId));
 
     const changes = Object.keys(updates).filter((k) => k !== "updatedAt").join(", ");
     return kit.result(kit.updated(contactId, "contact", `Contact updated: ${changes}.`));
   },
-});
+}), "act", "sensitive");

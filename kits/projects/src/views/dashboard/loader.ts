@@ -2,11 +2,11 @@ import { defineLoader } from "@kitstackco/sdk";
 import { eq, and, isNull, sql } from "drizzle-orm";
 import { projects, clients, tasks, timeEntries } from "../../schema";
 
-export const loader = defineLoader(async (db) => {
+export const loader = defineLoader(async (ctx) => {
   const today = new Date().toISOString().split("T")[0];
   const weekAgo = new Date(Date.now() - 7 * 86400000).toISOString().split("T")[0];
 
-  const activeProjects = await db.select({
+  const activeProjects = await ctx.db.select({
     id: projects.id,
     name: projects.name,
     status: projects.status,
@@ -22,7 +22,7 @@ export const loader = defineLoader(async (db) => {
   .where(and(isNull(projects.archivedAt), eq(projects.status, "active")))
   .orderBy(projects.dueDate);
 
-  const taskCounts = await db.select({
+  const taskCounts = await ctx.db.select({
     projectId: tasks.projectId,
     total: sql<number>`count(*)`,
     done: sql<number>`sum(CASE WHEN ${tasks.status} = 'done' THEN 1 ELSE 0 END)`,
@@ -30,7 +30,7 @@ export const loader = defineLoader(async (db) => {
   .from(tasks)
   .groupBy(tasks.projectId);
 
-  const weeklyTime = await db.select({
+  const weeklyTime = await ctx.db.select({
     projectId: timeEntries.projectId,
     projectName: projects.name,
     totalMinutes: sql<number>`sum(${timeEntries.durationMinutes})`,
@@ -40,7 +40,7 @@ export const loader = defineLoader(async (db) => {
   .where(sql`${timeEntries.entryDate} >= ${weekAgo}`)
   .groupBy(timeEntries.projectId, projects.name);
 
-  const urgentTasks = await db.select({
+  const urgentTasks = await ctx.db.select({
     title: tasks.title,
     status: tasks.status,
     priority: tasks.priority,

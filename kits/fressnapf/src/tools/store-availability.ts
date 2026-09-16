@@ -1,8 +1,9 @@
 import { z } from "zod";
 import { defineTool, kit } from "@kitstackco/sdk";
+import { withToolMetadata } from "../tool-metadata";
 import { MOCK_STORE, PICKUP_WINDOW } from "../domain/store";
 
-export const storeAvailability = defineTool({
+export const storeAvailability = withToolMetadata(defineTool({
   name: "store_availability",
   description:
     "Prüft die Verfügbarkeit zur Abholung im Markt. (Prototyp: simuliert — immer Fressnapf Krefeld, sofort abholbereit.)",
@@ -10,7 +11,7 @@ export const storeAvailability = defineTool({
     product_ids: z.array(z.string()).describe("Artikelnummern"),
     plz: z.string().optional().describe("Postleitzahl des Nutzers"),
   }),
-  handler: async (_db, args) => {
+  handler: async (ctx, args) => {
     const rows = args.product_ids.map((id) => ({
       productId: id,
       store: MOCK_STORE.name,
@@ -22,4 +23,4 @@ export const storeAvailability = defineTool({
         .join("\n")}\n\n(Prototyp: Verfügbarkeit simuliert.)`
     );
   },
-});
+}), "assist", "internal");

@@ -1,10 +1,11 @@
 import { z } from "zod";
 import { like, or, isNull } from "drizzle-orm";
 import { defineTool, kit } from "@kitstackco/sdk";
+import { withToolMetadata } from "../tool-metadata";
 import { nanoid } from "nanoid";
 import { contacts, interactions } from "../schema";
 
-export const logInteraction = defineTool({
+export const logInteraction = withToolMetadata(defineTool({
   name: "log_interaction",
   description: "Log a conversation, meeting, or touchpoint with a contact",
   args: z.object({
@@ -16,7 +17,7 @@ export const logInteraction = defineTool({
     follow_up_by: z.string().optional().describe("Follow-up deadline (ISO date)"),
     occurred_at: z.string().optional().describe("When it happened (ISO date). Defaults to now."),
   }),
-  handler: async (db, args) => {
+  handler: async (ctx, args) => {
     const now = new Date().toISOString();
 
     // Resolve contact by ID or fuzzy name match
@@ -46,7 +47,7 @@ export const logInteraction = defineTool({
     }
 
     const id = `int_${nanoid()}`;
-    await db.insert(interactions).values({
+    await ctx.db.insert(interactions).values({
       id,
       contactId,
       type: args.type,
@@ -61,4 +62,4 @@ export const logInteraction = defineTool({
 
     return kit.result(kit.created(id, "interaction", `${args.type} logged for contact ${contactId}.`));
   },
-});
+}), "act", "sensitive");

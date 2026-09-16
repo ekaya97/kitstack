@@ -1,19 +1,20 @@
 import { defineTool, kit } from "@kitstackco/sdk";
+import { withToolMetadata } from "../tool-metadata";
 import { z } from "zod";
 import { eq, and, isNull, lte, desc, sql } from "drizzle-orm";
 import type { SQL } from "drizzle-orm";
 import { projects, clients, tasks, timeEntries } from "../schema";
 
-export const dashboard = defineTool({
+export const dashboard = withToolMetadata(defineTool({
   name: "dashboard",
   description: "Cross-project overview: active projects, overdue/urgent tasks, and time logged this week",
   args: z.object({}),
-  load: async (db) => {
+  load: async (ctx) => {
     const today = new Date().toISOString().split("T")[0];
     const weekAgo = new Date(Date.now() - 7 * 86400000).toISOString().split("T")[0];
 
     // Active projects with client names
-    const activeProjects = await db.select({
+    const activeProjects = await ctx.db.select({
       id: projects.id,
       name: projects.name,
       status: projects.status,
@@ -30,7 +31,7 @@ export const dashboard = defineTool({
     .orderBy(projects.dueDate);
 
     // Task counts per project
-    const taskCounts = await db.select({
+    const taskCounts = await ctx.db.select({
       projectId: tasks.projectId,
       total: sql<number>`count(*)`,
       done: sql<number>`sum(CASE WHEN ${tasks.status} = 'done' THEN 1 ELSE 0 END)`,
@@ -39,7 +40,7 @@ export const dashboard = defineTool({
     .groupBy(tasks.projectId);
 
     // Urgent / overdue tasks
-    const urgentTasks = await db.select({
+    const urgentTasks = await ctx.db.select({
       title: tasks.title,
       status: tasks.status,
       priority: tasks.priority,
@@ -59,7 +60,7 @@ export const dashboard = defineTool({
     .limit(10);
 
     // Time logged this week per project
-    const weeklyTime = await db.select({
+    const weeklyTime = await ctx.db.select({
       projectName: projects.name,
       totalMinutes: sql<number>`sum(${timeEntries.durationMinutes})`,
     })
@@ -70,8 +71,8 @@ export const dashboard = defineTool({
 
     return { activeProjects, taskCounts, urgentTasks, weeklyTime, today };
   },
-  handler: async (db, args, ctx) => {
-    const data = await dashboard.load(db, args, ctx);
+  handler: async (ctx, args) => {
+    const data = await dashboard.load(ctx, args);
     const lines: string[] = ["## Dashboard"];
 
     // Active projects
@@ -110,4 +111,4 @@ export const dashboard = defineTool({
 
     return kit.text(lines.join("\n"));
   },
-});
+}), "assist", "internal");

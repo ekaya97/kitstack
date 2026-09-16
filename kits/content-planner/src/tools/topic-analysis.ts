@@ -1,14 +1,15 @@
 import { z } from "zod";
 import { desc, sql, asc } from "drizzle-orm";
 import { defineTool, kit } from "@kitstackco/sdk";
+import { withToolMetadata } from "../tool-metadata";
 import { topics } from "../schema";
 
-export const topicAnalysis = defineTool({
+export const topicAnalysis = withToolMetadata(defineTool({
   name: "topic_analysis",
   description:
     "Show topic coverage analysis — which topics are overdue, which are fresh, and how often each has been used.",
   args: z.object({}),
-  handler: async (db) => {
+  handler: async (ctx) => {
     const rows = await db
       .select()
       .from(topics)
@@ -39,4 +40,4 @@ export const topicAnalysis = defineTool({
 
     return kit.text(table);
   },
-});
+}), "assist", "internal");

@@ -1,18 +1,19 @@
 import { z } from "zod";
 import { isNull, eq } from "drizzle-orm";
 import { defineTool, kit } from "@kitstackco/sdk";
+import { withToolMetadata } from "../tool-metadata";
 import { decisions, outcomes } from "../schema";
 
-export const calibration = defineTool({
+export const calibration = withToolMetadata(defineTool({
   name: "calibration",
   description: "How well does stated confidence predict outcomes? Shows hit rates per confidence level and flags overconfidence",
   args: z.object({
     period: z.string().optional()
       .describe("Time period: this_month, this_quarter, this_year, or YYYY-MM-DD..YYYY-MM-DD"),
   }),
-  handler: async (db, args) => {
-    const allDecisions = await db.select().from(decisions).where(isNull(decisions.archivedAt));
-    const allOutcomes = await db.select().from(outcomes);
+  handler: async (ctx, args) => {
+    const allDecisions = await ctx.db.select().from(decisions).where(isNull(decisions.archivedAt));
+    const allOutcomes = await ctx.db.select().from(outcomes);
 
     // Filter by period
     let filtered = allDecisions;
@@ -105,4 +106,4 @@ export const calibration = defineTool({
 
     return kit.text(sections.join("\n"));
   },
-});
+}), "assist", "sensitive");

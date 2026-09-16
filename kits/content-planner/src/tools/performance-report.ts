@@ -1,9 +1,10 @@
 import { z } from "zod";
 import { eq, isNull, and, gte, lte, desc, sql, SQL } from "drizzle-orm";
 import { defineTool, kit } from "@kitstackco/sdk";
+import { withToolMetadata } from "../tool-metadata";
 import { content, performance } from "../schema";
 
-export const performanceReport = defineTool({
+export const performanceReport = withToolMetadata(defineTool({
   name: "performance_report",
   description:
     "Performance summary across published content — total impressions, engagements, top performers. TRIGGER: user asks about content analytics, results, or performance.",
@@ -18,7 +19,7 @@ export const performanceReport = defineTool({
       .optional()
       .describe("Filter by channel"),
   }),
-  handler: async (db, args) => {
+  handler: async (ctx, args) => {
     const now = new Date();
     const y = now.getFullYear();
     const m = now.getMonth();
@@ -106,4 +107,4 @@ export const performanceReport = defineTool({
 
     return kit.text(text);
   },
-});
+}), "assist", "internal");

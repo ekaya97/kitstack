@@ -1,10 +1,11 @@
 import { z } from "zod";
 import { eq, gte, lte, desc, and, like, SQL } from "drizzle-orm";
 import { defineTool, kit } from "@kitstackco/sdk";
+import { withToolMetadata } from "../tool-metadata";
 import { income } from "../schema";
 import { resolvePeriod, fmtEur } from "./helpers";
 
-export const listIncome = defineTool({
+export const listIncome = withToolMetadata(defineTool({
   name: "list_income",
   description: "List income entries with filters by period or source",
   args: z.object({
@@ -15,7 +16,7 @@ export const listIncome = defineTool({
     source: z.string().optional().describe("Filter by source (partial match)"),
     limit: z.number().optional().default(25).describe("Max results (default 25)"),
   }),
-  handler: async (db, args) => {
+  handler: async (ctx, args) => {
     const conditions: SQL[] = [];
 
     if (args.period || args.from || args.to) {
@@ -41,4 +42,4 @@ export const listIncome = defineTool({
     }
     return kit.text(table);
   },
-});
+}), "assist", "sensitive");

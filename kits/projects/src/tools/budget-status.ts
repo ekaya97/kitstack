@@ -1,23 +1,24 @@
 import { defineTool, kit } from "@kitstackco/sdk";
+import { withToolMetadata } from "../tool-metadata";
 import { z } from "zod";
 import { eq, like, sql } from "drizzle-orm";
 import { projects, timeEntries } from "../schema";
 
-export const budgetStatus = defineTool({
+export const budgetStatus = withToolMetadata(defineTool({
   name: "budget_status",
   description: "Show budget vs. actual spending for a project. Warns at 80%+ utilization.",
   args: z.object({
     project: z.string().describe("Project name or ID"),
   }),
-  handler: async (db, args) => {
+  handler: async (ctx, args) => {
     const [project] = args.project.startsWith("prj_")
-      ? await db.select().from(projects).where(eq(projects.id, args.project))
-      : await db.select().from(projects).where(like(projects.name, `%${args.project}%`)).limit(1);
+      ? await ctx.db.select().from(projects).where(eq(projects.id, args.project))
+      : await ctx.db.select().from(projects).where(like(projects.name, `%${args.project}%`)).limit(1);
 
     if (!project) return kit.notFound("project", args.project);
     if (project.budget === null || project.budget === undefined) return kit.text(`Project "${project.name}" has no budget set.`);
 
-    const timeStats = await db.select({
+    const timeStats = await ctx.db.select({
       totalMinutes: sql<number>`coalesce(sum(${timeEntries.durationMinutes}), 0)`,
       billableMinutes: sql<number>`coalesce(sum(CASE WHEN ${timeEntries.billable} = 1 THEN ${timeEntries.durationMinutes} ELSE 0 END), 0)`,
     }).from(timeEntries).where(eq(timeEntries.projectId, project.id));
@@ -58,4 +59,4 @@ export const budgetStatus = defineTool({
 
     return kit.text(lines.join("\n"));
   },
-});
+}), "assist", "internal");

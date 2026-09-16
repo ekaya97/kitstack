@@ -1,17 +1,18 @@
 import { z } from "zod";
 import { like } from "drizzle-orm";
 import { defineTool, kit } from "@kitstackco/sdk";
+import { withToolMetadata } from "../tool-metadata";
 import { nanoid } from "nanoid";
 import { topics } from "../schema";
 
-export const addTopic = defineTool({
+export const addTopic = withToolMetadata(defineTool({
   name: "add_topic",
   description: "Add a new topic to the taxonomy for tracking content coverage.",
   args: z.object({
     name: z.string().describe("Topic name"),
     description: z.string().optional().describe("Brief description of this topic area"),
   }),
-  handler: async (db, args) => {
+  handler: async (ctx, args) => {
     const now = new Date().toISOString();
 
     // Check for existing
@@ -26,7 +27,7 @@ export const addTopic = defineTool({
     }
 
     const id = `top_${nanoid()}`;
-    await db.insert(topics).values({
+    await ctx.db.insert(topics).values({
       id,
       name: args.name,
       description: args.description ?? null,
@@ -36,4 +37,4 @@ export const addTopic = defineTool({
 
     return kit.result(kit.created(id, "topic", `Topic "${args.name}" added.`));
   },
-});
+}), "act", "internal");

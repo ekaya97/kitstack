@@ -1,10 +1,11 @@
 import { z } from "zod";
 import { eq } from "drizzle-orm";
 import { defineTool, kit } from "@kitstackco/sdk";
+import { withToolMetadata } from "../tool-metadata";
 import { expenses } from "../schema";
 import { computeVat } from "./helpers";
 
-export const updateExpense = defineTool({
+export const updateExpense = withToolMetadata(defineTool({
   name: "update_expense",
   description: "Modify an existing expense — update amount, category, vendor, date, or any other field",
   args: z.object({
@@ -21,8 +22,8 @@ export const updateExpense = defineTool({
     receipt_note: z.string().optional().describe("Updated receipt note"),
     tags: z.string().optional().describe("Updated tags"),
   }),
-  handler: async (db, args) => {
-    const existing = await db.select().from(expenses).where(eq(expenses.id, args.id)).limit(1);
+  handler: async (ctx, args) => {
+    const existing = await ctx.db.select().from(expenses).where(eq(expenses.id, args.id)).limit(1);
     if (existing.length === 0) return kit.notFound("expense", args.id);
 
     const row = existing[0];
@@ -51,9 +52,9 @@ export const updateExpense = defineTool({
       updates.vatCents = vatCents;
     }
 
-    await db.update(expenses).set(updates).where(eq(expenses.id, args.id));
+    await ctx.db.update(expenses).set(updates).where(eq(expenses.id, args.id));
 
     const changed = Object.keys(updates).filter((k) => k !== "updatedAt").join(", ");
     return kit.result(kit.updated(args.id, "expense", `Expense updated: ${changed}.`));
   },
-});
+}), "act", "sensitive");
