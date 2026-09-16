@@ -1,3 +1,4 @@
+import { createElement } from "react";
 import { defineView } from "@kitstackco/sdk";
 import { loader } from "./loader";
 import { ConfirmationView } from "./View";
@@ -6,11 +7,11 @@ export { loader } from "./loader";
 export type { ConfirmationLoaderSnapshot, ConfirmationViewData } from "./loader";
 
 export default defineView({
-  slug: "confirmation",
+  id: "confirmation",
   name: "Debrief Confirmation",
   description: "after the sales call, to edit structured outcomes and confirm customer events",
-  loader,
-  component: ConfirmationView,
+  loaders: [loader],
+  render: (data, host) => createElement(ConfirmationView, { data, host }),
   height: 760,
   placeholder: {
     sessionId: "session-preview",

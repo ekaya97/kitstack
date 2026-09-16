@@ -241,6 +241,45 @@ export type Infer<T extends (...args: any[]) => any> = Awaited<ReturnType<T>>;
 
 // --- View Definition ---
 
+/** The two supported surfaces for a KitStack View. */
+export type ViewHostKind = "chat" | "shell";
+
+/** The current size of the host surface in CSS pixels. */
+export interface ViewHostSize {
+  width: number;
+  height: number;
+}
+
+/** Theme information supplied by the host. */
+export interface ViewHostTheme {
+  mode: "light" | "dark";
+}
+
+/**
+ * Capabilities supplied by the host to a View renderer.
+ *
+ * A View must be able to render in an MCP Apps chat iframe and in the
+ * KitStack dashboard shell without maintaining two implementations. The
+ * host owns navigation, identity, sizing, and theme; kits only consume this
+ * typed boundary.
+ */
+export interface ViewHost {
+  kind: ViewHostKind;
+  size: ViewHostSize;
+  navigate: (viewId: string, params?: Readonly<Record<string, unknown>>) => void | Promise<void>;
+  identity: RequestIdentity;
+  theme: ViewHostTheme;
+}
+
+/** Props passed to a View component by the SDK-generated host adapter. */
+export interface ViewComponentProps<TData> {
+  data: TData;
+  host: ViewHost;
+}
+
+/** Public renderer signature frozen by the View host contract. */
+export type ViewRender<TData> = (data: TData, host: ViewHost) => React.ReactNode;
+
 /**
  * A view definition created by {@link defineView}. Views are interactive
  * UI surfaces rendered inside the LLM client as sandboxed iframes via
@@ -267,11 +306,16 @@ export type Infer<T extends (...args: any[]) => any> = Awaited<ReturnType<T>>;
  * ```
  */
 export interface ViewDefinition<TLoader extends LoaderFn = LoaderFn> {
+  /** Stable public identifier. `slug` remains the router/build alias. */
+  id: string;
   slug: string;
   name: string;
   description: string;
+  /** The loader set declared by the public View API. The first loader is the primary data loader. */
+  loaders: readonly [TLoader];
   loader: TLoader;
-  component: React.ComponentType<{ data: Awaited<ReturnType<TLoader>> }>;
+  render: ViewRender<Awaited<ReturnType<TLoader>>>;
+  component: React.ComponentType<ViewComponentProps<Awaited<ReturnType<TLoader>>>>;
   height?: number;
   permissions?: {
     clipboardWrite?: boolean;

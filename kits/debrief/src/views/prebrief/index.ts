@@ -1,3 +1,4 @@
+import { createElement } from "react";
 import { defineView } from "@kitstackco/sdk";
 import { loader } from "./loader";
 import { PrebriefView } from "./View";
@@ -10,11 +11,11 @@ export type {
 } from "./loader";
 
 export default defineView({
-  slug: "prebrief",
+  id: "prebrief",
   name: "Sales Prebrief",
   description: "before the scheduled sales call, to review customer context, history, objective, timing, and privacy status",
-  loader,
-  component: PrebriefView,
+  loaders: [loader],
+  render: (data, host) => createElement(PrebriefView, { data, host }),
   height: 720,
   placeholder: {
     sessionId: "session-preview",

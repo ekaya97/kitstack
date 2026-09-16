@@ -1,4 +1,5 @@
 import { useKit } from "@kitstackco/sdk/view";
+import type { ViewComponentProps } from "@kitstackco/sdk";
 import type { CustomerTimelineEvent, CustomerTimelineViewData } from "./loader";
 
 const card: React.CSSProperties = {
@@ -16,12 +17,13 @@ const badgeColors: Record<CustomerTimelineEvent["type"], { background: string; c
   debrief_confirmed: { background: "#dcfce7", color: "#166534" },
 };
 
-export function CustomerTimelineView() {
-  const { data } = useKit<CustomerTimelineViewData>();
+export function CustomerTimelineView({ data: initialData, host }: ViewComponentProps<CustomerTimelineViewData>) {
+  const { data: liveData } = useKit<CustomerTimelineViewData>();
+  const data = liveData ?? initialData;
   if (!data) return <div style={{ padding: 16, color: "#6b7280" }}>Customer timeline unavailable.</div>;
 
   return (
-    <div style={{ display: "grid", gap: 12, padding: 16, fontFamily: "system-ui, sans-serif", color: "#111827" }}>
+    <div data-kitstack-host={host.kind} style={{ display: "grid", gap: 12, padding: 16, fontFamily: "system-ui, sans-serif", color: "#111827" }}>
       <div style={{ ...card, display: "grid", gap: 4 }}>
         <div style={{ fontSize: 12, color: "#6b7280", textTransform: "uppercase", letterSpacing: 1 }}>Customer timeline</div>
         <h1 style={{ margin: 0, fontSize: 22 }}>{data.customer.company}</h1>

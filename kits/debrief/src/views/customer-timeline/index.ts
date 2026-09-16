@@ -1,3 +1,4 @@
+import { createElement } from "react";
 import { defineView } from "@kitstackco/sdk";
 import { CustomerTimelineView } from "./View";
 import { loader } from "./loader";
@@ -12,11 +13,11 @@ export type {
 } from "./loader";
 
 export default defineView({
-  slug: "customer-timeline",
+  id: "customer-timeline",
   name: "Customer Timeline",
   description: "after confirmation, to review the customer's newest structured events",
-  loader,
-  component: CustomerTimelineView,
+  loaders: [loader],
+  render: (data, host) => createElement(CustomerTimelineView, { data, host }),
   height: 760,
   placeholder: {
     sessionId: "session-preview",

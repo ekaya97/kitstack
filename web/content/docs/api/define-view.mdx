@@ -1,21 +1,26 @@
 ---
 title: defineView()
-description: API reference for defineView() — create a view with a server-side loader and a React component.
+description: API reference for defineView() — create a view with typed data loaders and a host-aware renderer.
 ---
 
 # defineView()
 
-Creates a typed view definition. Views are React components that render inside the LLM client's chat.
+Creates a typed view definition. A View is declared once and can render in both
+an MCP Apps chat iframe and the KitStack dashboard shell. The SDK supplies the
+same typed host contract to both surfaces.
 
 ## Signature
 
 ```ts
 function defineView<TLoader extends LoaderFn>(config: {
-  slug: string;
+  id: string;
   name: string;
   description: string;
-  loader: TLoader;
-  component: React.ComponentType<{ data: Awaited<ReturnType<TLoader>> }>;
+  loaders: readonly [TLoader];
+  render: (
+    data: Awaited<ReturnType<TLoader>>,
+    host: ViewHost,
+  ) => React.ReactNode;
   height?: number;
   permissions?: { clipboardWrite?: boolean };
   placeholder?: Awaited<ReturnType<TLoader>>;
@@ -26,11 +31,11 @@ function defineView<TLoader extends LoaderFn>(config: {
 
 | Parameter | Type | Required | Description |
 |-----------|------|----------|-------------|
-| `slug` | `string` | Yes | URL-safe identifier. Must be `kebab-case`. Used in `kit_view(view: "slug")`. |
+| `id` | `string` | Yes | Stable URL-safe identifier. Must be `kebab-case`; it is also the router slug used in `kit_view(view: "id")`. |
 | `name` | `string` | Yes | Human-readable name. Shown in DevKit sidebar. |
 | `description` | `string` | Yes | Tells the LLM *when* to show this view (e.g., `"after adding contacts"`). |
-| `loader` | `LoaderFn` | Yes | Server-side function that fetches data. Created with [`defineLoader()`](/docs/api/define-loader). |
-| `component` | `React.ComponentType` | Yes | React component that receives `{ data }` from the loader. |
+| `loaders` | `readonly [LoaderFn]` | Yes | The View's typed server-side data loader set. The first loader is the primary loader executed by the current runtime. Created with [`defineLoader()`](/docs/api/define-loader). |
+| `render` | `(data, host) => React.ReactNode` | Yes | Host-aware renderer. It receives the loader result and the frozen [`ViewHost`](#viewhost) contract. |
 | `height` | `number` | No | Height in pixels for the iframe. |
 | `permissions.clipboardWrite` | `boolean` | No | Allow writing to clipboard from the view. Default: `false`. |
 | `placeholder` | `Awaited<ReturnType<TLoader>>` | No | Sample data for DevKit when the loader returns empty/null. |
@@ -49,11 +54,11 @@ import { loader } from "./loader";
 import { ContactsView } from "./View";
 
 export default defineView({
-  slug: "contacts",
+  id: "contacts",
   name: "Contacts",
   description: "after adding or updating contacts",
-  loader,
-  component: ContactsView,
+  loaders: [loader],
+  render: (data, host) => <ContactsView data={data} host={host} />,
   height: 500,
 });
 ```
@@ -66,11 +71,11 @@ import { loader } from "./loader";
 import { ContactDetailView } from "./View";
 
 export default defineView({
-  slug: "contact-detail",
+  id: "contact-detail",
   name: "Contact Detail",
   description: "to view detailed contact info with deals and activity",
-  loader,
-  component: ContactDetailView,
+  loaders: [loader],
+  render: (data, host) => <ContactDetailView data={data} host={host} />,
   placeholder: {
     contact: {
       id: "c1",
@@ -92,11 +97,11 @@ export default defineView({
 
 ```ts filename="src/views/export/index.ts"
 export default defineView({
-  slug: "export",
+  id: "export",
   name: "Export Data",
   description: "to export data as CSV or JSON",
-  loader,
-  component: ExportView,
+  loaders: [loader],
+  render: (data, host) => <ExportView data={data} host={host} />,
   permissions: {
     clipboardWrite: true,
   },
@@ -116,9 +121,36 @@ src/views/{slug}/
 
 The component file must be at `src/views/[slug]/View.tsx`. The build fails if it's missing.
 
+## ViewHost
+
+`render(data, host)` receives a `ViewHost` in every runtime:
+
+```ts
+interface ViewHost {
+  kind: "chat" | "shell";
+  size: { width: number; height: number };
+  navigate: (viewId: string, params?: Readonly<Record<string, unknown>>) => void | Promise<void>;
+  identity: { principal: string; actor: string; delegation?: string | Readonly<Record<string, unknown>> };
+  theme: { mode: "light" | "dark" };
+}
+```
+
+Use `host.kind` only for small surface-specific presentation differences. Keep
+business logic and data loading independent of the host. `navigate()` asks the
+host to open another View in the same kit; the host remains responsible for
+routing and authorization. `identity` is host-provided context for display or
+delegated actions, not a replacement for server-side authorization.
+
+The chat host is the MCP Apps iframe used by Claude and other MCP clients. The
+shell host is the KitStack dashboard surface. Both hosts use the same View
+renderer, so a kit does not need a chat View and a dashboard View for the same
+workflow.
+
 ## Notes
 
 - View slugs must be `kebab-case`. The regex is `/^[a-z][a-z0-9]*(?:-[a-z0-9]+)*$/`.
+- `id` is the public identifier; the SDK normalizes it to the internal `slug`
+  field used by the current build and router implementations.
 - Placeholders are typed against the loader's return type. TypeScript errors if the shape doesn't match.
 - Placeholders are stripped from the production build and stored in `kit._placeholders`. They only appear in the DevKit.
 - Changes to placeholder data or view config require restarting `kitstack dev`. Only `View.tsx` changes are hot-reloaded.

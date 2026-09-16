@@ -1,4 +1,30 @@
-import type { ViewDefinition, LoaderFn } from "./types";
+import { createElement } from "react";
+import type {
+  ViewComponentProps,
+  ViewDefinition,
+  ViewRender,
+  LoaderFn,
+} from "./types";
+
+type ViewMetadata<TData> = {
+  name: string;
+  description: string;
+  height?: number;
+  permissions?: { clipboardWrite?: boolean };
+  placeholder?: TData;
+};
+
+type PublicViewConfig<TLoader extends LoaderFn> = ViewMetadata<Awaited<ReturnType<TLoader>>> & {
+  id: string;
+  loaders: readonly [TLoader];
+  render: ViewRender<Awaited<ReturnType<TLoader>>>;
+};
+
+type LegacyViewConfig<TLoader extends LoaderFn> = ViewMetadata<Awaited<ReturnType<TLoader>>> & {
+  slug: string;
+  loader: TLoader;
+  component: React.ComponentType<ViewComponentProps<Awaited<ReturnType<TLoader>>>>;
+};
 
 /**
  * Define a view for interactive UI rendering via MCP Apps.
@@ -46,22 +72,36 @@ import type { ViewDefinition, LoaderFn } from "./types";
  * });
  * ```
  */
-export function defineView<TLoader extends LoaderFn>(config: {
-  slug: string;
-  name: string;
-  description: string;
-  loader: TLoader;
-  component: React.ComponentType<{ data: Awaited<ReturnType<TLoader>> }>;
-  height?: number;
-  permissions?: {
-    clipboardWrite?: boolean;
+export function defineView<TLoader extends LoaderFn>(
+  config: PublicViewConfig<TLoader>
+): ViewDefinition<TLoader>;
+
+/** @deprecated Use `id`, `loaders`, and `render(data, host)` for new Views. */
+export function defineView<TLoader extends LoaderFn>(
+  config: LegacyViewConfig<TLoader>
+): ViewDefinition<TLoader>;
+
+export function defineView<TLoader extends LoaderFn>(
+  config: PublicViewConfig<TLoader> | LegacyViewConfig<TLoader>
+): ViewDefinition<TLoader> {
+  if ("id" in config) {
+    const loader = config.loaders[0];
+    const component = (props: ViewComponentProps<Awaited<ReturnType<TLoader>>>) =>
+      config.render(props.data, props.host);
+    return {
+      ...config,
+      slug: config.id,
+      loader,
+      component,
+    };
+  }
+
+  const render: ViewRender<Awaited<ReturnType<TLoader>>> = (data, host) =>
+    createElement(config.component, { data, host });
+  return {
+    ...config,
+    id: config.slug,
+    loaders: [config.loader],
+    render,
   };
-  /**
-   * Sample data matching the loader's return type. Used by the DevKit
-   * to preview views when the database is empty. Stripped from production
-   * builds — never shipped to Lambda.
-   */
-  placeholder?: Awaited<ReturnType<TLoader>>;
-}): ViewDefinition<TLoader> {
-  return config;
 }
