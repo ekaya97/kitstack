@@ -133,4 +133,23 @@ describe("persisted scheduled calls", () => {
     await store.reset("org-demo");
     expect(await store.list("org-demo")).toEqual([]);
   });
+
+  it("uses the trigger-backed invocation seam when a daemon host provides one", async () => {
+    const clock = new FakeClock("2026-09-15T20:00:00.000Z");
+    const store = createScheduledCallStore(database(), { now: clock.now, createScheduledCallId: () => "scheduled-1" });
+    await store.schedule(input(clock.now()));
+    const calls: string[] = [];
+    const poller = new ScheduledCallPoller({
+      operations: store,
+      orgId: "org-demo",
+      workerId: "daemon-1",
+      now: clock.now,
+      startCall: async () => { throw new Error("direct provider seam should not run"); },
+      invokeTrigger: async (job) => { calls.push(job.sessionId); return "CA-trigger-1"; },
+    });
+
+    const result = await poller.pollOnce();
+    expect(result).toMatchObject({ status: "started", providerCallId: "CA-trigger-1" });
+    expect(calls).toEqual(["session-1"]);
+  });
 });

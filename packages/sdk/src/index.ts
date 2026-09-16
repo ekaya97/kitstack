@@ -5,6 +5,8 @@ export type {
   ConnectorRegistry,
   RequestIdentity,
   ChannelContext,
+  ChannelKind,
+  ChannelDefinition,
   SessionContext,
   TelemetryAttributes,
   TelemetrySink,
@@ -104,6 +106,31 @@ export {
   type EvalSurface,
   type PromotionOptions,
 } from "./eval";
+export {
+  defineTrigger,
+  dispatchTrigger,
+  type TriggerKind,
+  type TriggerIdentityType,
+  type TriggerIdentity,
+  type TriggerVerificationRequest,
+  type TriggerContext,
+  type TriggerDefinition,
+  type TriggerInvocation,
+  type TriggerAuditEvent,
+  type TriggerDispatchOptions,
+  type TriggerInvocationResult,
+} from "./trigger";
+
+export {
+  dispatch,
+  createDispatchEnvelope,
+  type DispatchEnvelope,
+  type DispatchRequestContext,
+  type DispatchDependencies,
+  type DispatchResult,
+  type DispatchErrorCode,
+  type DispatchTarget,
+} from "./server/dispatch";
 export { createKitContext, type CreateKitContextOptions } from "./context";
 
 // Connectors
