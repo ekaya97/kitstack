@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it } from "vitest";
-import { createTelemetryStore, type TelemetryStore } from "../telemetry/index.js";
+import { createTelemetryStore, type TelemetryStore } from "../../telemetry/index.js";
 import {
   createDemoPluginRegistry,
   createPluginContext,

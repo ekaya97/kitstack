@@ -1,10 +1,10 @@
 import { createHash } from "node:crypto";
 import { readFileSync } from "node:fs";
 import { isAbsolute, resolve } from "node:path";
-import type { DemoPlugin, DemoPluginContext } from "../registry/index.js";
+import type { DemoPlugin, DemoPluginContext } from "../plugins/registry/index.js";
+import { DEBRIEF_KIT_ID } from "../contracts";
 
 export const INSTRUCTION_PLUGIN_ID = "instructions:debrief-baseline";
-export const DEBRIEF_KIT_ID = "kit:debrief";
 export const DEFAULT_INSTRUCTION_CONTEXT = "default";
 export const DEFAULT_DEBRIEF_INSTRUCTION_FILE = new URL(
   "./debrief-baseline.md",

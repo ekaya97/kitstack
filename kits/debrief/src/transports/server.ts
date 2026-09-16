@@ -13,7 +13,7 @@ import { createDemoApp, type DemoApp } from "../composition/app/index.js";
 import type { McpAuthMode } from "../adapters/auth/mcp.js";
 import { handleDemoAppRequest, type DemoLiveVoiceRoute, type DemoAppRouteRequest } from "./http/app.js";
 import { attachVoiceMediaBridge, handleVoiceProviderStatus, startScheduledLiveVoiceCall } from "./http/voice.js";
-import { ScheduledCallPoller, type ScheduledCallPoller as ScheduledCallPollerType } from "../plugins/scheduler/index.js";
+import { ScheduledCallPoller, type ScheduledCallPoller as ScheduledCallPollerType } from "../scheduler/index.js";
 import {
   createDefineAgentVoiceLoop,
   createOpenAIRealtimeSocketFactory,

@@ -4,8 +4,8 @@ import type { DemoHttpRequest, DemoHttpResponse } from "./index.js";
 import { handleLiveVoiceStart, type LiveVoiceHttpOptions } from "./voice.js";
 import type { TwilioOpenAIBridge, VoiceWebSocket } from "../../adapters/voice/realtime.js";
 import type { ProxyResult } from "../../adapters/proxy/index.js";
-import type { ScheduledCallRecord } from "../../plugins/scheduler/index.js";
-import type { TelemetryAggregate, TelemetryEvent } from "../../plugins/telemetry/index.js";
+import type { ScheduledCallRecord } from "../../scheduler/index.js";
+import type { TelemetryAggregate, TelemetryEvent } from "../../telemetry/index.js";
 import type { VoiceStatusResult } from "../../adapters/voice/index.js";
 import {
   toCustomerTimelineViewData,

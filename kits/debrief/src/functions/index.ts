@@ -1,6 +1,6 @@
 import type { MemoryContext, MemoryRecord, MemoryWriteInput } from "../memory/plugin.js";
-import type { InstructionPlugin, ResolvedInstruction } from "../plugins/instructions/index.js";
-import type { TelemetryEventInput, TelemetryStore } from "../plugins/telemetry/index.js";
+import type { InstructionPlugin, ResolvedInstruction } from "../instructions/plugin.js";
+import type { TelemetryEventInput, TelemetryStore } from "../telemetry/index.js";
 import type {
   DebriefConfirmationResult,
   DebriefDraftUpdate,

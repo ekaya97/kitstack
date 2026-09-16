@@ -53,14 +53,16 @@ describe("DemoApp", () => {
     const directory = mkdtempSync(join(tmpdir(), "kitstack-demo-sessions-"));
     temporaryDirectories.push(directory);
     const url = `file:${join(directory, "demo.db")}`;
+    const callbackAt = new Date(Date.now() + 10 * 60 * 1000).toISOString();
+    const scheduledCallAt = new Date(Date.parse(callbackAt) + 5 * 60 * 1000).toISOString();
     const firstApp = await createDemoApp({ url, orgId: "org-demo" });
     const prepared = await firstApp.debrief.prepareDebrief({
       goal: "Prepare the Acme renewal",
       company: "  Acme   Corp ",
       contactName: " John Doe ",
       location: " Köln   Café ",
-      callbackAt: "2026-09-16T10:00:00.000Z",
-      scheduledCallAt: "2026-09-16T10:05:00.000Z",
+      callbackAt,
+      scheduledCallAt,
       callbackTimezone: "Europe/Berlin",
       bufferMinutes: 5,
     });
@@ -76,8 +78,8 @@ describe("DemoApp", () => {
     expect(restartedApp.debrief.getSession(prepared.sessionId)).toMatchObject({
       sessionId: prepared.sessionId,
       customerId: prepared.customerId,
-      callbackAt: "2026-09-16T10:00:00.000Z",
-      scheduledCallAt: "2026-09-16T10:05:00.000Z",
+      callbackAt,
+      scheduledCallAt,
     });
     await restartedApp.close();
   });

@@ -1,5 +1,5 @@
 import type { DebriefSession } from "../../functions/index.js";
-import type { TelemetryEventInput, TelemetryStore } from "../../plugins/telemetry/index.js";
+import type { TelemetryEventInput, TelemetryStore } from "../../telemetry/index.js";
 
 export const SIMULATOR_PROVIDER = "simulator" as const;
 export const SIMULATOR_MODEL = "simulator-german-sales-v1";

@@ -1,4 +1,4 @@
-import type { TelemetryEventInput, TelemetryStore } from "../../plugins/telemetry/index.js";
+import type { TelemetryEventInput, TelemetryStore } from "../../telemetry/index.js";
 
 export const SIMULATOR_PROVIDER = "simulator" as const;
 export const REALTIME_PROVIDER = "realtime" as const;

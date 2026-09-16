@@ -1,4 +1,4 @@
-import type { TelemetryStore } from "../telemetry/index.js";
+import type { TelemetryStore } from "../../telemetry/index.js";
 import {
   PluginRegistry as SdkPluginRegistry,
   type Plugin as SdkPlugin,

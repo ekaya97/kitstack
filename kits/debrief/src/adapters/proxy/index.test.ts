@@ -4,7 +4,7 @@ import {
   issueAppToken,
   registerApp,
 } from "../auth/index.js";
-import type { TelemetryEventInput } from "../../plugins/telemetry/index.js";
+import type { TelemetryEventInput } from "../../telemetry/index.js";
 import { handleProxyRequest } from "./index.js";
 
 const SECRET = "demo-secret-that-is-at-least-32-bytes-long";

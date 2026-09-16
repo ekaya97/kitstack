@@ -1,6 +1,6 @@
 import { afterEach, describe, expect, it } from "vitest";
 import { createClient, type Client } from "@libsql/client";
-import { createTelemetryStore, type TelemetryStore } from "../plugins/telemetry/index.js";
+import { createTelemetryStore, type TelemetryStore } from "../telemetry/index.js";
 import { createMemoryStore, type MemoryContext, type MemoryStore } from "./plugin.js";
 
 let client: Client;

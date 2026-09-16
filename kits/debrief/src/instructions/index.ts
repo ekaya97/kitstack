@@ -33,3 +33,5 @@ export function asAgentInstructions(
   const resolved = resolveBaselineInstructions(request);
   return { version: resolved.version, content: resolved.content };
 }
+
+export * from "./plugin.js";

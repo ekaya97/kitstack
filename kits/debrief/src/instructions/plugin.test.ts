@@ -3,14 +3,14 @@ import { mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { tmpdir } from "node:os";
 import { createTelemetryStore, type TelemetryStore } from "../telemetry/index.js";
+import { DEBRIEF_KIT_ID } from "../contracts";
 import {
   createInstructionPlugin,
-  DEBRIEF_KIT_ID,
   InstructionKitNotFoundError,
   InstructionResolutionError,
   INSTRUCTION_PLUGIN_ID,
   loadInstructionManifestFromFile,
-} from "./index.js";
+} from "./plugin.js";
 
 let telemetry: TelemetryStore | undefined;
 const temporaryDirectories: string[] = [];

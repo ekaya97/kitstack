@@ -10,7 +10,7 @@ import {
   type CreateTelemetryStoreOptions,
   type TelemetryQuery,
   type TelemetryStore,
-} from "../plugins/telemetry/index.js";
+} from "../telemetry/index.js";
 
 export const DEFAULT_DEMO_ORG_ID = "org-demo";
 export const DEFAULT_DEMO_RESET_TOKEN = "demo-reset";

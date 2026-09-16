@@ -3,7 +3,7 @@ import {
   type AppRegistry,
   type AppTokenClaims,
 } from "../auth/index.js";
-import type { TelemetryEventInput } from "../../plugins/telemetry/index.js";
+import type { TelemetryEventInput } from "../../telemetry/index.js";
 
 export interface TelemetrySink {
   append(event: TelemetryEventInput): Promise<unknown>;

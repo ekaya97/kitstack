@@ -12,7 +12,7 @@ import {
   type VoiceWebSocket,
   type SessionBinding,
 } from "../../adapters/voice/realtime.js";
-import type { TelemetryStore } from "../../plugins/telemetry/index.js";
+import type { TelemetryStore } from "../../telemetry/index.js";
 
 export interface VoiceHttpRequest {
   method: string;

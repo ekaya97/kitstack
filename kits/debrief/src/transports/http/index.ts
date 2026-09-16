@@ -8,7 +8,7 @@ import type {
   TelemetryChannel,
   TelemetryEventType,
   TelemetryQuery,
-} from "../../plugins/telemetry/index.js";
+} from "../../telemetry/index.js";
 
 export interface DemoHttpRequest extends DemoRuntimeRequest {
   method: string;

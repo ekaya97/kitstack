@@ -3,13 +3,13 @@ import { createAppRegistry, type AppRegistry } from "../../adapters/auth/index.j
 import type { McpAuthMode } from "../../adapters/auth/mcp.js";
 import { DebriefService, type DebriefSession, type MemoryStoreLike, type TextInference } from "../../functions/index.js";
 import { createDebriefPersistence, type DebriefPersistence } from "../../functions/persistence.js";
-import { createInstructionPlugin, type InstructionPlugin } from "../../plugins/instructions/index.js";
+import { createInstructionPlugin, type InstructionPlugin } from "../../instructions/plugin.js";
 import { createMemoryStore, type MemoryContext, type MemoryReadQuery, type MemoryStore, type MemoryWriteInput } from "../../memory/plugin.js";
 import { createDemoPluginRegistry, type DemoPluginContext, type PluginContextInput, type PluginRegistry } from "../../plugins/registry/index.js";
 import { handleProxyRequest } from "../../adapters/proxy/index.js";
-import type { ClaimDueInput, CompleteCallInput, FailCallInput, ScheduleCallInput, ScheduledCallOperations } from "../../plugins/scheduler/index.js";
-import { createScheduledCallStore } from "../../plugins/scheduler/index.js";
-import { createTelemetryStore, type TelemetryStore } from "../../plugins/telemetry/index.js";
+import type { ClaimDueInput, CompleteCallInput, FailCallInput, ScheduleCallInput, ScheduledCallOperations } from "../../scheduler/index.js";
+import { createScheduledCallStore } from "../../scheduler/index.js";
+import { createTelemetryStore, type TelemetryStore } from "../../telemetry/index.js";
 import { VoiceSimulator } from "../../adapters/voice/index.js";
 
 export interface DemoApp {

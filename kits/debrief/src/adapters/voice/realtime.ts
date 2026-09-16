@@ -2,7 +2,7 @@ import { createHmac, timingSafeEqual } from "node:crypto";
 import WebSocket from "ws";
 import { defineAgent, type AgentInput, type AgentLifecycleEvent, type AgentRunResult } from "@kitstackco/sdk";
 import { jwtVerify, SignJWT } from "jose";
-import type { TelemetryEventInput, TelemetryStore } from "../../plugins/telemetry/index.js";
+import type { TelemetryEventInput, TelemetryStore } from "../../telemetry/index.js";
 
 export const REALTIME_AUDIO_FORMAT = "g711_ulaw" as const;
 export const REALTIME_SAMPLE_RATE_HZ = 8_000 as const;
