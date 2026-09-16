@@ -141,6 +141,33 @@ describe("DebriefService", () => {
     }
   });
 
+  it("hydrates a session created by another task before a scheduler operation", async () => {
+    const first = await persistentSetup();
+    try {
+      const prepared = await first.service.prepareDebrief({
+        goal: "Call the customer",
+        company: "Acme Corp",
+        contactName: "Mr John Doe",
+        location: "Köln Café",
+      });
+      const second = new DebriefService(
+        { readRelevant: vi.fn(async () => []), writeCandidate: vi.fn(), approveCandidate: vi.fn(), publishCandidate: vi.fn() } as any,
+        { resolve: vi.fn() } as any,
+        { append: vi.fn(async () => undefined) } as any,
+        { orgId: "o", appId: "a" },
+        undefined,
+        { persistence: createDebriefPersistence(first.client) },
+      );
+      await expect(second.hydrateSession(prepared.sessionId)).resolves.toMatchObject({
+        sessionId: prepared.sessionId,
+        state: "prepared",
+        customerId: prepared.customerId,
+      });
+    } finally {
+      first.client.close();
+    }
+  });
+
   it("keeps partial completion free of confirmed events", async () => {
     const { client, service } = await persistentSetup();
     try {

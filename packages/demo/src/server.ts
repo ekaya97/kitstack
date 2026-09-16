@@ -368,7 +368,7 @@ function createLiveVoiceScheduler(app: DemoApp, liveVoice: DemoLiveVoiceRoute): 
     startCall: async (job) => {
       // The session is read from DebriefService's durable hydration, not a
       // process-local voice context, before the provider seam is invoked.
-      const session = app.debrief.getSession(job.sessionId);
+      const session = await app.debrief.hydrateSession(job.sessionId);
       if (session.orgId !== job.orgId) throw new Error("Scheduled call organization mismatch");
       const result = await startScheduledLiveVoiceCall(job.sessionId, liveVoice.http);
       return result.callId;

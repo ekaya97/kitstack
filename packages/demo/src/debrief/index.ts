@@ -287,6 +287,20 @@ export class DebriefService {
     return this.publishMemory({ sessionId, memoryId });
   }
 
+  /**
+   * Refresh a session from durable persistence before a cross-task operation.
+   * ECS rolling deployments can route prepare and scheduler requests to
+   * different tasks, so startup-only hydration is not sufficient.
+   */
+  async hydrateSession(sessionId: string): Promise<DebriefSession> {
+    if (this.persistence) {
+      const persisted = (await this.persistence.loadSessions(this.context.orgId, this.kitId))
+        .find((session) => session.sessionId === sessionId);
+      if (persisted) this.sessions.set(sessionId, cloneSession(persisted));
+    }
+    return this.getSession(sessionId);
+  }
+
   getSession(sessionId: string): DebriefSession { const session = this.require(sessionId); return { ...session, memoryIds: [...session.memoryIds] }; }
   getLatestSession(): DebriefSession | null {
     const latest = [...this.sessions.values()].sort((a, b) => b.updatedAt.localeCompare(a.updatedAt) || b.sessionId.localeCompare(a.sessionId))[0];
