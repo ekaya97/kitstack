@@ -63,7 +63,18 @@ export function createTwilioCallsClient(options: TwilioClientOptions): TwilioCal
         },
         body,
       });
-      if (!response.ok) throw new Error(`Twilio Calls API returned HTTP ${response.status}`);
+      if (!response.ok) {
+        let detail = "";
+        try {
+          const errorPayload = await response.clone().json() as { code?: unknown; message?: unknown; more_info?: unknown };
+          const code = typeof errorPayload.code === "string" || typeof errorPayload.code === "number" ? String(errorPayload.code) : "";
+          const message = typeof errorPayload.message === "string" ? errorPayload.message : "";
+          if (code || message) detail = ` (${[code, message].filter(Boolean).join(": ")})`;
+        } catch {
+          // Preserve the stable HTTP error when Twilio returns a non-JSON body.
+        }
+        throw new Error(`Twilio Calls API returned HTTP ${response.status}${detail}`);
+      }
       const payload = await response.json() as { sid?: unknown; status?: unknown };
       if (typeof payload.sid !== "string" || !payload.sid) throw new Error("Twilio Calls API returned no call SID");
       return { sid: payload.sid, status: typeof payload.status === "string" ? payload.status : undefined };

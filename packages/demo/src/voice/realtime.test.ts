@@ -81,6 +81,14 @@ describe("Twilio and OpenAI Realtime boundary", () => {
     expect(fetcher).toHaveBeenCalledTimes(1);
   });
 
+  it("preserves safe Twilio provider error details without exposing credentials", async () => {
+    const fetcher = vi.fn(async () => new Response(JSON.stringify({ code: 20003, message: "Authentication Error" }), { status: 401 }));
+    const twilio = createTwilioCallsClient({ accountSid: "AC123", authToken: "secret", fetch: fetcher });
+    await expect(twilio.createCall({
+      to: "+491234567890", from: "+491234567891", twiml: "<Response/>", record: false,
+    })).rejects.toThrow("Twilio Calls API returned HTTP 401 (20003: Authentication Error)");
+  });
+
   it("rejects non-E.164 destinations before calling Twilio", async () => {
     const twilio = { createCall: vi.fn() };
     await expect(startRealtimeCall({
