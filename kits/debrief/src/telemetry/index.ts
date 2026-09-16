@@ -1,6 +1,11 @@
 import { mkdirSync } from "node:fs";
 import { dirname } from "node:path";
 import { createClient, type Client, type InValue, type ResultSet } from "@libsql/client";
+import {
+  createTelemetryEvent,
+  type TelemetryEvent as SdkTelemetryEvent,
+  type TelemetryEventInput as SdkTelemetryEventInput,
+} from "@kitstackco/sdk";
 
 /** The only event classes written by the demo runtime. */
 export const TELEMETRY_EVENT_TYPES = [
@@ -26,41 +31,21 @@ export type TelemetryOutcome = "success" | "error" | "started" | "partial";
  * Metadata accepted by the store. Deliberately no prompt, completion, audio,
  * transcript, tool-argument, or tool-result fields exist in this contract.
  */
-export interface TelemetryEventInput {
-  id: string;
-  timestamp: string;
-  orgId: string;
+export type TelemetryEventInput = Omit<SdkTelemetryEventInput, "channel" | "type" | "outcome"> & {
   customerId?: string | null;
-  /** Boot events can happen before an app token exists. */
-  appId: string | null;
-  sessionId?: string | null;
-  /** Allows session traces to render a parent-child tree. */
-  parentId?: string | null;
-  traceId?: string | null;
   channel: TelemetryChannel;
-  pluginId?: string | null;
-  kitId?: string | null;
   type: TelemetryEventType;
-  operation: string;
-  model?: string | null;
-  provider?: string | null;
-  callId?: string | null;
-  requestTokens?: number | null;
-  responseTokens?: number | null;
-  latencyMs?: number | null;
-  estimatedCostUsd?: number | null;
-  routingReason?: string | null;
-  cancellationReason?: string | null;
-  timeoutReason?: string | null;
   outcome: TelemetryOutcome;
-  instructionVersions?: readonly string[];
-  memoryIds?: readonly string[];
-}
+};
 
-export interface TelemetryEvent extends TelemetryEventInput {
+export type TelemetryEvent = Omit<SdkTelemetryEvent, "channel" | "type" | "outcome"> & {
+  customerId: string | null;
+  channel: TelemetryChannel;
+  type: TelemetryEventType;
+  outcome: TelemetryOutcome;
   /** Monotonic insertion order; used instead of timestamps for stable traces. */
   sequence: number;
-}
+};
 
 export interface TelemetryQuery {
   orgId?: string;
@@ -119,6 +104,9 @@ const CREATE_SCHEMA_SQL = `
     org_id TEXT NOT NULL,
     customer_id TEXT,
     app_id TEXT,
+    principal TEXT,
+    actor TEXT,
+    delegation TEXT,
     session_id TEXT,
     parent_id TEXT,
     trace_id TEXT,
@@ -170,6 +158,9 @@ export class TelemetryStore {
       if (!names.has("provider")) await client.execute("ALTER TABLE telemetry_events ADD COLUMN provider TEXT");
       if (!names.has("call_id")) await client.execute("ALTER TABLE telemetry_events ADD COLUMN call_id TEXT");
       if (!names.has("customer_id")) await client.execute("ALTER TABLE telemetry_events ADD COLUMN customer_id TEXT");
+      if (!names.has("principal")) await client.execute("ALTER TABLE telemetry_events ADD COLUMN principal TEXT");
+      if (!names.has("actor")) await client.execute("ALTER TABLE telemetry_events ADD COLUMN actor TEXT");
+      if (!names.has("delegation")) await client.execute("ALTER TABLE telemetry_events ADD COLUMN delegation TEXT");
       if (!names.has("routing_reason")) await client.execute("ALTER TABLE telemetry_events ADD COLUMN routing_reason TEXT");
       if (!names.has("cancellation_reason")) await client.execute("ALTER TABLE telemetry_events ADD COLUMN cancellation_reason TEXT");
       if (!names.has("timeout_reason")) await client.execute("ALTER TABLE telemetry_events ADD COLUMN timeout_reason TEXT");
@@ -182,13 +173,14 @@ export class TelemetryStore {
 
   async append(input: TelemetryEventInput): Promise<TelemetryEvent> {
     await this.initialized;
+    const event = createTelemetryEvent(input);
 
     // Insert each field explicitly. This is the retention boundary: unknown
     // runtime properties can never become persisted event data.
     await this.client.execute({
       sql: `
         INSERT INTO telemetry_events (
-          id, timestamp, org_id, customer_id, app_id, session_id, parent_id, trace_id,
+          id, timestamp, org_id, customer_id, app_id, principal, actor, delegation, session_id, parent_id, trace_id,
           channel, plugin_id, kit_id, type, operation, model, provider, call_id,
           request_tokens, response_tokens, latency_ms, estimated_cost_usd,
           routing_reason, cancellation_reason, timeout_reason,
@@ -196,45 +188,49 @@ export class TelemetryStore {
         ) VALUES (
           ?, ?, ?, ?, ?, ?, ?, ?, ?, ?,
           ?, ?, ?, ?, ?, ?, ?, ?, ?, ?,
-          ?, ?, ?, ?, ?, ?
+          ?, ?, ?, ?, ?, ?,
+          ?, ?, ?
         )
       `,
       args: [
-        input.id,
-        input.timestamp,
-        input.orgId,
+        event.id,
+        event.timestamp,
+        event.orgId,
         input.customerId ?? null,
-        input.appId,
-        input.sessionId ?? null,
-        input.parentId ?? null,
-        input.traceId ?? null,
-        input.channel,
-        input.pluginId ?? null,
-        input.kitId ?? null,
-        input.type,
-        input.operation,
-        input.model ?? null,
-        input.provider ?? null,
-        input.callId ?? null,
-        input.requestTokens ?? null,
-        input.responseTokens ?? null,
-        input.latencyMs ?? null,
-        input.estimatedCostUsd ?? null,
-        input.routingReason ?? null,
-        input.cancellationReason ?? null,
-        input.timeoutReason ?? null,
-        input.outcome,
-        encodeStringArray(input.instructionVersions),
-        encodeStringArray(input.memoryIds),
+        event.appId,
+        event.principal,
+        event.actor,
+        event.delegation,
+        event.sessionId,
+        event.parentId,
+        event.traceId,
+        event.channel,
+        event.pluginId,
+        event.kitId,
+        event.type,
+        event.operation,
+        event.model,
+        event.provider,
+        event.callId,
+        event.requestTokens,
+        event.responseTokens,
+        event.latencyMs,
+        event.estimatedCostUsd,
+        event.routingReason,
+        event.cancellationReason,
+        event.timeoutReason,
+        event.outcome,
+        encodeStringArray(event.instructionVersions),
+        encodeStringArray(event.memoryIds),
       ] as InValue[],
     });
 
     const rows = await this.client.execute({
       sql: "SELECT * FROM telemetry_events WHERE id = ? LIMIT 1",
-      args: [input.id],
+      args: [event.id],
     });
     if (rows.rows.length !== 1) {
-      throw new Error(`Telemetry event was not readable after append: ${input.id}`);
+      throw new Error(`Telemetry event was not readable after append: ${event.id}`);
     }
     return mapEvent(rows.rows[0] as Row);
   }
@@ -410,6 +406,9 @@ function mapEvent(row: Row): TelemetryEvent {
     orgId: stringValue(row.org_id),
     customerId: nullableString(row.customer_id),
     appId: nullableString(row.app_id),
+    principal: nullableString(row.principal),
+    actor: nullableString(row.actor),
+    delegation: nullableString(row.delegation),
     sessionId: nullableString(row.session_id),
     parentId: nullableString(row.parent_id),
     traceId: nullableString(row.trace_id),
