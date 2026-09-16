@@ -132,7 +132,7 @@ conversation content.
 ## Development
 
 ```bash
-npm test               # 136 tests, fake providers, fake clock
+  npm test               # 137 tests, fake providers, fake clock
 npm run typecheck
 npm start              # HTTP host on 127.0.0.1:3001
 npm run start:stdio    # stdio transport for Claude Code or Desktop
