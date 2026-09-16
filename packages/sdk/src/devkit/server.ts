@@ -62,12 +62,12 @@ import * as ViewModule from "${relPath}";
 
 const Component = ViewModule.default || Object.values(ViewModule).find(v => typeof v === "function");
 
-export function mount(container, data) {
+export function mount(container, data, host) {
   if (!Component) {
     container.innerHTML = "<p>No view component found</p>";
     return;
   }
-  createRoot(container).render(React.createElement(Component, { data }));
+  createRoot(container).render(React.createElement(Component, { data, host: host || window.__KITSTACK_HOST__ }));
 }
 
 ((window).__KITSTACK_VIEWS__ ??= {})["${kit.id}/${view.slug}"] = { mount };
@@ -393,6 +393,13 @@ async function loadView(data) {
   try {
     window.__KITSTACK_MCP__.view = data.view;
     window.__KITSTACK_DATA__ = data.data;
+    window.__KITSTACK_HOST__ = {
+      kind: "shell",
+      size: { width: document.body.scrollWidth, height: document.body.scrollHeight },
+      navigate: (viewId, params) => window.__KITSTACK_MCP__.callTool("__load_view", { view: viewId, ...(params || {}) }),
+      identity: window.__KITSTACK_IDENTITY__ || { principal: "dev-user", actor: "dev-user" },
+      theme: { mode: "light" },
+    };
 
     const module = await import(VITE_URL + "/.kitstack/devkit-entries/" + data.view + ".tsx");
     const container = document.createElement("div");
@@ -400,7 +407,7 @@ async function loadView(data) {
     root.appendChild(container);
 
     if (module.mount) {
-      module.mount(container, data.data);
+      module.mount(container, data.data, window.__KITSTACK_HOST__);
       viewMounted = true;
       requestAnimationFrame(() => {
         sendNotification("ui/notifications/size-changed", {

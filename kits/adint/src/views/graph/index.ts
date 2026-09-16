@@ -1,13 +1,14 @@
+import { createElement } from "react";
 import { defineView } from "@kitstackco/sdk";
 import { loader } from "./loader.js";
 import { GraphView } from "./View.js";
 
 export default defineView({
-  slug: "graph",
+  id: "graph",
   name: "Ad graph",
   description: "after ad_graph — the cross-publisher graph and the not-on-Ströer opportunities",
-  loader,
-  component: GraphView,
+  loaders: [loader],
+  render: (data, host) => createElement(GraphView, { data, host }),
   height: 560,
   placeholder: {
     nodes: [

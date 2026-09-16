@@ -1,4 +1,5 @@
 import { useKit } from "@kitstackco/sdk/view";
+import type { ViewComponentProps } from "@kitstackco/sdk";
 
 type Trigger = {
   id: string;
@@ -7,13 +8,14 @@ type Trigger = {
   agencyStatus: string;
   score: number;
   scoreComponents: Record<string, number>;
-  publishers: string[];
+  publishers: readonly string[];
   live: { lastObservedAt: string; windowDays: number };
-  evidence: { label: string; href: string; kind: string }[];
+  evidence: readonly { label: string; href: string; kind: string }[];
 } | null;
 
-export function TriggerDetailView() {
-  const { data } = useKit<Trigger>();
+export function TriggerDetailView({ data: initialData, host }: ViewComponentProps<Trigger>) {
+  const { data: liveData } = useKit<Trigger>();
+  const data = liveData ?? initialData;
   if (!data) {
     return (
       <div style={{ padding: 16, fontFamily: "system-ui, sans-serif", color: "#6b7280", fontSize: 14 }}>
@@ -23,7 +25,7 @@ export function TriggerDetailView() {
   }
   const t = data;
   return (
-    <div style={{ padding: 16, fontFamily: "system-ui, sans-serif", color: "#111827", display: "grid", gap: 12 }}>
+    <div data-kitstack-host={host.kind} style={{ padding: 16, fontFamily: "system-ui, sans-serif", color: "#111827", display: "grid", gap: 12 }}>
       <div style={{ border: "1px solid #e5e7eb", borderRadius: 12, background: "#fff", padding: 16 }}>
         <div style={{ display: "flex", justifyContent: "space-between", alignItems: "baseline", gap: 8 }}>
           <h1 style={{ fontSize: 18, fontWeight: 700, margin: 0 }}>{t.brandName}</h1>

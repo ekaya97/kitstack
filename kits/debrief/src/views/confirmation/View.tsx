@@ -1,5 +1,6 @@
 import { useEffect, useState } from "react";
 import { useKit } from "@kitstackco/sdk/view";
+import type { ViewComponentProps } from "@kitstackco/sdk";
 import { CONFIRMATION_FIELDS, type ConfirmationField, type ConfirmationViewData } from "./loader";
 
 const labels: Record<ConfirmationField, string> = {
@@ -17,8 +18,9 @@ const card: React.CSSProperties = {
   padding: 16,
 };
 
-export function ConfirmationView() {
-  const { data, callTool, reload, loading } = useKit<ConfirmationViewData>();
+export function ConfirmationView({ data: initialData, host }: ViewComponentProps<ConfirmationViewData>) {
+  const { data: liveData, callTool, reload, loading } = useKit<ConfirmationViewData>();
+  const data = liveData ?? initialData;
   const [fields, setFields] = useState<Record<ConfirmationField, string>>(() => emptyFields(data));
   const [message, setMessage] = useState<string | null>(null);
 
@@ -51,7 +53,7 @@ export function ConfirmationView() {
 
   const confirmed = data.state === "confirmed" || Boolean(data.confirmedEventId);
   return (
-    <div style={{ display: "grid", gap: 12, padding: 16, fontFamily: "system-ui, sans-serif", color: "#111827" }}>
+    <div data-kitstack-host={host.kind} style={{ display: "grid", gap: 12, padding: 16, fontFamily: "system-ui, sans-serif", color: "#111827" }}>
       <div style={{ ...card, display: "grid", gap: 4 }}>
         <div style={{ fontSize: 12, color: "#6b7280", textTransform: "uppercase", letterSpacing: 1 }}>Debrief confirmation</div>
         <h1 style={{ margin: 0, fontSize: 22 }}>Review the call outcome</h1>

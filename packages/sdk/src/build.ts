@@ -332,9 +332,9 @@ import * as ViewModule from "${componentRelative}";
 // Find the component: default export or first exported function
 const Component = ViewModule.default || Object.values(ViewModule).find(v => typeof v === "function");
 
-export function mount(container, data) {
+export function mount(container, data, host) {
   window.__KITSTACK_DATA__ = data;
-  createRoot(container).render(Component ? <Component data={data} /> : null);
+  createRoot(container).render(Component ? <Component data={data} host={host || window.__KITSTACK_HOST__} /> : null);
 }
 
 ((window).__KITSTACK_VIEWS__ ??= {})["${kit.id}/${view.slug}"] = { mount };

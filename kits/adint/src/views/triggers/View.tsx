@@ -1,4 +1,5 @@
 import { useKit } from "@kitstackco/sdk/view";
+import type { ViewComponentProps } from "@kitstackco/sdk";
 
 type Trigger = {
   id: string;
@@ -6,22 +7,23 @@ type Trigger = {
   agencyName: string;
   agencyStatus: string;
   score: number;
-  publishers: string[];
+  publishers: readonly string[];
 };
 
 // Draft styling (inline) — restyle with the SDK's ks-* tokens later.
-export function TriggersView() {
-  const { data, callTool } = useKit<Trigger[]>();
+export function TriggersView({ data: initialData, host }: ViewComponentProps<Trigger[]>) {
+  const { data: liveData, callTool } = useKit<Trigger[]>();
+  const data = liveData ?? initialData;
   if (!data || data.length === 0) {
     return (
-      <div style={{ padding: 16, fontFamily: "system-ui, sans-serif", color: "#6b7280", fontSize: 14 }}>
+      <div data-kitstack-host={host.kind} style={{ padding: 16, fontFamily: "system-ui, sans-serif", color: "#6b7280", fontSize: 14 }}>
         No scored triggers yet — the campaign/insight layer has not run on this snapshot. Ask for the
         <strong style={{ color: "#111827" }}> ad graph</strong> to see brands running on competitors but not on Ströer.
       </div>
     );
   }
   return (
-    <div style={{ padding: 16, fontFamily: "system-ui, sans-serif", color: "#111827" }}>
+    <div data-kitstack-host={host.kind} style={{ padding: 16, fontFamily: "system-ui, sans-serif", color: "#111827" }}>
       <h1 style={{ fontSize: 15, fontWeight: 700, margin: "0 0 12px" }}>Opportunities — call this agency</h1>
       <div style={{ display: "grid", gap: 8 }}>
         {data.map((t, i) => (

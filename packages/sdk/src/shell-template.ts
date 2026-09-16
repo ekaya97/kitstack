@@ -220,6 +220,13 @@ async function loadView(data) {
       openLink: (url) => sendRequest("ui/open-link", { url }),
       copyToClipboard: (text) => navigator.clipboard.writeText(text),
     };
+    window.__KITSTACK_HOST__ = {
+      kind: "chat",
+      size: { width: document.body.scrollWidth, height: document.body.scrollHeight },
+      navigate: (viewId, params) => window.__KITSTACK_MCP__.callTool("__load_view", { view: viewId, ...(params || {}) }),
+      identity: data.identity || window.__KITSTACK_IDENTITY__ || { principal: "chat-user", actor: "chat-user" },
+      theme: { mode: "light" },
+    };
 
     const key = KIT_ID + "/" + data.view;
     root.innerHTML = '<div id="ks-content"><div class="ks-loading">Loading view...</div></div>';
@@ -235,7 +242,7 @@ async function loadView(data) {
 
     if (views?.[key]) {
       const container = document.getElementById("ks-content");
-      views[key].mount(container, data.data);
+      views[key].mount(container, data.data, window.__KITSTACK_HOST__);
 
       // Report size after mount + observe for dynamic changes
       const reportSize = () => {

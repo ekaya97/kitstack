@@ -1,4 +1,5 @@
 import { useKit } from "@kitstackco/sdk/view";
+import type { ViewComponentProps } from "@kitstackco/sdk";
 
 // Mirrors AdGraphViewModel from ../../domain/ad-graph. Kept local so the view is self-contained.
 type Node = {
@@ -19,7 +20,7 @@ type Stats = {
   crossPublisher: number;
   notOnStroeer: number;
 };
-type Data = { nodes: Node[]; edges: { source: string; target: string }[]; stats: Stats; truncated: boolean };
+type Data = { nodes: readonly Node[]; edges: readonly { source: string; target: string }[]; stats: Stats; truncated: boolean };
 
 // Draft styling (inline) — a coding agent should restyle with the SDK's ks-* design tokens.
 const card: React.CSSProperties = { border: "1px solid #e5e7eb", borderRadius: 12, background: "#fff", padding: 16 };
@@ -33,8 +34,9 @@ const chip = (accent: string): React.CSSProperties => ({
   color: accent,
 });
 
-export function GraphView() {
-  const { data } = useKit<Data>();
+export function GraphView({ data: initialData, host }: ViewComponentProps<Data>) {
+  const { data: liveData } = useKit<Data>();
+  const data = liveData ?? initialData;
   if (!data || data.stats.slots === 0) {
     return <div style={{ padding: 16, color: "#6b7280", fontSize: 14 }}>No captured ad slots yet.</div>;
   }
@@ -46,7 +48,7 @@ export function GraphView() {
   const onStroeer = brands.filter((n) => n.stroeer);
 
   return (
-    <div style={{ padding: 16, fontFamily: "system-ui, sans-serif", color: "#111827", display: "grid", gap: 12 }}>
+    <div data-kitstack-host={host.kind} style={{ padding: 16, fontFamily: "system-ui, sans-serif", color: "#111827", display: "grid", gap: 12 }}>
       <div style={{ display: "flex", gap: 12, flexWrap: "wrap" }}>
         <div style={{ ...card, flex: 1, minWidth: 160 }}>
           <div style={{ fontSize: 32, fontWeight: 700, color: "#b91c1c" }}>{s.notOnStroeer}</div>
