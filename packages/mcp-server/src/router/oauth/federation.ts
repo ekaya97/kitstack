@@ -178,6 +178,19 @@ function isS256CodeChallenge(value: string): boolean {
   }
 }
 
+/** Reject alternate base64url spellings that can decode to the same bytes. */
+function assertCanonicalJwtEncoding(token: string): void {
+  const segments = token.split(".");
+  if (segments.length !== 3 || segments.some((segment) => !segment || !/^[A-Za-z0-9_-]+$/.test(segment))) {
+    throw new Error("OIDC token has an invalid compact serialization");
+  }
+  for (const segment of segments) {
+    if (Buffer.from(segment, "base64url").toString("base64url") !== segment) {
+      throw new Error("OIDC token has a non-canonical base64url segment");
+    }
+  }
+}
+
 /** Generate a standards-compliant S256 PKCE pair for a public client. */
 export function createPkcePair(): PkcePair {
   const codeVerifier = crypto.randomBytes(32).toString("base64url");
@@ -260,6 +273,7 @@ export function createOidcFederation(config: OidcFederationConfig) {
 
   async function validateIdToken(token: string, options: { issuer?: string; nonce?: string } = {}): Promise<FederatedAuthentication> {
     if (!token) throw new Error("OIDC id_token is required");
+    assertCanonicalJwtEncoding(token);
     const untrustedIssuer = decodeJwt(token).iss;
     const issuer = resolveIssuer(options.issuer ?? untrustedIssuer);
     if (untrustedIssuer !== issuer) throw new Error("OIDC token issuer is not allowlisted");
