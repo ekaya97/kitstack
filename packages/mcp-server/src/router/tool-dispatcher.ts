@@ -5,6 +5,7 @@ import { audit } from "./audit";
 import { log } from "./logger";
 import { getKitFunctionId, getKitAuthzSlug } from "./kit-resources";
 import { getOAuthItem, putOAuthItem } from "./oauth-store";
+import type { PlatformAdapterRequestContext } from "./platform-adapter";
 
 // --- Circuit breaker + daily invocation cap ---
 
@@ -88,7 +89,8 @@ export async function dispatchToolCall(
   args: Record<string, unknown>,
   userId: string,
   getAllTools: () => Promise<KitRegistryItem[]>,
-  invokeKitLambda: (arn: string, payload: unknown) => Promise<unknown>
+  invokeKitLambda: (arn: string, payload: unknown) => Promise<unknown>,
+  requestContext?: PlatformAdapterRequestContext,
 ): Promise<KitToolResult> {
   const start = Date.now();
 
@@ -178,6 +180,9 @@ export async function dispatchToolCall(
     kitId: tool.kitId,
     dbUrl: userDb.dbUrl,
     dbToken: userDb.dbToken,
+    ...(requestContext?.sessionId ? { sessionId: requestContext.sessionId } : {}),
+    ...(requestContext?.traceId ? { traceId: requestContext.traceId } : {}),
+    ...(requestContext?.parentId ? { parentId: requestContext.parentId } : {}),
   };
 
   // Invoke the kit Lambda
