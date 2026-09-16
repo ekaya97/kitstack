@@ -1,4 +1,5 @@
 import type { Client, InValue } from "@libsql/client";
+import { defineJob, dispatchJob, type JobDefinition, type KitContext } from "@kitstackco/sdk";
 
 export type ScheduledCallStatus = "scheduled" | "starting" | "started" | "failed";
 
@@ -236,9 +237,14 @@ export interface ScheduledCallPollerOptions {
   now?: () => string;
   leaseMs?: number;
   intervalMs?: number;
-  startCall: (job: ScheduledCallRecord) => Promise<string | null>;
+  /** Legacy/provider seam retained for callers that have not opted into jobs. */
+  startCall?: (job: ScheduledCallRecord) => Promise<string | null>;
   /** Optional trigger-backed invocation used by daemon/channel hosts. */
   invokeTrigger?: (job: ScheduledCallRecord) => Promise<string | null>;
+  /** Declared SDK job used by the scheduler dispatch path. */
+  job?: JobDefinition;
+  /** Optional request context supplied to the declared job handler. */
+  jobContext?: KitContext;
   onProviderStart?: (job: ScheduledCallRecord, providerCallId: string | null) => Promise<void>;
   onProviderFailure?: (job: ScheduledCallRecord, error: unknown) => Promise<void>;
 }
@@ -257,15 +263,18 @@ export class ScheduledCallPoller {
     this.intervalMs = options.intervalMs ?? 1_000;
     if (!Number.isInteger(this.leaseMs) || this.leaseMs <= 0) throw new Error("leaseMs must be a positive integer");
     if (!Number.isInteger(this.intervalMs) || this.intervalMs <= 0) throw new Error("intervalMs must be a positive integer");
+    if (!options.startCall && !options.job && !options.invokeTrigger) throw new Error("A startCall, trigger, or declared job is required");
   }
 
   async pollOnce(): Promise<ScheduledCallRecord | null> {
     const job = await this.options.operations.claimDue({ orgId: this.options.orgId, workerId: this.options.workerId, now: this.now(), leaseMs: this.leaseMs });
     if (!job) return null;
     try {
-      const providerCallId = await (this.options.invokeTrigger
+      const providerCallId = this.options.job
+        ? await invokeScheduledJob(this.options.job, job, this.options.jobContext)
+        : this.options.invokeTrigger
         ? this.options.invokeTrigger(job)
-        : this.options.startCall(job));
+        : await this.options.startCall!(job);
       await this.options.onProviderStart?.(job, providerCallId);
       return await this.options.operations.complete({
         orgId: job.orgId,
@@ -302,6 +311,57 @@ export class ScheduledCallPoller {
     if (this.timer) clearInterval(this.timer);
     this.timer = undefined;
   }
+}
+
+/**
+ * Adapt the debrief provider seam to the SDK job contract. The returned job
+ * keeps provider details in the host closure while the poller dispatches it
+ * with a stable scheduler identity and the scheduled record as arguments.
+ */
+export function createScheduledCallJob(
+  startCall: (job: ScheduledCallRecord) => Promise<string | null>,
+): JobDefinition {
+  return defineJob({
+    name: "start_scheduled_call",
+    description: "Start one due scheduled sales call through the voice provider.",
+    schedule: "rate(1 minute)",
+    timeoutSeconds: 30,
+    handler: async (_ctx, args) => {
+      const record = (args as { scheduledCall: ScheduledCallRecord }).scheduledCall;
+      const providerCallId = await startCall(record);
+      return {
+        content: [{
+          type: "text",
+          text: JSON.stringify({ providerCallId }),
+        }],
+      };
+    },
+  });
+}
+
+async function invokeScheduledJob(
+  job: JobDefinition,
+  record: ScheduledCallRecord,
+  jobContext: KitContext | undefined,
+): Promise<string | null> {
+  const result = await dispatchJob(job, {
+    kitId: "kit:debrief",
+    jobName: job.name,
+    jobId: record.scheduledCallId,
+    args: { scheduledCall: record },
+    session: {
+      id: record.sessionId,
+      traceId: `job:${record.scheduledCallId}`,
+    },
+  }, jobContext ? { createContext: () => jobContext } : {});
+  if (result.isError) {
+    const message = result.content.find((block) => block.type === "text")?.text ?? "Job invocation failed";
+    throw new Error(message);
+  }
+  const text = result.content.find((block) => block.type === "text")?.text;
+  if (!text) return null;
+  const payload = JSON.parse(text) as { providerCallId?: unknown };
+  return typeof payload.providerCallId === "string" ? payload.providerCallId : null;
 }
 
 function mapScheduledCall(row: Row): ScheduledCallRecord {

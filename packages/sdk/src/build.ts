@@ -229,19 +229,21 @@ export async function buildKit(kitRoot: string, options: BuildKitOptions = {}) {
 
   // ── 4. BUNDLE SERVER ───────────────────────────────────────
 
-  // Auto-generate a generic Lambda handler that dispatches tools and loaders
+  // Auto-generate a generic Lambda handler that dispatches tools, loaders, and jobs
   const generatedHandlerPath = resolve(entriesDir, "_handler.ts");
   writeFileSync(generatedHandlerPath, `
 import { createClient } from "@libsql/client/http";
 import { drizzle } from "drizzle-orm/libsql/web";
 import { createKitContext } from "@kitstackco/sdk";
+import { dispatchJob, jobIdentity } from "@kitstackco/sdk";
 import kit from ${JSON.stringify(configPath)};
 
 interface KitInvocation {
   toolName?: string;
   loaderSlug?: string;
+  jobName?: string;
   args?: Record<string, unknown>;
-  userId: string;
+  userId?: string;
   kitId: string;
   dbUrl: string;
   dbToken: string;
@@ -253,21 +255,38 @@ interface KitInvocation {
 
 const toolMap = new Map(kit.tools.map((t: any) => [t.name, t]));
 const viewMap = new Map((kit.views ?? []).map((v: any) => [v.slug, v]));
+const jobMap = new Map((kit.jobs ?? []).map((j: any) => [j.name, j]));
 
 export const handler = async (event: KitInvocation) => {
   const client = createClient({ url: event.dbUrl, authToken: event.dbToken });
   const db = drizzle(client);
+  const job = event.jobName ? jobMap.get(event.jobName) : undefined;
+  const runtimeUserId = event.userId ?? "runtime-user";
+  const identity = job ? jobIdentity(kit.id, job.name) : runtimeUserId;
   const ctx = createKitContext({
     db,
     params: event.params,
-    identity: { principal: event.userId, actor: event.userId },
-    channel: { kind: "http" },
+    identity: { principal: identity, actor: identity },
+    channel: job ? { kind: "scheduler", id: event.jobName } : { kind: "http" },
     session: {
       id: event.sessionId ?? crypto.randomUUID(),
       traceId: event.traceId ?? crypto.randomUUID(),
       parentId: event.parentId,
     },
   });
+
+  if (event.jobName) {
+    if (!job) return { content: [{ type: "text", text: \`Unknown job: \${event.jobName}\` }], isError: true };
+    return await dispatchJob(job, {
+      kitId: kit.id,
+      jobName: job.name,
+      jobId: event.sessionId ?? \`job:\${job.name}\`,
+      args: event.args,
+      session: ctx.session,
+    }, {
+      createContext: () => ctx,
+    });
+  }
 
   if (event.loaderSlug) {
     const view = viewMap.get(event.loaderSlug);
@@ -527,6 +546,17 @@ export default defineConfig({
       description: t.description,
       inputSchema: t.args ? zodToJsonSchema(t.args) : {},
     })),
+    jobs: (kit.jobs ?? []).map((job) => ({
+      name: job.name,
+      description: job.description,
+      schedule: job.schedule,
+      timeoutSeconds: job.timeoutSeconds,
+      inputSchema: job.args ? zodToJsonSchema(job.args) : {},
+    })),
+    resources: {
+      memoryMb: 128,
+      timeoutSeconds: Math.max(10, ...(kit.jobs ?? []).map((job) => job.timeoutSeconds)),
+    },
     views: (kit.views ?? []).map((v) => ({
       slug: v.slug,
       name: v.name,

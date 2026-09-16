@@ -23,6 +23,7 @@ export type {
   ViewComponentProps,
   ViewRender,
   KitDefinition,
+  JobDefinition,
   KitToolInvocation,
   KitToolInput,
   LoaderFn,
@@ -131,7 +132,22 @@ export {
   type DispatchErrorCode,
   type DispatchTarget,
 } from "./server/dispatch";
+export { defineJob } from "./define-job";
 export { createKitContext, type CreateKitContextOptions } from "./context";
+
+// Jobs
+export {
+  createJobDispatchEnvelope,
+  dispatchJob,
+  jobIdentity,
+  type ClaimJobInput,
+  type CompleteJobInput,
+  type FailJobInput,
+  type JobDispatchInput,
+  type JobLeaseOperations,
+  type JobLeaseRecord,
+  type JobLeaseStatus,
+} from "./jobs";
 
 // Connectors
 export {

@@ -405,6 +405,7 @@ export interface KitDefinition {
    */
   triggers?: string[];
   tools: ToolDefinition[];
+  jobs?: JobDefinition<any>[];
   views?: ViewDefinition<any>[];
   /**
    * View placeholder data extracted from view definitions by
@@ -413,6 +414,18 @@ export interface KitDefinition {
    * @internal
    */
   _placeholders?: Record<string, unknown>;
+}
+
+// --- Jobs ---
+
+/** A typed scheduled job declared by a kit. */
+export interface JobDefinition<TArgs extends z.ZodType = z.ZodType> {
+  name: string;
+  description: string;
+  schedule: string;
+  timeoutSeconds: number;
+  args?: TArgs;
+  handler: (ctx: KitContext, args: z.infer<TArgs>) => Promise<KitToolResult | void>;
 }
 
 // --- Agent Definition ---
@@ -657,12 +670,13 @@ export interface AgentDefinition<TContext extends Record<string, unknown> = Reco
 
 /**
  * The payload sent from the McpRouter to a kit Lambda when invoking a
- * tool or loader. This is the wire format — kit handlers receive this
+ * tool, loader, or job. This is the wire format — kit handlers receive this
  * as their event.
  */
 export interface KitToolInvocation {
   toolName?: string;
   loaderSlug?: string;
+  jobName?: string;
   args?: Record<string, unknown>;
   userId: string;
   kitId: string;

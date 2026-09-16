@@ -1,5 +1,5 @@
 import type { z } from "zod";
-import type { KitDefinition, ToolDefinition, ViewDefinition } from "./types";
+import type { JobDefinition, KitDefinition, ToolDefinition, ViewDefinition } from "./types";
 import { KitValidationError, ToolValidationError } from "./errors";
 
 /**
@@ -107,6 +107,7 @@ export function defineKit(config: {
   instructions: string;
   triggers?: string[];
   tools: ToolDefinition[];
+  jobs?: JobDefinition<any>[];
   views?: ViewDefinition[];
 }): KitDefinition {
   for (const tool of config.tools) {
@@ -208,6 +209,18 @@ export function defineKit(config: {
           `Trigger "${trigger}" must be a lowercase string. Use "${String(trigger).toLowerCase()}" instead.`
         );
       }
+    }
+  }
+
+  if (config.jobs) {
+    const jobNames = config.jobs.map((job) => job.name);
+    const uniqueJobNames = new Set(jobNames);
+    if (uniqueJobNames.size !== jobNames.length) {
+      const dupes = jobNames.filter((name, index) => jobNames.indexOf(name) !== index);
+      throw new KitValidationError(
+        "KIT_DUPLICATE_JOBS",
+        `Kit "${config.id}" has duplicate job names: ${dupes.join(", ")}. Each job name must be unique within a kit.`,
+      );
     }
   }
 
