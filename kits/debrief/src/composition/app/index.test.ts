@@ -111,6 +111,31 @@ describe("DemoApp", () => {
     await app.close();
   });
 
+  it("uses the declarative extraction model and records the routing reason", async () => {
+    const app = await createDemoApp({
+      url: ":memory:",
+      models: { extraction: "strong-extraction", fallback: "safe-fallback" },
+    });
+    const callbackAt = new Date(Date.now() + 10 * 60 * 1000).toISOString();
+    const prepared = await app.debrief.prepareDebrief({
+      goal: "Prepare the Acme prebrief",
+      company: "Acme Corp",
+      contactName: "John Doe",
+      location: "Köln Café",
+      callbackAt,
+      callbackTimezone: "Europe/Berlin",
+      bufferMinutes: 5,
+    });
+    expect(prepared.prebrief).toContain("Known: Company: Acme Corp");
+    expect(await app.telemetry.query({ type: "model.route" })).toEqual([
+      expect.objectContaining({ model: "strong-extraction", routingReason: "declarative-task-class" }),
+    ]);
+    expect(await app.telemetry.query({ type: "inference" })).toEqual([
+      expect.objectContaining({ model: "strong-extraction", routingReason: "declarative-task-class" }),
+    ]);
+    await app.close();
+  });
+
   it("reset removes customer/session/event/draft rows but preserves app credentials", async () => {
     const app = await createDemoApp({ url: ":memory:" });
     const registered = app.apps.register({ name: "Claude demo", org: "org-demo" });

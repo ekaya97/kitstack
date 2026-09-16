@@ -112,6 +112,16 @@ export {
   type TelemetryOutcome,
 } from "./telemetry";
 
+// Deterministic, explainable model routing
+export {
+  createDeclarativeModelRouter,
+  type DeclarativeModelPolicy,
+  type DeclarativeModelRouterOptions,
+  type ModelRoute,
+  type ModelRouteContext,
+  type ModelTaskClass,
+} from "./model-routing";
+
 // Factory functions
 export { defineKit } from "./define-kit";
 export { defineTool } from "./define-tool";

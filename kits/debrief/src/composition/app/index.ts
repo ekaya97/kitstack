@@ -12,7 +12,7 @@ import { createScheduledCallStore } from "../../scheduler/index.js";
 import { createTelemetryStore, type TelemetryStore } from "../../telemetry/index.js";
 import { VoiceSimulator } from "../../adapters/voice/index.js";
 import { createLibsqlStorageAdapter } from "../../storage/libsql.js";
-import { createTelemetryExporter, type TelemetryExportConfig } from "@kitstackco/sdk";
+import { createDeclarativeModelRouter, createTelemetryExporter, type TelemetryExportConfig } from "@kitstackco/sdk";
 
 export interface DemoApp {
   readonly client: Client;
@@ -48,6 +48,8 @@ export interface CreateDemoAppOptions {
   telemetry?: TelemetryExportConfig;
   /** Export failures are reported here while local telemetry remains available. */
   onTelemetryExportError?: (error: Error) => void | Promise<void>;
+  /** Declarative model policy used by text inference in the debrief host. */
+  models?: { conversation?: string; extraction?: string; fallback?: string };
 }
 
 export async function createDemoApp(options: CreateDemoAppOptions = {}): Promise<DemoApp> {
@@ -66,6 +68,16 @@ export async function createDemoApp(options: CreateDemoAppOptions = {}): Promise
     onExportError: options.onTelemetryExportError
       ? (error) => options.onTelemetryExportError!(error)
       : undefined,
+  });
+  const modelRouter = createDeclarativeModelRouter({
+    policy: {
+      models: {
+        conversation: options.models?.conversation ?? "gpt-4o-mini",
+        extraction: options.models?.extraction ?? "gpt-4o-mini",
+      },
+      fallback: options.models?.fallback,
+    },
+    telemetry,
   });
   const storage = createLibsqlStorageAdapter(client, { scope: { orgId, kitId: "kit:debrief" } });
   const apps = createAppRegistry({ secret: options.secret ?? "demo-secret-at-least-32-characters-long" });
@@ -253,11 +265,19 @@ export async function createDemoApp(options: CreateDemoAppOptions = {}): Promise
   plugins = await createDemoPluginRegistry({ orgId, appId, telemetry, handlers: pluginHandlers });
   const inferPrebrief: TextInference = async (input) => {
     const startedAt = Date.now();
+    const route = await modelRouter.resolve("extraction", {
+      orgId,
+      appId,
+      sessionId: input.sessionId,
+      traceId: input.sessionId,
+      kitId: "kit:debrief",
+      pluginId: "ai:demo-compatible",
+    });
     const request = new Request("http://demo.local/v1/chat/completions", {
       method: "POST",
       headers: { "content-type": "application/json" },
       body: JSON.stringify({
-        model: "gpt-4o-mini",
+        model: route.model,
         messages: [{
           role: "user",
           content: [
@@ -297,7 +317,8 @@ export async function createDemoApp(options: CreateDemoAppOptions = {}): Promise
         kitId: "kit:debrief",
         type: "inference",
         operation: "prebrief",
-        model: "gpt-4o-mini",
+        model: route.model,
+        routingReason: route.reason,
         provider: "demo-compatible",
         requestTokens: usage.prompt_tokens ?? null,
         responseTokens: usage.completion_tokens ?? null,
@@ -322,7 +343,8 @@ export async function createDemoApp(options: CreateDemoAppOptions = {}): Promise
         kitId: "kit:debrief",
         type: "inference",
         operation: "prebrief",
-        model: "gpt-4o-mini",
+        model: route.model,
+        routingReason: route.reason,
         provider: "demo-compatible",
         latencyMs: Date.now() - startedAt,
         estimatedCostUsd: 0,
