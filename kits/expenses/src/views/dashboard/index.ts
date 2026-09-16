@@ -30,11 +30,11 @@ export default defineView({
       { category: "education", total: 19200 },
     ],
     recentExpenses: [
-      { id: "e1", date: "2026-05-07", description: "Figma Pro subscription", amountCents: 1400, category: "software" },
-      { id: "e2", date: "2026-05-06", description: "Lunch with client at Vapiano", amountCents: 4750, category: "meals_business" },
-      { id: "e3", date: "2026-05-05", description: "ICE Berlin-Munich", amountCents: 8900, category: "travel" },
-      { id: "e4", date: "2026-05-04", description: "USB-C hub", amountCents: 3499, category: "hardware" },
-      { id: "e5", date: "2026-05-03", description: "AWS May bill", amountCents: 4200, category: "software" },
+      { id: "e1", type: "expense", date: "2026-05-07", description: "Figma Pro subscription", amountCents: 1400, category: "software" },
+      { id: "e2", type: "expense", date: "2026-05-06", description: "Lunch with client at Vapiano", amountCents: 4750, category: "meals_business" },
+      { id: "e3", type: "expense", date: "2026-05-05", description: "ICE Berlin-Munich", amountCents: 8900, category: "travel" },
+      { id: "e4", type: "expense", date: "2026-05-04", description: "USB-C hub", amountCents: 3499, category: "hardware" },
+      { id: "e5", type: "expense", date: "2026-05-03", description: "AWS May bill", amountCents: 4200, category: "software" },
     ],
   },
 });

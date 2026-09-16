@@ -17,13 +17,38 @@ export default defineView({
       companyName: "Acme GmbH",
     },
     deals: [
-      { id: "d1", title: "Acme Brand Strategy", stage: "negotiation", valueCents: 1800000, currency: "EUR" },
-      { id: "d6", title: "Acme Q1 Retainer", stage: "won", valueCents: 1200000, currency: "EUR" },
+      {
+        id: "d1", companyId: null, contactId: "c1", title: "Acme Brand Strategy",
+        valueCents: 1800000, currency: "EUR", stage: "negotiation", probability: 70,
+        expectedClose: "2026-06-01", lostReason: null, notes: null,
+        archivedAt: null, createdAt: "2026-04-01", updatedAt: "2026-05-05",
+      },
+      {
+        id: "d6", companyId: null, contactId: "c1", title: "Acme Q1 Retainer",
+        valueCents: 1200000, currency: "EUR", stage: "won", probability: 100,
+        expectedClose: "2026-05-15", lostReason: null, notes: null,
+        archivedAt: null, createdAt: "2026-03-01", updatedAt: "2026-05-05",
+      },
     ],
     activities: [
-      { id: "a1", type: "meeting", summary: "Scope review meeting — aligned on 3-phase approach", createdAt: "2026-05-05" },
-      { id: "a2", type: "email", summary: "Sent revised pricing with volume discount", createdAt: "2026-05-04" },
-      { id: "a6", type: "task", summary: "Send Q1 retainer invoice", createdAt: "2026-04-20" },
+      {
+        id: "a1", contactId: "c1", type: "meeting",
+        summary: "Scope review meeting — aligned on 3-phase approach",
+        sentiment: "positive", followUp: null, followUpBy: null,
+        occurredAt: "2026-05-05", createdAt: "2026-05-05", updatedAt: "2026-05-05",
+      },
+      {
+        id: "a2", contactId: "c1", type: "email",
+        summary: "Sent revised pricing with volume discount",
+        sentiment: null, followUp: null, followUpBy: null,
+        occurredAt: "2026-05-04", createdAt: "2026-05-04", updatedAt: "2026-05-04",
+      },
+      {
+        id: "a6", contactId: "c1", type: "task",
+        summary: "Send Q1 retainer invoice",
+        sentiment: null, followUp: "Send invoice", followUpBy: "2026-05-10",
+        occurredAt: "2026-04-20", createdAt: "2026-04-20", updatedAt: "2026-04-20",
+      },
     ],
   },
 });

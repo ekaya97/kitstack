@@ -9,6 +9,10 @@ const BAR_COLORS = [
 ];
 
 export function TimeReportView({ data }: { data: Data }) {
+  if (!data) {
+    return <div className="p-4 text-ks-muted">No time entries found.</div>;
+  }
+
   const grandTotal = data.monthlyByProject.reduce((sum, r) => sum + r.totalMinutes, 0);
   const grandBillable = data.monthlyByProject.reduce((sum, r) => sum + r.billableMinutes, 0);
   const grandValue = data.monthlyByProject.reduce((sum, r) => {

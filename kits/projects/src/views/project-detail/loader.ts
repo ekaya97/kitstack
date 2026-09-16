@@ -3,7 +3,7 @@ import { eq, sql } from "drizzle-orm";
 import { projects, clients, milestones, tasks, timeEntries } from "../../schema";
 
 export const loader = defineLoader(async (ctx) => {
-  const projectId = ctx.params?.project;
+  const projectId = typeof ctx.params?.project === "string" ? ctx.params.project : undefined;
 
   // If no project specified, return the first active project
   const [project] = projectId
