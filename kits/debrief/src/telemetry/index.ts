@@ -49,6 +49,9 @@ export interface TelemetryEventInput {
   responseTokens?: number | null;
   latencyMs?: number | null;
   estimatedCostUsd?: number | null;
+  routingReason?: string | null;
+  cancellationReason?: string | null;
+  timeoutReason?: string | null;
   outcome: TelemetryOutcome;
   instructionVersions?: readonly string[];
   memoryIds?: readonly string[];
@@ -131,6 +134,9 @@ const CREATE_SCHEMA_SQL = `
     response_tokens INTEGER,
     latency_ms INTEGER,
     estimated_cost_usd REAL,
+    routing_reason TEXT,
+    cancellation_reason TEXT,
+    timeout_reason TEXT,
     outcome TEXT NOT NULL,
     instruction_versions TEXT,
     memory_ids TEXT
@@ -164,6 +170,9 @@ export class TelemetryStore {
       if (!names.has("provider")) await client.execute("ALTER TABLE telemetry_events ADD COLUMN provider TEXT");
       if (!names.has("call_id")) await client.execute("ALTER TABLE telemetry_events ADD COLUMN call_id TEXT");
       if (!names.has("customer_id")) await client.execute("ALTER TABLE telemetry_events ADD COLUMN customer_id TEXT");
+      if (!names.has("routing_reason")) await client.execute("ALTER TABLE telemetry_events ADD COLUMN routing_reason TEXT");
+      if (!names.has("cancellation_reason")) await client.execute("ALTER TABLE telemetry_events ADD COLUMN cancellation_reason TEXT");
+      if (!names.has("timeout_reason")) await client.execute("ALTER TABLE telemetry_events ADD COLUMN timeout_reason TEXT");
       // Create this index only after the compatibility column migration. Older
       // production databases predate customer-scoped telemetry.
       await client.execute(`CREATE INDEX IF NOT EXISTS telemetry_events_customer_idx
@@ -182,8 +191,13 @@ export class TelemetryStore {
           id, timestamp, org_id, customer_id, app_id, session_id, parent_id, trace_id,
           channel, plugin_id, kit_id, type, operation, model, provider, call_id,
           request_tokens, response_tokens, latency_ms, estimated_cost_usd,
+          routing_reason, cancellation_reason, timeout_reason,
           outcome, instruction_versions, memory_ids
-        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        ) VALUES (
+          ?, ?, ?, ?, ?, ?, ?, ?, ?, ?,
+          ?, ?, ?, ?, ?, ?, ?, ?, ?, ?,
+          ?, ?, ?, ?, ?, ?
+        )
       `,
       args: [
         input.id,
@@ -206,6 +220,9 @@ export class TelemetryStore {
         input.responseTokens ?? null,
         input.latencyMs ?? null,
         input.estimatedCostUsd ?? null,
+        input.routingReason ?? null,
+        input.cancellationReason ?? null,
+        input.timeoutReason ?? null,
         input.outcome,
         encodeStringArray(input.instructionVersions),
         encodeStringArray(input.memoryIds),
@@ -408,6 +425,9 @@ function mapEvent(row: Row): TelemetryEvent {
     responseTokens: nullableNumber(row.response_tokens),
     latencyMs: nullableNumber(row.latency_ms),
     estimatedCostUsd: nullableNumber(row.estimated_cost_usd),
+    routingReason: nullableString(row.routing_reason),
+    cancellationReason: nullableString(row.cancellation_reason),
+    timeoutReason: nullableString(row.timeout_reason),
     outcome: stringValue(row.outcome) as TelemetryOutcome,
     instructionVersions: decodeStringArray(row.instruction_versions),
     memoryIds: decodeStringArray(row.memory_ids),

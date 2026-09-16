@@ -349,6 +349,7 @@ async function composeLiveVoiceRoute(app: DemoApp): Promise<DemoLiveVoiceRoute |
         instructions: { version: context.version, content: context.content },
         telemetry: app.telemetry,
         provider: "twilio-openai-realtime",
+        model: openai.model,
         callId: binding.callSid ?? null,
         memoryIds: context.memoryIds,
         onStop: async () => { await app.debrief.awaitConfirmation(binding.sessionId); },
