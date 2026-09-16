@@ -79,6 +79,8 @@ vi.mock("../../db/dynamo", () => ({
 
 vi.mock("../authz", () => ({
   mcpCheckTuple: vi.fn(async () => true),
+  interactiveIdentity: (principal: string) => ({ principal, actor: principal, kind: "interactive" }),
+  authorizeToolInvocation: vi.fn(async () => ({ allowed: true })),
 }));
 
 vi.mock("../oauth-store", () => ({
