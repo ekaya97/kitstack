@@ -1,0 +1,21 @@
+{
+  "name": "@kitstackco/platform-kit",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "description": "KitStack's grant-controlled platform observability kit.",
+  "dependencies": {
+    "@kitstackco/sdk": "*",
+    "zod": "^4.4.3"
+  },
+  "devDependencies": {
+    "@types/react": "^19.0.0",
+    "react": "^19.0.0",
+    "typescript": "^5.0.0",
+    "vitest": "^2.0.0"
+  },
+  "scripts": {
+    "typecheck": "tsc -p tsconfig.json --noEmit",
+    "test": "vitest run"
+  }
+}
