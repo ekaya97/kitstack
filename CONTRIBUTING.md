@@ -1,111 +1,131 @@
-# Contributing / Local Development
+# Contributing and local development
 
-This document covers running KitStack locally and the repository layout. For what
-KitStack is and why it's built the way it is, see the [README](README.md).
+This document covers running KitStack locally and the repository layout. For
+what KitStack is and why it is built this way, read the [README](README.md).
 
 ## Prerequisites
 
 - Node.js 22+
-- AWS credentials configured (for the SST reference deployment)
-- Turso account + database (or any libSQL-compatible endpoint)
+- For the SDK and the debrief kit: nothing else. Tests and the local host use
+  an in-memory or file-backed libSQL database.
+- For the web app and the AWS reference deployment: AWS credentials, a Turso
+  account, and the secrets listed in [`.env.example`](.env.example).
 
 ## Setup
 
 ```bash
 git clone <repo-url> && cd kitstack
 npm install
-cp .env.example .env    # fill in values
-npm run db:migrate      # apply schema
-npm run db:seed         # seed catalog data
-npm run dev             # starts SST + Next.js
+npm test                                  # debrief kit + host, 136 tests
+npm run demo:server                       # local host on 127.0.0.1:3001
+npm run dev --workspace kitstack-web      # web app on :3000, open /demo
 ```
 
-## Environment Variables
+For the full stack with SST:
 
-```
-# Database
-TURSO_DATABASE_URL=libsql://your-db.turso.io
-TURSO_AUTH_TOKEN=...
-
-# Auth
-BETTER_AUTH_SECRET=...
-GOOGLE_CLIENT_ID=...
-GOOGLE_CLIENT_SECRET=...
-GITHUB_CLIENT_ID=...
-GITHUB_CLIENT_SECRET=...
-
-# Payments
-LEMONSQUEEZY_API_KEY=...
-LEMONSQUEEZY_STORE_ID=...
-LEMONSQUEEZY_WEBHOOK_SECRET=...
-
-# MCP
-MCP_JWT_SECRET=...
-MCP_SERVER_URL=https://mcp.your-domain.example
-TURSO_PLATFORM_API_TOKEN=...
-TURSO_ORG_NAME=...
-
-# Analytics
-NEXT_PUBLIC_POSTHOG_KEY=...
-
-# App
-SITE_URL=http://localhost:3000
+```bash
+cp .env.example .env.<stage>              # fill in values
+./infra/sync-secrets.sh <stage>           # push secrets to SST
+npm run dev                               # sst dev: Turso CLI, router, web
 ```
 
 ## Scripts
 
 | Command | Description |
 |---------|-------------|
-| `npm run dev` | SST + Next.js dev server |
-| `npm run build` | Production build |
-| `npm test` | Run all tests (Vitest) |
-| `npm run db:migrate` | Apply database migrations |
-| `npm run db:push` | Push schema to Turso |
-| `npm run db:studio` | Open Drizzle Studio |
-| `npm run db:seed` | Seed catalog data |
-| `npm run upload` | Upload skill assets to S3 |
+| `npm test` | Run the debrief kit and host suite with Vitest |
+| `npm run demo:server` | Start the plugin-composed debrief host over HTTP |
+| `npm run start:stdio --workspace @kitstackco/debrief-kit` | Same host over stdio for Claude Code or Desktop |
+| `npm run typecheck --workspace @kitstackco/debrief-kit` | TypeScript check for the kit |
+| `npm run publish:assets --workspace @kitstackco/debrief-kit` | Build Views and upload the shell to the assets bucket |
+| `npm run dev` | `sst dev` for the full stack |
+| `npm run dev:db` | Local Turso on `databases/local.db` |
+| `npm run db:generate` / `npm run db:seed` | Drizzle migrations and catalog seed for the web app |
+| `npm run sync:secrets` | Sync `.env.<stage>` into SST secrets |
 
-## Repository Layout
+## Environment
+
+The debrief host reads these; all have local defaults except the provider
+credentials needed for a real call.
 
 ```
-web/
-  src/
-    app/                 Next.js pages and API routes
-    components/          React components
-    db/                  Drizzle schema + migrations
-    hooks/               TanStack Query hooks
-    lib/                 Auth, DB client, analytics, utilities
-    services/            Business logic (kit lifecycle, subscriptions, payments)
-    stores/              Zustand stores
+PORT, HOST                              default 3001, 127.0.0.1
+KITSTACK_DEMO_DB_URL                    default file-backed libSQL; set a Turso URL for remote
+KITSTACK_DEMO_DB_AUTH_TOKEN
+KITSTACK_DEMO_MCP_AUTH                  none | app-token | internal-signed
+KITSTACK_DEMO_ADMIN_TOKEN               required for app-token and internal-signed modes
+KITSTACK_DEMO_INTERNAL_SECRET           shared with the router in internal-signed mode
+KITSTACK_DEMO_SCHEDULER_INTERVAL_MS     poller interval
+KITSTACK_DEMO_VOICE_DOMAIN              public HTTPS/WSS host for Twilio media streams
+DemoAllowedDestination                  the one E.164 number a live call may reach
+TwilioAccountSid, TwilioAuthToken, TwilioFromNumber
+OpenAiApiKey, OPENAI_REALTIME_MODEL, OPENAI_REALTIME_VOICE
+```
 
+`none` is loopback-only and is never a fallback: a misconfigured token mode
+fails closed. The web app and router variables are listed in `.env.example`.
+
+## Repository layout
+
+```
 packages/
-  sdk/                   @kitstackco/sdk — defineKit / defineTool / defineView,
-                         CLI, build + deploy pipeline, serve() self-host runtime
-  mcp-server/            MCP router (onion-pattern dispatch, entitlements)
-    src/router/          Protocol handling, kit tool dispatch
-    src/db/              Registry DB access and Turso database provisioning
-    src/app-data/        AppData Lambda for interactive view iframes
-  mcp-apps/              Vite-built interactive UI components (iframes)
-  authz/                 Authorization primitives
+  sdk/
+    src/define-kit.ts, define-tool.ts, define-view.ts, define-loader.ts
+    src/define-agent.ts        bounded agent loop
+    src/plugins/               manifest, registry, context
+    src/server/                serve(), protocol (kit + kit_view), auth adapters, view router
+    src/cli/commands/          init, dev, build, deploy, publish, serve, login, call
+    src/testing/               createTestKit()
+  mcp-server/
+    src/router/                handler, mcp-protocol, kit-handler, tool-dispatcher,
+                               platform-adapter (virtual debrief kit), oauth/, audit, authz
+    src/app-data/              data endpoint for View iframes
+    src/db/                    registry and per-user database provisioning
+  authz/                       tuple store: check, grant, revoke, listObjects, listSubjects
 
-kits/                    Reference kits (debrief, crm, expenses, …)
-skills/                  Downloadable skill packages
-infra/                   SST infrastructure (storage, web, mcp)
-docs/                    Specs and research
+kits/
+  debrief/
+    kit.config.ts              kit identity, eight tools, three Views
+    src/contracts.ts           session state machine, operation port, capability contracts
+    src/agent/                 createSalesAgent() over defineAgent
+    src/tools/ views/ instructions/ memory/ scheduler/ telemetry/
+    src/plugins/registry/      ten plugin kinds and their telemetry
+    src/adapters/              auth (three MCP modes), proxy, voice (Twilio + Realtime)
+    src/channels/ triggers/    voice channel, manual and Twilio triggers
+    src/transports/            server.ts, http/, mcp/stdio.ts
+    src/composition/app/       concrete wiring for this repository; the dogfood e2e test
+  crm/ expenses/ content-planner/ decision-journal/ projects/ adint/ fressnapf/
+                               earlier kits on the hosted path; each has its own package.json
+
+web/
+  content/docs/                MDX docs the site renders
+  src/app/demo/                Runtime/Registry and Usage/Observability/FinOps screens
+  src/content/blog/            long-form posts
+
+infra/                         SST: secrets, storage, mcp (router), demo (voice service), web
 ```
 
-## Full Tech Stack
+`docs/` at the repository root is gitignored working material and is not part
+of the published repository.
+
+## Testing conventions
+
+- Every kit and host test runs with fake providers. No test needs Twilio,
+  OpenAI, AWS, or a network.
+- Time-dependent behavior uses the fake clock in `kits/debrief/test/fixtures.ts`.
+- Passing unit tests never count as a provider smoke. A live phone call is
+  recorded as verified only after an operator-controlled rehearsal.
+- Telemetry tests assert the absence of content fields. Adding a prompt,
+  transcript, or payload field to a telemetry record is a contract change, not
+  a feature.
+
+## Tech stack
 
 | Layer | Tech |
 |-------|------|
-| Frontend | Next.js 15, React 19, Tailwind, HeroUI, Framer Motion |
-| State | TanStack Query 5, Zustand |
-| Auth | BetterAuth (Drizzle adapter) |
-| Database | Turso (SQLite), DynamoDB |
-| ORM | Drizzle |
-| Validation | Zod |
-| Payments | Lemon Squeezy |
-| Infra | SST v3, AWS Lambda (Node 22, ARM64) |
-| MCP | Custom onion-pattern server (stdio + HTTP) |
+| SDK and host | TypeScript, Node 22, Zod, Drizzle, libSQL |
+| Router | Custom MCP server (stdio + streamable HTTP), `jose` JWTs, OAuth 2.1 with PKCE |
+| Voice | Twilio Calls and Media Streams, OpenAI Realtime, `ws` |
+| Web | Next.js 15, React 19, Tailwind, BetterAuth, TanStack Query |
+| Infra | SST v3 on AWS: Lambda (Node 22, ARM64), ECS/Fargate, ALB, DynamoDB, S3, CloudWatch |
 | Analytics | PostHog |
-| Blog | MDX via next-mdx-remote |

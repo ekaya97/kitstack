@@ -1,34 +1,90 @@
 ---
 title: Roadmap
-description: What's coming next for KitStack — from try-before-you-commit to multi-tenant databases and kit billing.
+description: What KitStack is building next, in the order it has to land.
 ---
 
 # Roadmap
 
-KitStack is under active development. Here's what we're building next.
+KitStack is an unreleased prototype. The reference implementation is a sales
+voice agent that runs one customer session across a Claude prebrief, a
+scheduled phone call, an editable confirmation View, and a learned correction.
+The roadmap turns the primitives that demo exercises into a governed platform
+a customer can install without us.
 
-## Try it out
+Four lanes run in parallel: SDK, CLI, router, and kits. The order below is
+derived from what blocks what, not from preference.
 
-Try kits and skills directly on KitStack before committing to anything. Browse the marketplace, activate a kit, and use it in your LLM client — free, with usage limits. No credit card, no setup.
+## The spine
 
-## Skill customizer
+1. **One runtime.** Remove the remaining duplicate framework and kit copies so
+   every cross-cutting change is paid once.
+2. **The `ctx` refactor.** `defineTool` handlers receive
+   `ctx = { db, identity, channel, telemetry, audit, log, connectors }`. Every
+   later capability reaches a tool through `ctx`, so this lands before the
+   kit count grows. Tools declare `mode: "assist" | "act"` now; enforcement
+   arrives with the dispatch core.
+3. **The dispatch core.** One function, `dispatch({ identity, channel, kitId,
+   cmd, args })`, through which every tool call passes: resolve kit, identity,
+   grant, policy, mode gate, invoke, telemetry and audit. The hosted router
+   and the self-hosted `serve()` both become thin transports over it, so both
+   deployment paths are governed identically. Bring-your-own MCP servers go
+   through the same core via a small manifest.
+4. **Grants.** The existing tuple store widens to `kit:use`, `kit:act`,
+   `kit:deploy`, `kit:telemetry`, `kit:admin`, `platform:admin`, with a
+   version counter and a per-process cache so revocation lands in under a
+   minute.
+5. **Identity.** Principal, actor, and delegation on every session. The
+   router remains the OAuth 2.1 authorization server, adds Protected Resource
+   Metadata, and federates to Entra ID. Clients never see the IdP directly.
+6. **Channels.** Trigger plugins for HTTP, signed webhooks, schedules, and
+   streams, each with a fixed identity, a kit allowlist, and mandatory audit.
+   Voice and the inference proxy reuse the same contract.
+7. **Connectors.** A `Connector<Config, Client>` interface bound at deploy
+   from an org binding registry, with secrets resolved at bind time. The
+   first set is dictated by the reference agent: CRM write path, Twilio
+   voice and SMS, calendar, and a generic REST importer.
+8. **`defineAgent` v2.** Every loop turn emits model, tokens, latency, cost,
+   tool calls, and outcome into the telemetry schema. The loop's `run()`
+   becomes a runtime plugin so an existing framework loop can be wrapped
+   inside the same bounded, metadata-only envelope, with inference routed
+   through the proxy.
+9. **Telemetry and audit.** Two stores: metadata-only telemetry with an
+   OpenTelemetry exporter and W3C trace context, and an append-only,
+   hash-linked audit chain. Per-tool struggle metrics: retries before a valid
+   call, schema failures, repeated identical calls, tokens per successful
+   outcome.
+10. **Container build.** `kit build` layers any kit onto one base image that
+    runs in compose, Lambda, Fargate, or a customer's Kubernetes. Kit authors
+    never write a Dockerfile.
+11. **Eval harness.** Scenario, CRUD baseline, and kit surface compared on
+    round-trips, result tokens, cumulative context, and task success, with a
+    table on every pull request.
 
-A guided customization flow for skills (skills are free forever). Take any skill from the marketplace and personalize it for your specific use case — adjust prompts, configure behavior, make it yours. Built into the platform, no code required.
+## After the spine
 
-## KitBuild
+- **Instruction overrides.** Draft, staged rollout, promote or expire, pinned
+  to a tool's contract version, scored per version against a held-out
+  baseline. Baseline serving with version logging ships first; overrides
+  follow.
+- **Memory kit.** Org-level and user-level structured memory as a kit other
+  kits depend on through a namespace grant.
+- **Policy engine.** Deny lists and `act` gating land in the dispatch core
+  first; YAML rules, argument constraints, and classification redaction
+  follow.
+- **Model routing.** Declarative per-task-class model selection first, with
+  every routing decision emitted as telemetry with its reason. Learned
+  routing only once per-org scored data exists, always degrading to the
+  declarative policy.
+- **Dashboard shell.** The platform kit's Views move from chat into a shell
+  with sessions, cost, grants, connector bindings, and a deploy queue.
+- **Proxy channel.** A reverse proxy in front of an inference router:
+  authenticate, attach identity and priority, admit, forward. KitStack never
+  persists conversations.
 
-A web-based kit builder with AI integration. Describe what you want, and KitBuild scaffolds the tools, views, schema, and instructions for you. Edit in the browser, preview live, deploy with one click. Think Lovable, but for MCP apps.
+## What will not be built
 
-## Kit bundles
-
-Bundle multiple kits to combine functionality. A CRM kit + a customer support kit, for example. The platform joins the individual databases at runtime so kits can share data and work together — without either kit author needing to know about the other.
-
-## Multi-tenant databases with authorization
-
-An opt-in kit config for shared databases. Multiple users connect to the same database with fine-grained, Google Zanzibar-style authorization built into the SDK. Define who can read, write, and own which resources — the `authorize` hook on tools enforces it automatically.
-
-This unlocks team use cases: shared CRMs, collaborative project trackers, multi-user dashboards — all with per-resource access control out of the box.
-
-## Per-kit billing and admin dashboard
-
-Kit authors can charge for their kits — subscription, usage-based, or one-time purchase. The platform handles billing and payments for a fee. A dedicated kit admin dashboard provides insights into users, activation status, kit logs, and revenue.
+- A general agent framework. A `defineAgent` loop is scoped to one kit's
+  tools and one trigger: no cross-kit orchestration, chains, or graph DSL.
+- Transcript or conversation storage. Telemetry is metadata by design, and
+  this is a logging configuration a customer can audit.
+- A hosted multi-tenant tier before the self-hosted install is proven.

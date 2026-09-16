@@ -2,7 +2,11 @@
   "mcpServers": {
     "kitstack-sales-demo": {
       "command": "node",
-      "args": ["--import", "tsx/esm", "packages/demo/src/mcp/stdio.ts"],
+      "args": [
+        "--import",
+        "tsx/esm",
+        "kits/debrief/src/transports/mcp/stdio.ts"
+      ],
       "cwd": "/Users/eneskaya/dev/kitstack"
     }
   }

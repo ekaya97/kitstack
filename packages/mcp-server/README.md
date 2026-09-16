@@ -1,134 +1,121 @@
-# KitStack MCP Server
+# KitStack MCP router
 
-MCP server that exposes multiple tool kits to LLMs via the Model Context Protocol.
+The router exposes every kit to an MCP client through two static tools. It
+owns OAuth, identity, dispatch, audit, and View shells. Kits own behavior.
 
-## Architecture: The Onion Pattern
+## The onion pattern
 
-The server uses a single static tool (`kit`) to progressively disclose capabilities. This avoids the `tools/list_changed` notification problem entirely — the MCP tool list never changes, and kit activation/deactivation is reflected dynamically at the application layer.
-
-### Why
-
-MCP clients must re-query `tools/list` when tools change. Most clients handle `notifications/tools/list_changed` poorly or not at all. By keeping `tools/list` permanently static (1 tool), we sidestep the problem. The LLM discovers available kits by calling `kit()` — a normal tool call, not a protocol event.
-
-Additionally, LLM tool selection degrades above ~30-40 tools. The onion pattern keeps the top-level tool count at 1 regardless of how many kits or actions exist.
-
-### The `kit` Tool
+`tools/list` returns exactly two tools, `kit` and `kit_view`, and never
+changes. Activating or deactivating a kit is reflected the next time the model
+calls `kit()`, not through `notifications/tools/list_changed`, which most
+clients handle poorly or not at all. Tool selection also degrades above a few
+dozen tools; the onion keeps the top-level count at two regardless of how many
+kits or actions exist.
 
 Behavior is inferred from which parameters are present, like a CLI:
 
 ```
-kit()                                          -> list activated kits
-kit(id="crm")                                  -> discover actions in a kit
-kit(id="crm", cmd="add_contact")               -> describe an action's parameter schema
-kit(id="crm", cmd="add_contact", params={...}) -> run an action
+kit()                                          -> list kits this identity may use
+kit(id="crm")                                  -> discover actions, with complexity hints
+kit(id="crm", cmd="add_contact")               -> describe: schema plus instructions
+kit(id="crm", cmd="add_contact", params={...}) -> run
+kit_view(id="crm")                             -> list Views
+kit_view(id="crm", view="pipeline")            -> render a View in chat
 ```
 
-The tool definition returned by `tools/list`:
+A call with no `params` routes to describe and returns the tool's schema and
+instructions. A partially filled call that fails validation currently returns
+a Zod error string; routing that failure back through describe, so a tool
+teaches its use instead of scolding, is planned once the dispatch core exists
+and can land in one place.
 
-```json
-{
-  "name": "kit",
-  "description": "KitStack — persistent tool kits for AI. Works like a CLI:\n\n  kit()                    -> list available kits\n  kit(id)                  -> show actions in a kit\n  kit(id, cmd)             -> describe an action's parameters\n  kit(id, cmd, params)     -> run an action\n\nStart with kit() to see what's installed.",
-  "inputSchema": {
-    "type": "object",
-    "properties": {
-      "id":     { "type": "string", "description": "Kit ID, e.g. 'crm'" },
-      "cmd":    { "type": "string", "description": "Action name, e.g. 'add_contact'" },
-      "params": { "type": "object", "description": "Action parameters" }
-    }
-  }
-}
-```
-
-### The Four Layers
+### Layers
 
 ```
-Layer 0: tools/list        ->  Always returns just { kit }. Static. Never changes.
-Layer 1: kit()             ->  Lists activated kits with IDs, names, action counts.
-Layer 2: kit(id)           ->  Shows all actions in a kit with complexity hints.
-Layer 3: kit(id, cmd)      ->  Shows the full parameter schema for one action.
-        kit(id, cmd, params) -> Executes the action.
+Layer 0: tools/list           -> { kit, kit_view }. Static.
+Layer 1: kit()                -> activated kits with IDs, names, action counts
+Layer 2: kit(id)              -> actions in a kit, marked simple or requires params
+Layer 3: kit(id, cmd)         -> parameter schema and instructions for one action
+         kit(id, cmd, params) -> execute
 ```
 
-### Routing Logic
+Minimum path is two calls when the model already knows the kit ID. Full path
+is four for an unfamiliar action.
 
-In `mcp-protocol.ts`, tool calls to `kit` are routed by param presence:
+### Why one tool, not many
+
+- LLMs are trained on CLI ergonomics: short parameter names, behavior from
+  presence, terse descriptions. First-shot comprehension is better.
+- No action enum. Fewer parameters to fill means fewer mistakes.
+- Structured JSON params, not a command string. Schema validation stays
+  intact and there is no parser to maintain.
+- The `kit()` description is a table of contents shaped for the caller. The
+  model recognizes instead of searching, which is cheaper than deferred tool
+  loading over a catalogue.
+
+## Request lifecycle
 
 ```
-if (!id)                  -> listKits(userId)
-if (id && !cmd)           -> discover(kitId)
-if (id && cmd && !params) -> describe(kitId, cmd)
-if (id && cmd && params)  -> run(kitId, cmd, params) -> dispatchToolCall()
+Bearer JWT  -> verifyAccessToken -> { sub: userId }
+            -> rate limit (per user, DynamoDB counter)
+            -> protocol handler: initialize | tools/list | tools/call
+            -> kit-handler: list | discover | describe | run
+            -> tool-dispatcher: resolve kit -> platform adapter -> invoke
+            -> audit (tool, kit, duration, outcome; no payloads)
 ```
 
-### Typical LLM Interaction
+The platform adapter resolves a kit to its execution target. Registry kits
+invoke a kit Lambda with the caller's per-user database credentials. The
+`debrief` kit is a **virtual kit**: the adapter short-circuits `executeTool`,
+`executeLoader`, and `getShellHtml` for it and forwards the call to the voice
+host over a short-lived internal-signed JWT carrying `{ sub, org, kit, req,
+trace, exp }`. An unavailable host maps to a useful MCP error rather than a
+generic Lambda failure.
 
-**User says:** "Add a contact named John to my CRM"
+## OAuth
+
+The router is an OAuth 2.1 authorization server with PKCE and dynamic client
+registration:
 
 ```
-LLM -> kit()
-       "You have 3 kits: crm, expense, meeting"
-
-LLM -> kit(id="crm")
-       "11 actions: add_contact (simple), add_deal (requires params), ..."
-
-LLM -> kit(id="crm", cmd="add_contact", params={ name: "John" })
-       "Contact added: John (id: 42)"
+POST /register                 -> client_id, client_secret (30-day TTL)
+GET  /authorize                -> validate client, redirect to login
+GET  /authorize/callback       -> authorization code (10-min TTL)
+POST /token                    -> access JWT (1 h) + rotating refresh token
 ```
 
-The LLM skipped `describe` because `discover` marked `add_contact` as simple. For actions marked "requires params", the LLM would call `kit(id, cmd)` first to see the schema.
+Claude Web, Claude Code, and other MCP clients connect once and see every kit
+the identity may use. Protected Resource Metadata and Entra federation are
+planned; see the roadmap.
 
-**Minimum path:** 2 calls (kit -> kit with cmd+params) when the LLM already knows the kit ID.
-**Full path:** 4 calls (kit -> kit(id) -> kit(id,cmd) -> kit(id,cmd,params)) for unfamiliar complex actions.
-
-### Entitlement
-
-`kit()` only returns kits the user has activated. Entitlement is checked via `UserKitDbItem` records in DynamoDB. When a user activates or deactivates a kit through the dashboard, it's immediately reflected the next time the LLM calls `kit()` — no protocol notifications needed.
-
-### Why Not Flat Mode
-
-Previously the server had two modes:
-- **Flat mode** (<=40 tools): list all tools individually via `tools/list`
-- **Onion mode** (>40 tools): collapse into per-kit meta-tools
-
-This was removed because:
-1. Flat mode requires `tools/list` to change when kits are activated/deactivated
-2. The mode switch created two code paths to maintain
-3. The single `kit` tool is simple enough that the extra tool call cost is negligible
-
-## Directory Structure
+## Directory structure
 
 ```
 src/
-  db/                Registry DB access and database provisioning
-    dynamo.ts        DynamoDB operations for registry and user kit DBs
-    provisioner.ts   Turso database provisioning per user per kit
-    schema.ts        Router database schema
-
-  router/            MCP protocol handling
-    handler.ts       Lambda entry point: OAuth, auth, rate limiting, routing
-    mcp-protocol.ts  MCP JSON-RPC dispatch: initialize, tools/list, tools/call
-    kit-handler.ts   The onion layer handlers: list, discover, describe, run
-    tool-dispatcher.ts  Resolves a tool call to a kit Lambda invocation
-
-  kits/              Kit implementations (each is a separate Lambda)
-    crm/             CRM kit: contacts, deals, pipeline, proposals
-    expense/         Expense & tax prep kit
-    meeting/         Meeting action tracker kit
-    outreach/        Outreach kit
-
-  scripts/           Deployment helpers
-    seed-registry.ts Populates DynamoDB registry from kit definitions
+  router/
+    handler.ts            Lambda entry: OAuth routes, auth, rate limit, dispatch
+    mcp-protocol.ts       JSON-RPC: initialize, tools/list, tools/call
+    kit-handler.ts        list | discover | describe | run
+    tool-dispatcher.ts    resolves a tool call to an execution target
+    platform-adapter.ts   registry kits via Lambda; virtual debrief kit via signed bridge
+    kit-resources.ts      per-kit resources
+    app-resources.ts      View shell and CDN CSP metadata
+    app-token.ts          short-lived tokens for View iframes
+    authz.ts, audit.ts    tuple checks and audit records
+    oauth/                authorize, token, register, metadata, helpers
+    oauth-store.ts        DynamoDB-backed OAuth state with TTLs
+  app-data/               data endpoint for View iframes
+  db/                     registry access and per-user database provisioning
+  relay/                  kitstack dev relay
+  kill-switch/            emergency disable
+  scripts/                seed-registry and deployment helpers
 ```
 
-## Key Design Decisions
+## Relationship to `serve()`
 
-- **CLI-style interface.** LLMs are heavily trained on bash/CLI interactions. The `kit` tool mimics CLI ergonomics: short param names (`id`, `cmd`), behavior driven by param presence, terse descriptions. This improves first-shot comprehension.
-
-- **No action enum.** Instead of `action: "discover" | "describe" | "run"`, behavior is inferred. Fewer params to fill = fewer mistakes.
-
-- **Complexity hints in discover.** The discover response marks each action as "simple" or "requires params" so the LLM can skip the describe step for trivial actions.
-
-- **One tool, not two.** We considered separate `list_kits` + `use_kit` tools. A single `kit` tool is terser, has one schema to learn, and maps naturally to the CLI mental model (`git` with subcommands, not `git-add` / `git-commit` as separate binaries).
-
-- **No string parsing.** Despite the CLI inspiration, params are structured JSON — not a command string to parse. This keeps MCP schema validation and avoids building a parser.
+`@kitstackco/sdk/server` ships `serve()`, a self-host runtime that speaks the
+same two-tool protocol over stdio or HTTP. Today the router and `serve()`
+implement dispatch separately, and `serve()` performs no authorization beyond
+identity. Extracting one governed dispatch function that both paths call is the
+critical-path item on the roadmap; it is what makes self-hosted and hosted
+deployments equally governed.

@@ -1,6 +1,6 @@
 ---
 title: KitStack SDK
-description: The framework for building MCP apps. Tools, views, database, and deployment — handled.
+description: The framework for building MCP apps and the agents that run them. Tools, views, instructions, memory, plugins, and deployment.
 ---
 
 # KitStack SDK
@@ -93,11 +93,17 @@ Each user gets their own SQLite database for each kit. Completely separate — n
 
 KitStack is a single MCP connection. Users activate and deactivate kits from the dashboard without reconnecting their LLM client. One auth, one connection, and the user manages what's available from a single dashboard — like an app store that doesn't require restarting the app after each install.
 
+### Beyond tools: agents, plugins, and one telemetry record
+
+`defineAgent` gives a kit a bounded loop for the channels where no chat client is present: a scheduled call, a webhook, a voice stream. The loop is scoped to one kit and one trigger, enforces turn and wall-clock limits, binds an instruction version, and emits lifecycle events that carry names, outcomes, and durations but never content.
+
+Host capabilities such as persistence, memory, instructions, AI, triggers, channels, a proxy, and a scheduler are plugins with a data-only manifest. Every plugin invocation, MCP call, memory read, instruction resolution, and inference request writes into the same metadata-only telemetry record, keyed by session, parent, and trace. That is what lets one session be followed from a chat prebrief through a phone call to a confirmation without inspecting server logs. The reference implementation is the sales debrief kit in the repository.
+
 ## Current limitations
 
-**No network.** Kits can't call external APIs — every piece of data enters through the user's conversation. This is a temporary limitation. If your kit needs external endpoints, reach out at hello@kitstack.co.
+**No network on the hosted platform.** Hosted kit Lambdas cannot call external APIs; every piece of data enters through the conversation. A self-hosted host has no such restriction, and connectors bound at deploy time are on the roadmap.
 
-**No background execution.** Kits only run when the LLM calls them. No scheduled tasks, no reminders, no triggers.
+**No background execution on the hosted platform.** Hosted kits run only when the LLM calls them. Triggers, a persisted scheduler, and a voice channel exist in the self-hosted reference host and are being generalized into SDK plugins.
 
 **Single-user, single-session.** No collaboration, no shared state between users. Multi-user collaborative kits are on the roadmap.
 
