@@ -25,6 +25,10 @@ export default defineConfig({
     "cli/commands/serve": "src/cli/commands/serve.ts",
     "cli/commands/call": "src/cli/commands/call.ts",
     "cli/commands/login": "src/cli/commands/login.ts",
+    "cli/commands/eval": "src/cli/commands/eval.ts",
+    "cli/commands/grants": "src/cli/commands/grants.ts",
+    "cli/commands/connectors": "src/cli/commands/connectors.ts",
+    "cli/commands/add": "src/cli/commands/add.ts",
 
     // Deploy helpers
     "deploy/index": "src/deploy/index.ts",

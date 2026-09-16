@@ -12,6 +12,7 @@ import { resolve } from "node:path";
 import { existsSync, readFileSync, readdirSync, statSync } from "node:fs";
 import { execSync } from "node:child_process";
 import { loadCredentials } from "../credentials";
+import { authenticatedCliClient, jsonBody } from "../api-client";
 import { buildKit } from "../../build";
 
 const KITSTACK_API_URL = process.env.KITSTACK_API_URL || "https://kitstack.co";
@@ -24,6 +25,7 @@ Usage:
 
 Options:
   --config <path>   Path to kit root directory (default: .)
+  approve <id>       Approve a pending deployment request (admin only)
   --help, -h        Show help
 
 Requires: kitstack login
@@ -48,6 +50,26 @@ export async function deploy(args: string[]) {
   if (args.includes("--help") || args.includes("-h")) {
     console.log(DEPLOY_HELP);
     process.exit(0);
+  }
+
+  if (args[0] === "approve") {
+    const requestId = args[1];
+    if (!requestId || args.length > 2) {
+      throw new Error("Usage: kitstack deploy approve <request-id>");
+    }
+    const result = await authenticatedCliClient().request<{
+      status: "approved" | "rejected" | "deployed";
+      requestId: string;
+      kitId?: string;
+      rollbackTarget?: string | null;
+    }>(`/api/cli/deploy/requests/${encodeURIComponent(requestId)}/approve`, {
+      method: "POST",
+      body: jsonBody({}),
+    });
+    console.log(`  ✓ Deployment request ${result.requestId} ${result.status}`);
+    if (result.kitId) console.log(`    Kit: ${result.kitId}`);
+    if (result.rollbackTarget) console.log(`    Rollback target: ${result.rollbackTarget}`);
+    return result;
   }
 
   // Parse flags
@@ -153,16 +175,26 @@ export async function deploy(args: string[]) {
   }
 
   const result = (await response.json()) as {
+    status: "deployed" | "pending_approval";
+    requestId?: string;
     kitId: string;
-    kitSlug: string;
-    tools: number;
-    views: number;
-    lambda: string | null;
+    kitSlug?: string;
+    tools?: number;
+    views?: number;
+    lambda?: string | null;
+    approval?: { required: boolean; reason?: string };
   };
 
+  if (response.status === 202 || result.status === "pending_approval") {
+    console.log(`  ⏳ Deployment request ${result.requestId ?? "created"} is awaiting admin approval.`);
+    if (result.approval?.reason) console.log(`    ${result.approval.reason}`);
+    console.log("    An admin can run: kitstack deploy approve <request-id>");
+    return result;
+  }
+
   console.log(`  ✓ Kit "${result.kitId}" deployed (private)`);
-  console.log(`    Tools: ${result.tools}`);
-  console.log(`    Views: ${result.views}`);
+  console.log(`    Tools: ${result.tools ?? 0}`);
+  console.log(`    Views: ${result.views ?? 0}`);
   if (result.lambda) console.log(`    Lambda: ${result.lambda}`);
   console.log(`\n  Activate it from your dashboard at ${KITSTACK_API_URL}/dashboard?tab=developer\n`);
   process.exit(0);
