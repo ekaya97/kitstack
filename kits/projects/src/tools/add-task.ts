@@ -1,10 +1,11 @@
 import { defineTool, kit } from "@kitstackco/sdk";
+import { withToolMetadata } from "../tool-metadata";
 import { z } from "zod";
 import { nanoid } from "nanoid";
 import { eq, like } from "drizzle-orm";
 import { projects, milestones, tasks } from "../schema";
 
-export const addTask = defineTool({
+export const addTask = withToolMetadata(defineTool({
   name: "add_task",
   description: "Add a task to a project, optionally under a milestone",
   args: z.object({
@@ -17,11 +18,11 @@ export const addTask = defineTool({
     due_date: z.string().describe("Task deadline (YYYY-MM-DD)").optional(),
     estimated_hours: z.number().describe("Estimated hours to complete").optional(),
   }),
-  handler: async (db, args) => {
+  handler: async (ctx, args) => {
     // Resolve project
     const [project] = args.project.startsWith("prj_")
-      ? await db.select().from(projects).where(eq(projects.id, args.project))
-      : await db.select().from(projects).where(like(projects.name, `%${args.project}%`)).limit(1);
+      ? await ctx.db.select().from(projects).where(eq(projects.id, args.project))
+      : await ctx.db.select().from(projects).where(like(projects.name, `%${args.project}%`)).limit(1);
 
     if (!project) return kit.notFound("project", args.project);
 
@@ -29,8 +30,8 @@ export const addTask = defineTool({
     let milestoneId: string | null = null;
     if (args.milestone) {
       const [ms] = args.milestone.startsWith("mil_")
-        ? await db.select().from(milestones).where(eq(milestones.id, args.milestone))
-        : await db.select().from(milestones)
+        ? await ctx.db.select().from(milestones).where(eq(milestones.id, args.milestone))
+        : await ctx.db.select().from(milestones)
             .where(like(milestones.name, `%${args.milestone}%`))
             .limit(1);
       if (ms) milestoneId = ms.id;
@@ -38,7 +39,7 @@ export const addTask = defineTool({
 
     const id = `tsk_${nanoid()}`;
     const now = new Date().toISOString();
-    await db.insert(tasks).values({
+    await ctx.db.insert(tasks).values({
       id,
       projectId: project.id,
       milestoneId,
@@ -55,4 +56,4 @@ export const addTask = defineTool({
       kit.created(id, "task", `Task "${args.title}" added to ${project.name}.`)
     );
   },
-});
+}), "act", "internal");

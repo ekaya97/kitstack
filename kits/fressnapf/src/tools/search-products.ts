@@ -32,8 +32,8 @@ export const searchProducts = defineTool({
       .describe("Strukturierte Filter aus dem Tierprofil (Größe, Lebensphase, Futterart …)"),
     limit: z.number().optional().describe("Max. Treffer (Standard 6, max 12)"),
   }),
-  load: async (db, args: SearchQuery, ctx) => {
-    const rows = await db.select().from(products);
+  load: async (ctx, args: SearchQuery) => {
+    const rows = await ctx.db.select().from(products);
     const all = rows.map(rowToProduct);
     const results = filterProducts(all, args);
     const label =
@@ -42,11 +42,11 @@ export const searchProducts = defineTool({
         .filter(Boolean)
         .join(" · ") ||
       "Sortiment";
-    await setLastSearch(db, ctx.userId, results.map((p) => p.id), label);
+    await setLastSearch(ctx.db, ctx.identity.principal, results.map((p) => p.id), label);
     return results;
   },
-  handler: async (db, args, ctx) => {
-    const results = await searchProducts.load(db, args, ctx);
+  handler: async (ctx, args) => {
+    const results = await searchProducts.load(ctx, args);
     if (results.length === 0)
       return kit.text("Keine Treffer. Lockere die Filter (z. B. Größe oder Futterart).");
 
@@ -70,4 +70,10 @@ export const searchProducts = defineTool({
       `${results.length} Treffer:\n${lines.join("\n")}\n\nZeige sie mit kit_view(id="fressnapf", view="product_list"). Nenne dem Nutzer in 1–2 Sätzen, warum #1 und #2 passen.`
     );
   },
+});
+
+Object.assign(searchProducts, {
+  mode: "assist" as const,
+  classification: "internal",
+  annotations: { readOnlyHint: true, destructiveHint: false },
 });

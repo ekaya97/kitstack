@@ -1,10 +1,11 @@
 import { z } from "zod";
 import { eq, gte, lte, isNull, and, sql } from "drizzle-orm";
 import { defineTool, kit } from "@kitstackco/sdk";
+import { withToolMetadata } from "../tool-metadata";
 import { expenses, income, settings } from "../schema";
 import { resolvePeriod, fmtEur } from "./helpers";
 
-export const vatReport = defineTool({
+export const vatReport = withToolMetadata(defineTool({
   name: "vat_report",
   description: "VAT summary for UStVA filing — total collected, deductible input VAT, net liability by rate",
   args: z.object({
@@ -13,9 +14,9 @@ export const vatReport = defineTool({
     from: z.string().optional().describe("Start date (ISO) for custom range"),
     to: z.string().optional().describe("End date (ISO) for custom range"),
   }),
-  handler: async (db, args) => {
+  handler: async (ctx, args) => {
     // Check Kleinunternehmer mode
-    const vatMode = await db.select().from(settings).where(eq(settings.key, "vat_mode")).limit(1);
+    const vatMode = await ctx.db.select().from(settings).where(eq(settings.key, "vat_mode")).limit(1);
     const isKleinunternehmer = vatMode.length > 0 && vatMode[0].value === "kleinunternehmer";
 
     if (isKleinunternehmer) {
@@ -86,4 +87,4 @@ export const vatReport = defineTool({
 
     return kit.text(text);
   },
-});
+}), "assist", "sensitive");

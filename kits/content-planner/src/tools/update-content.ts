@@ -1,9 +1,10 @@
 import { z } from "zod";
 import { eq, like } from "drizzle-orm";
 import { defineTool, kit } from "@kitstackco/sdk";
+import { withToolMetadata } from "../tool-metadata";
 import { content } from "../schema";
 
-export const updateContent = defineTool({
+export const updateContent = withToolMetadata(defineTool({
   name: "update_content",
   description:
     "Update a content piece — change status, body, scheduled date, or mark as published. TRIGGER: user wants to edit, reschedule, or publish content.",
@@ -21,7 +22,7 @@ export const updateContent = defineTool({
     notes: z.string().optional().describe("Additional notes or context"),
     tags: z.string().optional().describe("Updated comma-separated tags"),
   }),
-  handler: async (db, args) => {
+  handler: async (ctx, args) => {
     const now = new Date().toISOString();
 
     // Resolve content by ID or fuzzy title match
@@ -64,11 +65,11 @@ export const updateContent = defineTool({
       updates.publishedDate = now.split("T")[0];
     }
 
-    await db.update(content).set(updates).where(eq(content.id, contentId));
+    await ctx.db.update(content).set(updates).where(eq(content.id, contentId));
 
     const changes = Object.keys(updates)
       .filter((k) => k !== "updatedAt")
       .join(", ");
     return kit.result(kit.updated(contentId, "content", `Content updated: ${changes}.`));
   },
-});
+}), "act", "internal");

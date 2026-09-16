@@ -13,8 +13,8 @@ export const getProduct = defineTool({
   args: z.object({
     id: z.string().describe("Fressnapf-Artikelnummer (aus search_products)"),
   }),
-  load: async (db, args, ctx) => {
-    const rows = await db.select().from(products).where(eq(products.id, args.id)).limit(1);
+  load: async (ctx, args) => {
+    const rows = await ctx.db.select().from(products).where(eq(products.id, args.id)).limit(1);
     if (!rows[0]) return null;
     const product = rowToProduct(rows[0]);
     const topReviews = await db
@@ -23,7 +23,7 @@ export const getProduct = defineTool({
       .where(eq(reviews.productId, args.id))
       .orderBy(desc(reviews.rating), desc(reviews.date))
       .limit(3);
-    await setCurrentProduct(db, ctx.userId, args.id);
+    await setCurrentProduct(db, ctx.identity.principal, args.id);
     return {
       product,
       reviews: topReviews.map((r) => ({
@@ -35,8 +35,8 @@ export const getProduct = defineTool({
       })),
     };
   },
-  handler: async (db, args, ctx) => {
-    const data = await getProduct.load(db, args, ctx);
+  handler: async (ctx, args) => {
+    const data = await getProduct.load(ctx, args);
     if (!data) return kit.notFound("Produkt", args.id);
     const { product: p, reviews: revs } = data;
     const rating = p.rating ? `${p.rating.value.toFixed(1)}★ (${p.rating.count})` : "keine Bewertung";
@@ -47,4 +47,10 @@ export const getProduct = defineTool({
       `${p.brand} — ${p.name}\n${eur(p.price.amount)}${p.price.perKg ? ` (${eur(p.price.perKg)}/kg)` : ""} · ${rating}\n\n${p.description ?? ""}\n\nTop-Bewertungen:\n${revLines}\n\nZeige die Detailansicht mit kit_view(id="fressnapf", view="product_detail").`
     );
   },
+});
+
+Object.assign(getProduct, {
+  mode: "assist" as const,
+  classification: "internal",
+  annotations: { readOnlyHint: true, destructiveHint: false },
 });

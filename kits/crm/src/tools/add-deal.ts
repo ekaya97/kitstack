@@ -1,9 +1,10 @@
 import { z } from "zod";
 import { defineTool, kit } from "@kitstackco/sdk";
+import { withToolMetadata } from "../tool-metadata";
 import { nanoid } from "nanoid";
 import { deals } from "../schema";
 
-export const addDeal = defineTool({
+export const addDeal = withToolMetadata(defineTool({
   name: "add_deal",
   description: "Create a new deal in the pipeline",
   args: z.object({
@@ -17,11 +18,11 @@ export const addDeal = defineTool({
     expected_close: z.string().optional().describe("Expected close date (ISO)"),
     notes: z.string().optional().describe("Notes about the deal"),
   }),
-  handler: async (db, args) => {
+  handler: async (ctx, args) => {
     const now = new Date().toISOString();
     const id = `deal_${nanoid()}`;
 
-    await db.insert(deals).values({
+    await ctx.db.insert(deals).values({
       id,
       contactId: args.contact_id ?? null,
       companyId: args.company_id ?? null,
@@ -39,4 +40,4 @@ export const addDeal = defineTool({
     const valueStr = args.value ? ` — ${args.currency} ${(args.value / 100).toFixed(2)}` : "";
     return kit.result(kit.created(id, "deal", `Deal "${args.title}" created${valueStr}.`));
   },
-});
+}), "act", "sensitive");

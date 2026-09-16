@@ -1,9 +1,10 @@
 import { z } from "zod";
 import { defineTool, kit } from "@kitstackco/sdk";
+import { withToolMetadata } from "../tool-metadata";
 import { nanoid } from "nanoid";
 import { decisions } from "../schema";
 
-export const logDecision = defineTool({
+export const logDecision = withToolMetadata(defineTool({
   name: "log_decision",
   description: "Record a decision with full context, reasoning, and confidence level. Use when the user has reached a conclusion on something meaningful.",
   args: z.object({
@@ -23,7 +24,7 @@ export const logDecision = defineTool({
     decided_at: z.string().optional().describe("When the decision was made (ISO date). Defaults to today."),
     review_date: z.string().optional().describe("When to revisit this decision (ISO date)"),
   }),
-  handler: async (db, args) => {
+  handler: async (ctx, args) => {
     const id = `dec_${nanoid()}`;
     const now = new Date().toISOString();
     const decidedAt = args.decided_at ?? now.slice(0, 10);
@@ -39,7 +40,7 @@ export const logDecision = defineTool({
       reviewDate = d.toISOString().slice(0, 10);
     }
 
-    await db.insert(decisions).values({
+    await ctx.db.insert(decisions).values({
       id,
       title: args.title,
       context: args.context,
@@ -61,4 +62,4 @@ export const logDecision = defineTool({
     const msg = `Decision "${args.title}" logged.${reviewDate ? ` Review scheduled for ${reviewDate}.` : ""}`;
     return kit.result(kit.created(id, "decision", msg));
   },
-});
+}), "act", "sensitive");

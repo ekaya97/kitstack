@@ -2,7 +2,7 @@ import { defineLoader } from "@kitstackco/sdk";
 import { isNull, sql } from "drizzle-orm";
 import { deals, contacts, companies } from "../../schema";
 
-export const loader = defineLoader(async (db) => {
+export const loader = defineLoader(async (ctx) => {
   const rows = await db
     .select({
       id: deals.id,

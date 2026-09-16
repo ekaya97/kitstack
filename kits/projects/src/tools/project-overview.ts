@@ -1,34 +1,35 @@
 import { defineTool, kit } from "@kitstackco/sdk";
+import { withToolMetadata } from "../tool-metadata";
 import { z } from "zod";
 import { eq, like, desc, sql } from "drizzle-orm";
 import { projects, clients, milestones, tasks, timeEntries } from "../schema";
 
-export const projectOverview = defineTool({
+export const projectOverview = withToolMetadata(defineTool({
   name: "project_overview",
   description: "Detailed view of a single project: milestones, tasks, time logged, and budget status",
   args: z.object({
     project: z.string().describe("Project name or ID"),
   }),
-  load: async (db, args) => {
+  load: async (ctx, args) => {
     const [project] = args.project.startsWith("prj_")
-      ? await db.select().from(projects).where(eq(projects.id, args.project))
-      : await db.select().from(projects).where(like(projects.name, `%${args.project}%`)).limit(1);
+      ? await ctx.db.select().from(projects).where(eq(projects.id, args.project))
+      : await ctx.db.select().from(projects).where(like(projects.name, `%${args.project}%`)).limit(1);
 
     if (!project) return null;
 
     const client = project.clientId
-      ? (await db.select().from(clients).where(eq(clients.id, project.clientId)))[0] ?? null
+      ? (await ctx.db.select().from(clients).where(eq(clients.id, project.clientId)))[0] ?? null
       : null;
 
-    const projectMilestones = await db.select().from(milestones)
+    const projectMilestones = await ctx.db.select().from(milestones)
       .where(eq(milestones.projectId, project.id))
       .orderBy(milestones.sortOrder);
 
-    const projectTasks = await db.select().from(tasks)
+    const projectTasks = await ctx.db.select().from(tasks)
       .where(eq(tasks.projectId, project.id))
       .orderBy(tasks.sortOrder);
 
-    const timeStats = await db.select({
+    const timeStats = await ctx.db.select({
       totalMinutes: sql<number>`coalesce(sum(${timeEntries.durationMinutes}), 0)`,
       billableMinutes: sql<number>`coalesce(sum(CASE WHEN ${timeEntries.billable} = 1 THEN ${timeEntries.durationMinutes} ELSE 0 END), 0)`,
     }).from(timeEntries).where(eq(timeEntries.projectId, project.id));
@@ -42,8 +43,8 @@ export const projectOverview = defineTool({
       billableMinutes: timeStats[0]?.billableMinutes ?? 0,
     };
   },
-  handler: async (db, args, ctx) => {
-    const data = await projectOverview.load(db, args, ctx);
+  handler: async (ctx, args) => {
+    const data = await projectOverview.load(ctx, args);
     if (!data) return kit.notFound("project", args.project);
 
     const p = data.project;
@@ -98,4 +99,4 @@ export const projectOverview = defineTool({
 
     return kit.text(lines.join("\n"));
   },
-});
+}), "assist", "internal");

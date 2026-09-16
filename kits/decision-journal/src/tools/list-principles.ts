@@ -1,13 +1,14 @@
 import { z } from "zod";
 import { isNull, desc } from "drizzle-orm";
 import { defineTool, kit } from "@kitstackco/sdk";
+import { withToolMetadata } from "../tool-metadata";
 import { principles } from "../schema";
 
-export const listPrinciples = defineTool({
+export const listPrinciples = withToolMetadata(defineTool({
   name: "principles",
   description: "List all personal decision-making principles",
   args: z.object({}),
-  handler: async (db) => {
+  handler: async (ctx) => {
     const rows = await db
       .select()
       .from(principles)
@@ -24,4 +25,4 @@ export const listPrinciples = defineTool({
     }
     return kit.text(table);
   },
-});
+}), "assist", "sensitive");

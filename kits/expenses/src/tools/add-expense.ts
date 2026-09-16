@@ -1,11 +1,12 @@
 import { z } from "zod";
 import { defineTool, kit } from "@kitstackco/sdk";
+import { withToolMetadata } from "../tool-metadata";
 import { nanoid } from "nanoid";
 import { eq } from "drizzle-orm";
 import { expenses, settings } from "../schema";
 import { computeVat } from "./helpers";
 
-export const addExpense = defineTool({
+export const addExpense = withToolMetadata(defineTool({
   name: "add_expense",
   description: "Log an expense — auto-computes VAT (net/gross split) based on user's VAT mode and rate",
   args: z.object({
@@ -21,7 +22,7 @@ export const addExpense = defineTool({
     receipt_note: z.string().optional().describe("Note about the receipt"),
     tags: z.string().optional().describe("Comma-separated tags"),
   }),
-  handler: async (db, args) => {
+  handler: async (ctx, args) => {
     const now = new Date().toISOString();
     const id = `exp_${nanoid()}`;
     const amountCents = Math.round(args.amount * 100);
@@ -29,13 +30,13 @@ export const addExpense = defineTool({
     // Determine VAT rate
     let vatRate = args.vat_rate;
     if (vatRate === undefined) {
-      const vatMode = await db.select().from(settings).where(eq(settings.key, "vat_mode")).limit(1);
+      const vatMode = await ctx.db.select().from(settings).where(eq(settings.key, "vat_mode")).limit(1);
       vatRate = vatMode.length > 0 && vatMode[0].value === "kleinunternehmer" ? 0 : 19;
     }
 
     const { netCents, vatCents } = computeVat(amountCents, vatRate);
 
-    await db.insert(expenses).values({
+    await ctx.db.insert(expenses).values({
       id,
       amountCents,
       currency: "EUR",
@@ -59,4 +60,4 @@ export const addExpense = defineTool({
       kit.created(id, "expense", `Expense "${args.description}" logged — ${(amountCents / 100).toFixed(2)} EUR (net ${(netCents / 100).toFixed(2)}, VAT ${vatRate}%).`)
     );
   },
-});
+}), "act", "sensitive");

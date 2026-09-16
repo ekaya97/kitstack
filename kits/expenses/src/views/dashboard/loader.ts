@@ -7,7 +7,7 @@ function localIso(year: number, month: number, day: number): string {
   return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
 }
 
-export const loader = defineLoader(async (db) => {
+export const loader = defineLoader(async (ctx) => {
   const now = new Date();
   const y = now.getFullYear();
   const m = now.getMonth();

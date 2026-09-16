@@ -1,10 +1,11 @@
 import { defineTool, kit } from "@kitstackco/sdk";
+import { withToolMetadata } from "../tool-metadata";
 import { z } from "zod";
 import { eq, like, and, lte, desc, sql } from "drizzle-orm";
 import type { SQL } from "drizzle-orm";
 import { tasks, projects } from "../schema";
 
-export const listTasks = defineTool({
+export const listTasks = withToolMetadata(defineTool({
   name: "list_tasks",
   description: "List tasks across all projects or for a specific project. Great for answering 'what should I work on today?' or 'what's overdue?'",
   args: z.object({
@@ -16,20 +17,20 @@ export const listTasks = defineTool({
     due_before: z.string().describe("Show tasks due before this date (YYYY-MM-DD)").optional(),
     limit: z.number().describe("Max results (default: 25)").optional().default(25),
   }),
-  handler: async (db, args) => {
+  handler: async (ctx, args) => {
     const conditions: SQL[] = [];
 
     if (args.project) {
       const [p] = args.project.startsWith("prj_")
-        ? await db.select().from(projects).where(eq(projects.id, args.project))
-        : await db.select().from(projects).where(like(projects.name, `%${args.project}%`)).limit(1);
+        ? await ctx.db.select().from(projects).where(eq(projects.id, args.project))
+        : await ctx.db.select().from(projects).where(like(projects.name, `%${args.project}%`)).limit(1);
       if (p) conditions.push(eq(tasks.projectId, p.id));
     }
     if (args.status) conditions.push(eq(tasks.status, args.status));
     if (args.priority) conditions.push(eq(tasks.priority, args.priority));
     if (args.due_before) conditions.push(lte(tasks.dueDate, args.due_before));
 
-    const rows = await db.select({
+    const rows = await ctx.db.select({
       title: tasks.title,
       status: tasks.status,
       priority: tasks.priority,
@@ -54,4 +55,4 @@ export const listTasks = defineTool({
       `| Task | Project | Status | Priority | Due |\n|------|---------|--------|----------|-----|\n${lines.join("\n")}\n\n${rows.length} task(s).`
     );
   },
-});
+}), "assist", "internal");

@@ -1,10 +1,11 @@
 import { z } from "zod";
 import { like } from "drizzle-orm";
 import { defineTool, kit } from "@kitstackco/sdk";
+import { withToolMetadata } from "../tool-metadata";
 import { nanoid } from "nanoid";
 import { categories } from "../schema";
 
-export const addCategory = defineTool({
+export const addCategory = withToolMetadata(defineTool({
   name: "add_category",
   description: "Add a custom expense category with optional SKR03 account mapping",
   args: z.object({
@@ -12,7 +13,7 @@ export const addCategory = defineTool({
     skr03_account: z.string().optional().describe("SKR03 account number (e.g. 4930)"),
     parent_category: z.string().optional().describe("Parent category if this is a subcategory"),
   }),
-  handler: async (db, args) => {
+  handler: async (ctx, args) => {
     const existing = await db
       .select({ id: categories.id })
       .from(categories)
@@ -24,7 +25,7 @@ export const addCategory = defineTool({
     }
 
     const categoryId = `cat_${nanoid()}`;
-    await db.insert(categories).values({
+    await ctx.db.insert(categories).values({
       id: categoryId,
       name: args.name,
       skr03Account: args.skr03_account ?? null,
@@ -36,4 +37,4 @@ export const addCategory = defineTool({
       kit.created(categoryId, "category", `Category "${args.name}" added.${args.skr03_account ? ` SKR03: ${args.skr03_account}.` : ""}`)
     );
   },
-});
+}), "act", "sensitive");

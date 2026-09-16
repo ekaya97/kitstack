@@ -1,13 +1,14 @@
 import { z } from "zod";
 import { eq, isNull, sql } from "drizzle-orm";
 import { defineTool, kit } from "@kitstackco/sdk";
+import { withToolMetadata } from "../tool-metadata";
 import { deals } from "../schema";
 
-export const pipeline = defineTool({
+export const pipeline = withToolMetadata(defineTool({
   name: "pipeline",
   description: "Show deal pipeline summary with stage counts and values",
   args: z.object({}),
-  handler: async (db) => {
+  handler: async (ctx) => {
     const stages = ["lead", "contacted", "proposal", "negotiation", "won", "lost"];
 
     const rows = await db
@@ -39,4 +40,4 @@ export const pipeline = defineTool({
 
     return kit.text(table);
   },
-});
+}), "assist", "sensitive");

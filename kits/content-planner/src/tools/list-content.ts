@@ -1,8 +1,8 @@
 import { z } from "zod";
 import { eq, like, isNull, desc, and, gte, lte, SQL } from "drizzle-orm";
 import { defineTool, kit } from "@kitstackco/sdk";
+import { withToolMetadata } from "../tool-metadata";
 import type { KitContext } from "@kitstackco/sdk";
-import type { LibSQLDatabase } from "drizzle-orm/libsql";
 import { content } from "../schema";
 
 const listContentArgs = z.object({
@@ -61,9 +61,8 @@ function periodRange(period: string): { start: string; end: string } {
 }
 
 async function loadContent(
-  db: LibSQLDatabase,
+  ctx: KitContext,
   args: z.infer<typeof listContentArgs>,
-  ctx: KitContext
 ) {
   const conditions: SQL[] = [isNull(content.archivedAt)];
   if (args.status) conditions.push(eq(content.status, args.status));
@@ -84,13 +83,13 @@ async function loadContent(
     .limit(args.limit);
 }
 
-export const listContent = defineTool({
+export const listContent = withToolMetadata(defineTool({
   name: "list_content",
   description: "List content pieces with optional filters for status, channel, format, and period.",
   args: listContentArgs,
   load: loadContent,
-  handler: async (db, args, ctx) => {
-    const rows = await loadContent(db, args, ctx);
+  handler: async (ctx, args) => {
+    const rows = await loadContent(ctx, args);
     if (rows.length === 0) return kit.text("No content found.");
 
     let table = `${rows.length} piece(s):\n\n| Title | Channel | Format | Status | Scheduled | Published |\n|-------|---------|--------|--------|-----------|-----------|\n`;
@@ -99,4 +98,4 @@ export const listContent = defineTool({
     }
     return kit.text(table);
   },
-});
+}), "assist", "internal");

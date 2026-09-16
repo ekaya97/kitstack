@@ -19,16 +19,16 @@ export const petProfileSet = defineTool({
       .optional()
       .describe("Besondere Bedürfnisse, z. B. ['Zahnpflege', 'sensible Verdauung']"),
   }),
-  load: async (db, args, ctx) => {
+  load: async (ctx, args) => {
     const now = new Date().toISOString();
     const existing = await db
       .select()
       .from(petProfile)
-      .where(eq(petProfile.userId, ctx.userId))
+      .where(eq(petProfile.userId, ctx.identity.principal))
       .limit(1);
 
     const values = {
-      userId: ctx.userId,
+      userId: ctx.identity.principal,
       name: args.name,
       species: args.species,
       breed: args.breed ?? null,
@@ -41,15 +41,15 @@ export const petProfileSet = defineTool({
     let id: string;
     if (existing[0]) {
       id = existing[0].id;
-      await db.update(petProfile).set(values).where(eq(petProfile.id, id));
+      await ctx.db.update(petProfile).set(values).where(eq(petProfile.id, id));
     } else {
       id = `pet_${nanoid()}`;
-      await db.insert(petProfile).values({ ...values, id, createdAt: now });
+      await ctx.db.insert(petProfile).values({ ...values, id, createdAt: now });
     }
     return { id, ...args };
   },
-  handler: async (db, args, ctx) => {
-    const { id } = await petProfileSet.load(db, args, ctx);
+  handler: async (ctx, args) => {
+    const { id } = await petProfileSet.load(ctx, args);
     const desc = [args.breed, args.age_years ? `${args.age_years} Jahre` : null]
       .filter(Boolean)
       .join(", ");
@@ -57,4 +57,10 @@ export const petProfileSet = defineTool({
       kit.created(id, "pet_profile", `Profil für ${args.name}${desc ? ` (${desc})` : ""} gespeichert.`)
     );
   },
+});
+
+Object.assign(petProfileSet, {
+  mode: "act" as const,
+  classification: "sensitive",
+  annotations: { readOnlyHint: false, destructiveHint: false },
 });

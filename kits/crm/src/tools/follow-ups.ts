@@ -1,15 +1,16 @@
 import { z } from "zod";
 import { eq, isNotNull, lte, gte, desc, asc } from "drizzle-orm";
 import { defineTool, kit } from "@kitstackco/sdk";
+import { withToolMetadata } from "../tool-metadata";
 import { interactions, contacts } from "../schema";
 
-export const followUps = defineTool({
+export const followUps = withToolMetadata(defineTool({
   name: "follow_ups",
   description: "Show overdue and upcoming follow-ups",
   args: z.object({
     days_ahead: z.number().optional().default(7).describe("How many days ahead to look (default 7)"),
   }),
-  handler: async (db, args) => {
+  handler: async (ctx, args) => {
     const today = new Date().toISOString().slice(0, 10);
     const ahead = new Date(Date.now() + args.days_ahead * 86400000).toISOString().slice(0, 10);
 
@@ -61,4 +62,4 @@ export const followUps = defineTool({
 
     return kit.text(sections.join("\n"));
   },
-});
+}), "assist", "sensitive");

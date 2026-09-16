@@ -1,10 +1,11 @@
 import { z } from "zod";
 import { eq, like } from "drizzle-orm";
 import { defineTool, kit } from "@kitstackco/sdk";
+import { withToolMetadata } from "../tool-metadata";
 import { nanoid } from "nanoid";
 import { performance, content } from "../schema";
 
-export const logPerformance = defineTool({
+export const logPerformance = withToolMetadata(defineTool({
   name: "log_performance",
   description:
     "Record performance metrics for published content — impressions, likes, comments, shares, clicks. TRIGGER: user reports how a post performed or shares analytics.",
@@ -18,7 +19,7 @@ export const logPerformance = defineTool({
     clicks: z.number().optional().describe("Number of link clicks"),
     notes: z.string().optional().describe("Qualitative observations"),
   }),
-  handler: async (db, args) => {
+  handler: async (ctx, args) => {
     const now = new Date().toISOString();
 
     // Resolve content
@@ -51,7 +52,7 @@ export const logPerformance = defineTool({
       args.engagements ?? (args.likes ?? 0) + (args.comments ?? 0) + (args.shares ?? 0);
 
     const perfId = `perf_${nanoid()}`;
-    await db.insert(performance).values({
+    await ctx.db.insert(performance).values({
       id: perfId,
       contentId,
       impressions: args.impressions ?? null,
@@ -74,4 +75,4 @@ export const logPerformance = defineTool({
       kit.created(perfId, "performance", `Performance logged: ${metrics.join(", ") || "recorded"}.`)
     );
   },
-});
+}), "act", "internal");

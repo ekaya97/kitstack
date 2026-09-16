@@ -1,8 +1,8 @@
 import { z } from "zod";
 import { isNull, and, gte, lte, or, SQL } from "drizzle-orm";
 import { defineTool, kit } from "@kitstackco/sdk";
+import { withToolMetadata } from "../tool-metadata";
 import type { KitContext } from "@kitstackco/sdk";
-import type { LibSQLDatabase } from "drizzle-orm/libsql";
 import { content } from "../schema";
 
 const calendarArgs = z.object({
@@ -57,9 +57,8 @@ function getRange(period: string): { start: string; end: string; label: string }
 }
 
 async function loadCalendar(
-  db: LibSQLDatabase,
+  ctx: KitContext,
   args: z.infer<typeof calendarArgs>,
-  ctx: KitContext
 ) {
   const { start, end, label } = getRange(args.period);
 
@@ -79,13 +78,13 @@ async function loadCalendar(
   return { rows, label, start, end };
 }
 
-export const calendar = defineTool({
+export const calendar = withToolMetadata(defineTool({
   name: "calendar",
   description:
     "Show publishing schedule for a period — what's scheduled, what's been published. TRIGGER: user asks about their content schedule or calendar.",
   args: calendarArgs,
-  handler: async (db, args, ctx) => {
-    const { rows, label, start, end } = await loadCalendar(db, args, ctx);
+  handler: async (ctx, args) => {
+    const { rows, label, start, end } = await loadCalendar(ctx, args);
 
     if (rows.length === 0) return kit.text(`No content scheduled or published for ${label}.`);
 
@@ -114,7 +113,7 @@ export const calendar = defineTool({
 
     return kit.text(text);
   },
-});
+}), "assist", "internal");
 
 function channelIcon(channel: string): string {
   switch (channel) {

@@ -1,24 +1,24 @@
 import { z } from "zod";
-import type { LibSQLDatabase } from "drizzle-orm/libsql";
-import { defineTool, kit } from "@kitstackco/sdk";
+import { defineTool, kit, type KitContext } from "@kitstackco/sdk";
+import { withToolMetadata } from "../tool-metadata";
 import { findTrigger, type TriggerView } from "../domain/read-model.js";
 
 const args = z.object({
   id: z.string().describe("The trigger/event id, from list_triggers."),
 });
 
-async function loadTrigger(db: LibSQLDatabase, a: z.infer<typeof args>): Promise<TriggerView | null> {
-  return findTrigger(db, a.id);
+async function loadTrigger(ctx: KitContext, a: z.infer<typeof args>): Promise<TriggerView | null> {
+  return findTrigger(ctx.db, a.id);
 }
 
-export const getTrigger = defineTool({
+export const getTrigger = withToolMetadata(defineTool({
   name: "get_trigger",
   description:
     "Get one opportunity in full: the brand, the competitor publishers it runs on, the resolved agency, the score breakdown, and evidence. Then call kit_view(id=\"adint\", view=\"trigger-detail\").",
   args,
-  load: (db, a: z.infer<typeof args>, _ctx) => loadTrigger(db, a),
-  handler: async (db, a, _ctx) => {
-    const t = await loadTrigger(db, a);
+  load: (ctx, a: z.infer<typeof args>) => loadTrigger(ctx, a),
+  handler: async (ctx, a) => {
+    const t = await loadTrigger(ctx, a);
     if (t === null) return kit.text(`No live trigger with id ${a.id}.`);
     const components = Object.entries(t.scoreComponents)
       .map(([k, v]) => `${k}=${v}`)
@@ -34,4 +34,4 @@ export const getTrigger = defineTool({
       ].join("\n")
     );
   },
-});
+}), "assist", "internal");

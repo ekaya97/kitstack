@@ -1,9 +1,10 @@
 import { z } from "zod";
 import { eq, gte, lte, isNull, desc, and, SQL } from "drizzle-orm";
 import { defineTool, kit } from "@kitstackco/sdk";
+import { withToolMetadata } from "../tool-metadata";
 import { deals } from "../schema";
 
-export const listDeals = defineTool({
+export const listDeals = withToolMetadata(defineTool({
   name: "list_deals",
   description: "List deals with optional filters",
   args: z.object({
@@ -14,7 +15,7 @@ export const listDeals = defineTool({
     max_value: z.number().optional().describe("Maximum value in cents"),
     limit: z.number().optional().default(25).describe("Max results"),
   }),
-  handler: async (db, args) => {
+  handler: async (ctx, args) => {
     const conditions: SQL[] = [isNull(deals.archivedAt)];
 
     if (args.stage) conditions.push(eq(deals.stage, args.stage));
@@ -39,4 +40,4 @@ export const listDeals = defineTool({
     }
     return kit.text(table);
   },
-});
+}), "assist", "sensitive");

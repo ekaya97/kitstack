@@ -1,9 +1,10 @@
 import { defineTool, kit } from "@kitstackco/sdk";
+import { withToolMetadata } from "../tool-metadata";
 import { z } from "zod";
 import { nanoid } from "nanoid";
 import { clients } from "../schema";
 
-export const addClient = defineTool({
+export const addClient = withToolMetadata(defineTool({
   name: "add_client",
   description: "Add a new client (company or person you do work for)",
   args: z.object({
@@ -13,10 +14,10 @@ export const addClient = defineTool({
     industry: z.string().describe("Industry or sector").optional(),
     notes: z.string().describe("Any notes about this client").optional(),
   }),
-  handler: async (db, args) => {
+  handler: async (ctx, args) => {
     const id = `cli_${nanoid()}`;
     const now = new Date().toISOString();
-    await db.insert(clients).values({
+    await ctx.db.insert(clients).values({
       id,
       name: args.name,
       contactName: args.contact_name ?? null,
@@ -28,4 +29,4 @@ export const addClient = defineTool({
     });
     return kit.result(kit.created(id, "client", `Client "${args.name}" added.`));
   },
-});
+}), "act", "internal");

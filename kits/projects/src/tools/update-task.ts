@@ -1,9 +1,10 @@
 import { defineTool, kit } from "@kitstackco/sdk";
+import { withToolMetadata } from "../tool-metadata";
 import { z } from "zod";
 import { eq, like, and } from "drizzle-orm";
 import { tasks, milestones } from "../schema";
 
-export const updateTask = defineTool({
+export const updateTask = withToolMetadata(defineTool({
   name: "update_task",
   description: "Update a task's status, priority, due date, or other details. Use this when the user says they finished, started, or changed a task.",
   args: z.object({
@@ -17,11 +18,11 @@ export const updateTask = defineTool({
     due_date: z.string().describe("Updated deadline (YYYY-MM-DD)").optional(),
     estimated_hours: z.number().describe("Updated estimate in hours").optional(),
   }),
-  handler: async (db, args) => {
+  handler: async (ctx, args) => {
     // Resolve task
     const [existing] = args.task.startsWith("tsk_")
-      ? await db.select().from(tasks).where(eq(tasks.id, args.task))
-      : await db.select().from(tasks).where(like(tasks.title, `%${args.task}%`)).limit(1);
+      ? await ctx.db.select().from(tasks).where(eq(tasks.id, args.task))
+      : await ctx.db.select().from(tasks).where(like(tasks.title, `%${args.task}%`)).limit(1);
 
     if (!existing) return kit.notFound("task", args.task);
 
@@ -37,23 +38,23 @@ export const updateTask = defineTool({
     if (args.due_date !== undefined) updates.dueDate = args.due_date;
     if (args.estimated_hours !== undefined) updates.estimatedHours = args.estimated_hours;
 
-    await db.update(tasks).set(updates).where(eq(tasks.id, existing.id));
+    await ctx.db.update(tasks).set(updates).where(eq(tasks.id, existing.id));
 
     // Check if all tasks in the milestone are done
     let hint = "";
     if (args.status === "done" && existing.milestoneId) {
-      const remaining = await db.select().from(tasks)
+      const remaining = await ctx.db.select().from(tasks)
         .where(and(
           eq(tasks.milestoneId, existing.milestoneId),
           like(tasks.status, "todo"),
         ));
-      const inProgress = await db.select().from(tasks)
+      const inProgress = await ctx.db.select().from(tasks)
         .where(and(
           eq(tasks.milestoneId, existing.milestoneId),
           eq(tasks.status, "in_progress"),
         ));
       if (remaining.length === 0 && inProgress.length === 0) {
-        const [ms] = await db.select().from(milestones)
+        const [ms] = await ctx.db.select().from(milestones)
           .where(eq(milestones.id, existing.milestoneId));
         if (ms && ms.status !== "completed") {
           hint = ` All tasks in milestone "${ms.name}" are done — consider completing it.`;
@@ -72,4 +73,4 @@ export const updateTask = defineTool({
       : `Task "${existing.title}" updated.${hint}`;
     return kit.result(kit.updated(existing.id, "task", msg));
   },
-});
+}), "act", "internal");

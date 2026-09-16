@@ -1,11 +1,12 @@
 import { z } from "zod";
 import { eq, like } from "drizzle-orm";
 import { defineTool, kit } from "@kitstackco/sdk";
+import { withToolMetadata } from "../tool-metadata";
 import type { KitResultFragment } from "@kitstackco/sdk";
 import { nanoid } from "nanoid";
 import { content, ideas, topics } from "../schema";
 
-export const createContent = defineTool({
+export const createContent = withToolMetadata(defineTool({
   name: "create_content",
   description:
     "Create a content piece — a draft post, article, newsletter, or thread. Optionally link to an existing idea. TRIGGER: user wants to write, draft, or create a post/article.",
@@ -26,7 +27,7 @@ export const createContent = defineTool({
     tags: z.string().optional().describe("Comma-separated tags"),
     notes: z.string().optional().describe("Additional notes or context"),
   }),
-  handler: async (db, args) => {
+  handler: async (ctx, args) => {
     const now = new Date().toISOString();
     const fragments: KitResultFragment[] = [];
 
@@ -50,7 +51,7 @@ export const createContent = defineTool({
 
     // Mark linked idea as "developing" if it was "captured"
     if (ideaId) {
-      const linked = await db.select().from(ideas).where(eq(ideas.id, ideaId)).limit(1);
+      const linked = await ctx.db.select().from(ideas).where(eq(ideas.id, ideaId)).limit(1);
       if (linked.length > 0 && linked[0].status === "captured") {
         await db
           .update(ideas)
@@ -69,7 +70,7 @@ export const createContent = defineTool({
         .limit(1);
       if (existing.length === 0) {
         const topicId = `top_${nanoid()}`;
-        await db.insert(topics).values({
+        await ctx.db.insert(topics).values({
           id: topicId,
           name: args.topic,
           contentCount: 1,
@@ -91,7 +92,7 @@ export const createContent = defineTool({
     const contentId = `cnt_${nanoid()}`;
     const status = args.scheduled_date ? "scheduled" : "draft";
 
-    await db.insert(content).values({
+    await ctx.db.insert(content).values({
       id: contentId,
       ideaId,
       title: args.title,
@@ -112,4 +113,4 @@ export const createContent = defineTool({
     fragments.push(kit.created(contentId, "content", `Content "${args.title}" created${statusNote}.`));
     return kit.result(fragments);
   },
-});
+}), "act", "internal");

@@ -1,9 +1,10 @@
 import { z } from "zod";
 import { defineTool, kit } from "@kitstackco/sdk";
+import { withToolMetadata } from "../tool-metadata";
 import { nanoid } from "nanoid";
 import { principles } from "../schema";
 
-export const addPrinciple = defineTool({
+export const addPrinciple = withToolMetadata(defineTool({
   name: "add_principle",
   description: "Extract and save a personal decision-making principle — a reusable lesson learned from past decisions",
   args: z.object({
@@ -11,11 +12,11 @@ export const addPrinciple = defineTool({
     description: z.string().optional().describe("Longer explanation of the principle and when it applies"),
     derived_from: z.string().optional().describe("Decision ID (dec_xxx) that led to this principle"),
   }),
-  handler: async (db, args) => {
+  handler: async (ctx, args) => {
     const id = `pri_${nanoid()}`;
     const now = new Date().toISOString();
 
-    await db.insert(principles).values({
+    await ctx.db.insert(principles).values({
       id,
       title: args.title,
       description: args.description ?? null,
@@ -26,4 +27,4 @@ export const addPrinciple = defineTool({
 
     return kit.result(kit.created(id, "principle", `Principle saved: "${args.title}"`));
   },
-});
+}), "act", "sensitive");

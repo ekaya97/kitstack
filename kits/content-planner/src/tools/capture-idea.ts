@@ -1,11 +1,12 @@
 import { z } from "zod";
 import { eq, like } from "drizzle-orm";
 import { defineTool, kit } from "@kitstackco/sdk";
+import { withToolMetadata } from "../tool-metadata";
 import type { KitResultFragment } from "@kitstackco/sdk";
 import { nanoid } from "nanoid";
 import { ideas, topics } from "../schema";
 
-export const captureIdea = defineTool({
+export const captureIdea = withToolMetadata(defineTool({
   name: "capture_idea",
   description:
     "Save a content idea for later development. TRIGGER: user mentions a content idea, says 'I should write about…', or wants to brainstorm topics.",
@@ -20,7 +21,7 @@ export const captureIdea = defineTool({
     inspiration: z.string().optional().describe("Where the idea came from"),
     priority: z.enum(["low", "medium", "high"]).optional().default("medium").describe("Idea priority: low, medium, or high"),
   }),
-  handler: async (db, args) => {
+  handler: async (ctx, args) => {
     const now = new Date().toISOString();
     const fragments: KitResultFragment[] = [];
 
@@ -34,7 +35,7 @@ export const captureIdea = defineTool({
 
       if (existing.length === 0) {
         const topicId = `top_${nanoid()}`;
-        await db.insert(topics).values({
+        await ctx.db.insert(topics).values({
           id: topicId,
           name: args.topic,
           contentCount: 0,
@@ -51,7 +52,7 @@ export const captureIdea = defineTool({
     }
 
     const ideaId = `idea_${nanoid()}`;
-    await db.insert(ideas).values({
+    await ctx.db.insert(ideas).values({
       id: ideaId,
       title: args.title,
       description: args.description ?? null,
@@ -67,4 +68,4 @@ export const captureIdea = defineTool({
     fragments.push(kit.created(ideaId, "idea", `Idea "${args.title}" captured.`));
     return kit.result(fragments);
   },
-});
+}), "act", "internal");

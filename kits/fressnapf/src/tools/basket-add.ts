@@ -1,11 +1,12 @@
 import { z } from "zod";
 import { and, eq } from "drizzle-orm";
 import { defineTool, kit } from "@kitstackco/sdk";
+import { withToolMetadata } from "../tool-metadata";
 import { nanoid } from "nanoid";
 import { products, basketLines } from "../schema";
 import { buildBasket, eur } from "../domain/basket";
 
-export const basketAdd = defineTool({
+export const basketAdd = withToolMetadata(defineTool({
   name: "basket_add",
   description:
     "Legt ein Produkt in den Warenkorb. Danach kit_view(id=\"fressnapf\", view=\"basket\") aufrufen, um den Korb zu zeigen.",
@@ -13,8 +14,8 @@ export const basketAdd = defineTool({
     product_id: z.string().describe("Fressnapf-Artikelnummer"),
     qty: z.number().optional().default(1).describe("Menge (Standard 1)"),
   }),
-  handler: async (db, args, ctx) => {
-    const prod = await db.select().from(products).where(eq(products.id, args.product_id)).limit(1);
+  handler: async (ctx, args) => {
+    const prod = await ctx.db.select().from(products).where(eq(products.id, args.product_id)).limit(1);
     if (!prod[0]) return kit.notFound("Produkt", args.product_id);
     const p = prod[0];
     const now = new Date().toISOString();
@@ -23,7 +24,7 @@ export const basketAdd = defineTool({
     const existing = await db
       .select()
       .from(basketLines)
-      .where(and(eq(basketLines.userId, ctx.userId), eq(basketLines.productId, p.id)))
+      .where(and(eq(basketLines.userId, ctx.identity.principal), eq(basketLines.productId, p.id)))
       .limit(1);
 
     let id: string;
@@ -35,9 +36,9 @@ export const basketAdd = defineTool({
         .where(eq(basketLines.id, id));
     } else {
       id = `bl_${nanoid()}`;
-      await db.insert(basketLines).values({
+      await ctx.db.insert(basketLines).values({
         id,
-        userId: ctx.userId,
+        userId: ctx.identity.principal,
         productId: p.id,
         qty,
         unitPrice: p.priceAmount,
@@ -48,7 +49,7 @@ export const basketAdd = defineTool({
       });
     }
 
-    const rows = await db.select().from(basketLines).where(eq(basketLines.userId, ctx.userId));
+    const rows = await ctx.db.select().from(basketLines).where(eq(basketLines.userId, ctx.identity.principal));
     const basket = buildBasket(rows);
     return kit.result(
       kit.updated(
@@ -58,4 +59,4 @@ export const basketAdd = defineTool({
       )
     );
   },
-});
+}), "act", "sensitive");

@@ -1,9 +1,10 @@
 import { z } from "zod";
 import { eq, like, isNull, desc, and, SQL } from "drizzle-orm";
 import { defineTool, kit } from "@kitstackco/sdk";
+import { withToolMetadata } from "../tool-metadata";
 import { contacts, companies } from "../schema";
 
-export const listContacts = defineTool({
+export const listContacts = withToolMetadata(defineTool({
   name: "list_contacts",
   description: "List contacts with optional filters",
   args: z.object({
@@ -13,7 +14,7 @@ export const listContacts = defineTool({
     tag: z.string().optional().describe("Filter by tag (partial match)"),
     limit: z.number().optional().default(25).describe("Max results"),
   }),
-  handler: async (db, args) => {
+  handler: async (ctx, args) => {
     const conditions: SQL[] = [isNull(contacts.archivedAt)];
 
     if (args.relationship) {
@@ -66,4 +67,4 @@ export const listContacts = defineTool({
     }
     return kit.text(table);
   },
-});
+}), "assist", "sensitive");

@@ -1,6 +1,7 @@
 import { z } from "zod";
 import { eq } from "drizzle-orm";
 import { defineTool, kit } from "@kitstackco/sdk";
+import { withToolMetadata } from "../tool-metadata";
 import { customAlphabet } from "nanoid";
 import { basketLines, orders } from "../schema";
 import { buildBasket, eur } from "../domain/basket";
@@ -8,7 +9,7 @@ import { MOCK_STORE, PICKUP_WINDOW } from "../domain/store";
 
 const orderNumber = customAlphabet("0123456789", 6);
 
-export const placeOrder = defineTool({
+export const placeOrder = withToolMetadata(defineTool({
   name: "place_order",
   description:
     "Löst eine Abholbestellung im Markt aus. Nur nach ausdrücklicher Bestätigung des Nutzers. Danach kit_view(id=\"fressnapf\", view=\"order_confirmation\") aufrufen. (Prototyp: Bestellung wird lokal erzeugt, kein echter Checkout.)",
@@ -18,8 +19,8 @@ export const placeOrder = defineTool({
       .optional()
       .describe(`Abholzeitfenster (Standard: '${PICKUP_WINDOW}')`),
   }),
-  handler: async (db, args, ctx) => {
-    const rows = await db.select().from(basketLines).where(eq(basketLines.userId, ctx.userId));
+  handler: async (ctx, args) => {
+    const rows = await ctx.db.select().from(basketLines).where(eq(basketLines.userId, ctx.identity.principal));
     if (rows.length === 0)
       return kit.conflict("Der Warenkorb ist leer — erst etwas hinzufügen, dann bestellen.");
 
@@ -28,9 +29,9 @@ export const placeOrder = defineTool({
     const now = new Date().toISOString();
     const pickupWindow = args.pickup_window ?? PICKUP_WINDOW;
 
-    await db.insert(orders).values({
+    await ctx.db.insert(orders).values({
       id,
-      userId: ctx.userId,
+      userId: ctx.identity.principal,
       store: JSON.stringify(MOCK_STORE),
       pickupWindow,
       subtotal: basket.subtotal,
@@ -47,4 +48,4 @@ export const placeOrder = defineTool({
       )
     );
   },
-});
+}), "act", "sensitive");

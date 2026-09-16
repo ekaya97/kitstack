@@ -1,15 +1,16 @@
 import { z } from "zod";
 import { isNull, isNotNull, lte, asc } from "drizzle-orm";
 import { defineTool, kit } from "@kitstackco/sdk";
+import { withToolMetadata } from "../tool-metadata";
 import { decisions } from "../schema";
 
-export const reviewDue = defineTool({
+export const reviewDue = withToolMetadata(defineTool({
   name: "review_due",
   description: "Show decisions that are due for review — either overdue or coming up in the next 7 days",
   args: z.object({
     days_ahead: z.number().optional().default(7).describe("How many days ahead to look (default 7)"),
   }),
-  handler: async (db, args) => {
+  handler: async (ctx, args) => {
     const today = new Date().toISOString().slice(0, 10);
     const ahead = new Date(Date.now() + args.days_ahead * 86400000).toISOString().slice(0, 10);
 
@@ -48,4 +49,4 @@ export const reviewDue = defineTool({
 
     return kit.text(sections.join("\n"));
   },
-});
+}), "assist", "sensitive");

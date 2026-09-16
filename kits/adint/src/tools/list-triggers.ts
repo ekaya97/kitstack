@@ -1,20 +1,20 @@
 import { z } from "zod";
-import type { LibSQLDatabase } from "drizzle-orm/libsql";
-import { defineTool, kit } from "@kitstackco/sdk";
+import { defineTool, kit, type KitContext } from "@kitstackco/sdk";
+import { withToolMetadata } from "../tool-metadata";
 import { listTriggers, type TriggerView } from "../domain/read-model.js";
 
-async function loadTriggers(db: LibSQLDatabase): Promise<TriggerView[]> {
-  return listTriggers(db);
+async function loadTriggers(ctx: KitContext): Promise<TriggerView[]> {
+  return listTriggers(ctx.db);
 }
 
-export const listTriggersTool = defineTool({
+export const listTriggersTool = withToolMetadata(defineTool({
   name: "list_triggers",
   description:
     "List ranked 'call this agency' opportunities: a brand on a live campaign running on competitors, not on Ströer. Then call kit_view(id=\"adint\", view=\"triggers\").",
   args: z.object({}),
-  load: (db, _a, _ctx) => loadTriggers(db),
-  handler: async (db, _a, _ctx) => {
-    const triggers = await loadTriggers(db);
+  load: (ctx, _a) => loadTriggers(ctx),
+  handler: async (ctx, _a) => {
+    const triggers = await loadTriggers(ctx);
     if (triggers.length === 0) {
       // Honest Stage-A state: triggers are produced by the campaigns/insight pipeline, which has
       // not run on the seeded data. The graph is the opportunity view meanwhile.
@@ -29,4 +29,4 @@ export const listTriggersTool = defineTool({
       `${triggers.length} live opportunities:\n${lines.join("\n")}\n\nShow them with kit_view(id="adint", view="triggers").`
     );
   },
-});
+}), "assist", "internal");

@@ -1,10 +1,11 @@
 import { defineTool, kit } from "@kitstackco/sdk";
+import { withToolMetadata } from "../tool-metadata";
 import { z } from "zod";
 import { nanoid } from "nanoid";
 import { eq, like, isNull } from "drizzle-orm";
 import { clients, projects } from "../schema";
 
-export const addProject = defineTool({
+export const addProject = withToolMetadata(defineTool({
   name: "add_project",
   description: "Create a new project, optionally linked to a client. If the client doesn't exist yet, it will be created automatically.",
   args: z.object({
@@ -23,13 +24,13 @@ export const addProject = defineTool({
       .describe("How the project is billed").optional(),
     tags: z.string().describe("Comma-separated tags").optional(),
   }),
-  handler: async (db, args) => {
+  handler: async (ctx, args) => {
     const now = new Date().toISOString();
     let clientId: string | null = null;
 
     if (args.client) {
       // Try to find existing client by name
-      const [existing] = await db.select().from(clients)
+      const [existing] = await ctx.db.select().from(clients)
         .where(like(clients.name, `%${args.client}%`))
         .limit(1);
 
@@ -38,7 +39,7 @@ export const addProject = defineTool({
       } else {
         // Auto-create client
         clientId = `cli_${nanoid()}`;
-        await db.insert(clients).values({
+        await ctx.db.insert(clients).values({
           id: clientId,
           name: args.client,
           createdAt: now,
@@ -48,7 +49,7 @@ export const addProject = defineTool({
     }
 
     const id = `prj_${nanoid()}`;
-    await db.insert(projects).values({
+    await ctx.db.insert(projects).values({
       id,
       clientId,
       name: args.name,
@@ -71,4 +72,4 @@ export const addProject = defineTool({
       : `Project "${args.name}" created.`;
     return kit.result(kit.created(id, "project", msg));
   },
-});
+}), "act", "internal");

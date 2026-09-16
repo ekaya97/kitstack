@@ -1,6 +1,6 @@
 import { z } from "zod";
-import type { LibSQLDatabase } from "drizzle-orm/libsql";
-import { defineTool, kit } from "@kitstackco/sdk";
+import { defineTool, kit, type KitContext } from "@kitstackco/sdk";
+import { withToolMetadata } from "../tool-metadata";
 import { buildAdGraph, type AdGraphViewModel } from "../domain/ad-graph.js";
 import { graphSlice } from "../domain/read-model.js";
 
@@ -16,22 +16,22 @@ const args = z.object({
 });
 
 // Standalone loader (not the tool const) so the handler can reuse it without a type cycle.
-async function loadGraph(db: LibSQLDatabase, a: z.infer<typeof args>): Promise<AdGraphViewModel> {
+async function loadGraph(ctx: KitContext, a: z.infer<typeof args>): Promise<AdGraphViewModel> {
   const limit = a.limit ?? NODE_LIMIT;
   // Overview collapses page/slot so buyers (brands) are the subject; focus keeps detail.
   const collapsePages = a.publisher === undefined;
-  const rows = await graphSlice(db, a.publisher, limit);
+  const rows = await graphSlice(ctx.db, a.publisher, limit);
   return buildAdGraph({ rows, limit, collapsePages });
 }
 
-export const adGraph = defineTool({
+export const adGraph = withToolMetadata(defineTool({
   name: "ad_graph",
   description:
     "Build the cross-publisher ad graph: which brands run on which publishers, and which run on competitors but NOT on Ströer (the opportunity). Omit `publisher` for the overview. Then call kit_view(id=\"adint\", view=\"graph\").",
   args,
-  load: (db, a: z.infer<typeof args>, _ctx) => loadGraph(db, a),
-  handler: async (db, a, _ctx) => {
-    const g = await loadGraph(db, a);
+  load: (ctx, a: z.infer<typeof args>) => loadGraph(ctx, a),
+  handler: async (ctx, a) => {
+    const g = await loadGraph(ctx, a);
     const s = g.stats;
     if (s.slots === 0) return kit.text("No captured ad slots for this scope yet.");
 
@@ -51,4 +51,4 @@ export const adGraph = defineTool({
     ];
     return kit.text(lines.filter(Boolean).join("\n"));
   },
-});
+}), "assist", "internal");

@@ -2,7 +2,7 @@ import { defineLoader } from "@kitstackco/sdk";
 import { isNull, desc } from "drizzle-orm";
 import { decisions, outcomes, principles } from "../../schema";
 
-export const loader = defineLoader(async (db) => {
+export const loader = defineLoader(async (ctx) => {
   const allDecisions = await db
     .select({
       id: decisions.id,

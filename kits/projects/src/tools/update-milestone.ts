@@ -1,9 +1,10 @@
 import { defineTool, kit } from "@kitstackco/sdk";
+import { withToolMetadata } from "../tool-metadata";
 import { z } from "zod";
 import { eq, like, and } from "drizzle-orm";
 import { milestones, tasks, projects } from "../schema";
 
-export const updateMilestone = defineTool({
+export const updateMilestone = withToolMetadata(defineTool({
   name: "update_milestone",
   description: "Update a milestone's status, name, due date, or description. Use this to mark a milestone as completed or in progress.",
   args: z.object({
@@ -14,10 +15,10 @@ export const updateMilestone = defineTool({
     description: z.string().describe("Updated description").optional(),
     due_date: z.string().describe("Updated deadline (YYYY-MM-DD)").optional(),
   }),
-  handler: async (db, args) => {
+  handler: async (ctx, args) => {
     const [existing] = args.milestone.startsWith("mil_")
-      ? await db.select().from(milestones).where(eq(milestones.id, args.milestone))
-      : await db.select().from(milestones).where(like(milestones.name, `%${args.milestone}%`)).limit(1);
+      ? await ctx.db.select().from(milestones).where(eq(milestones.id, args.milestone))
+      : await ctx.db.select().from(milestones).where(like(milestones.name, `%${args.milestone}%`)).limit(1);
 
     if (!existing) return kit.notFound("milestone", args.milestone);
 
@@ -31,7 +32,7 @@ export const updateMilestone = defineTool({
     if (args.description !== undefined) updates.description = args.description;
     if (args.due_date !== undefined) updates.dueDate = args.due_date;
 
-    await db.update(milestones).set(updates).where(eq(milestones.id, existing.id));
+    await ctx.db.update(milestones).set(updates).where(eq(milestones.id, existing.id));
 
     const changes: string[] = [];
     if (args.status !== undefined) changes.push(`status → ${args.status}`);
@@ -41,18 +42,18 @@ export const updateMilestone = defineTool({
     // If milestone completed, check if all milestones in the project are done
     let hint = "";
     if (args.status === "completed") {
-      const remaining = await db.select().from(milestones)
+      const remaining = await ctx.db.select().from(milestones)
         .where(and(
           eq(milestones.projectId, existing.projectId),
           like(milestones.status, "pending"),
         ));
-      const inProgress = await db.select().from(milestones)
+      const inProgress = await ctx.db.select().from(milestones)
         .where(and(
           eq(milestones.projectId, existing.projectId),
           eq(milestones.status, "in_progress"),
         ));
       if (remaining.length === 0 && inProgress.length === 0) {
-        const [project] = await db.select().from(projects)
+        const [project] = await ctx.db.select().from(projects)
           .where(eq(projects.id, existing.projectId));
         if (project && project.status !== "completed") {
           hint = ` All milestones in "${project.name}" are done — consider completing the project.`;
@@ -65,4 +66,4 @@ export const updateMilestone = defineTool({
       : `Milestone "${existing.name}" updated.${hint}`;
     return kit.result(kit.updated(existing.id, "milestone", msg));
   },
-});
+}), "act", "internal");
