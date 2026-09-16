@@ -1,6 +1,7 @@
 import { afterEach, describe, expect, it } from "vitest";
 import { createClient, type Client } from "@libsql/client";
 import {
+  createScheduledCallJob,
   createScheduledCallStore,
   ScheduledCallPoller,
   type ScheduledCallOperations,
@@ -88,6 +89,27 @@ describe("persisted scheduled calls", () => {
     expect(results.filter(Boolean)).toHaveLength(1);
     expect(started).toHaveLength(1);
     expect(await store.get("org-demo", "scheduled-1")).toMatchObject({ status: "started", attemptCount: 1 });
+  });
+
+  it("invokes a declared SDK job through the scheduler path", async () => {
+    const clock = new FakeClock("2026-09-15T20:05:00.000Z");
+    const store = createScheduledCallStore(database(), { now: clock.now, createScheduledCallId: () => "scheduled-1" });
+    await store.schedule(input(clock.now()));
+    const invoked: string[] = [];
+    const poller = new ScheduledCallPoller({
+      operations: store,
+      orgId: "org-demo",
+      workerId: "worker-1",
+      now: clock.now,
+      job: createScheduledCallJob(async (record) => {
+        invoked.push(record.scheduledCallId);
+        return "CA-job-1";
+      }),
+    });
+
+    const result = await poller.pollOnce();
+    expect(result).toMatchObject({ status: "started", providerCallId: "CA-job-1", attemptCount: 1 });
+    expect(invoked).toEqual(["scheduled-1"]);
   });
 
   it("marks an uncertain starting job failed after its lease expires and never retries it", async () => {

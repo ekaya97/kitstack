@@ -13,7 +13,7 @@ import { createDemoApp, type DemoApp } from "../composition/app/index.js";
 import type { McpAuthMode } from "../adapters/auth/mcp.js";
 import { handleDemoAppRequest, type DemoLiveVoiceRoute, type DemoAppRouteRequest } from "./http/app.js";
 import { attachVoiceMediaBridge, handleVoiceProviderStatus, startScheduledLiveVoiceCall } from "./http/voice.js";
-import { ScheduledCallPoller, type ScheduledCallPoller as ScheduledCallPollerType } from "../scheduler/index.js";
+import { createScheduledCallJob, ScheduledCallPoller, type ScheduledCallPoller as ScheduledCallPollerType } from "../scheduler/index.js";
 import {
   createDefineAgentVoiceLoop,
   createOpenAIRealtimeSocketFactory,
@@ -361,19 +361,20 @@ async function composeLiveVoiceRoute(app: DemoApp): Promise<DemoLiveVoiceRoute |
 }
 
 function createLiveVoiceScheduler(app: DemoApp, liveVoice: DemoLiveVoiceRoute): ScheduledCallPollerType {
+  const startCall = async (job: import("../scheduler/index.js").ScheduledCallRecord) => {
+    // The session is read from DebriefService's durable hydration, not a
+    // process-local voice context, before the provider seam is invoked.
+    const session = await app.debrief.hydrateSession(job.sessionId);
+    if (session.orgId !== job.orgId) throw new Error("Scheduled call organization mismatch");
+    const result = await startScheduledLiveVoiceCall(job.sessionId, liveVoice.http);
+    return result.callId;
+  };
   return new ScheduledCallPoller({
     operations: app.scheduler,
     orgId: app.orgId,
     workerId: process.env.KITSTACK_DEMO_SCHEDULER_WORKER_ID?.trim() || `demo-voice-${process.pid}`,
     intervalMs: Number(process.env.KITSTACK_DEMO_SCHEDULER_INTERVAL_MS ?? 1_000),
-    startCall: async (job) => {
-      // The session is read from DebriefService's durable hydration, not a
-      // process-local voice context, before the provider seam is invoked.
-      const session = await app.debrief.hydrateSession(job.sessionId);
-      if (session.orgId !== job.orgId) throw new Error("Scheduled call organization mismatch");
-      const result = await startScheduledLiveVoiceCall(job.sessionId, liveVoice.http);
-      return result.callId;
-    },
+    job: createScheduledCallJob(startCall),
     onProviderFailure: async (job, error) => {
       try { await app.debrief.markFailed(job.sessionId, error); } catch { /* Keep the scheduler failure durable. */ }
     },
