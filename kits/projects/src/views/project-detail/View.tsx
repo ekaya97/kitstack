@@ -26,7 +26,7 @@ const PRIORITY_COLORS: Record<string, string> = {
 };
 
 export function ProjectDetailView({ data }: { data: Data }) {
-  if (!data.project) {
+  if (!data || !data.project) {
     return <div className="p-4 text-ks-muted">No project found.</div>;
   }
 

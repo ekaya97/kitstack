@@ -33,7 +33,7 @@ export default defineView({
     itemCount: 2,
     subtotal: 17.98,
     friendsPoints: 17,
-    store: { name: "Fressnapf Krefeld", address: "Hafelsstraße 250, 47809 Krefeld" },
+    store: { id: "store-krefeld", name: "Fressnapf Krefeld", address: "Hafelsstraße 250, 47809 Krefeld", pickupToday: true },
     pickupWindow: "heute ab 16:00",
   },
 });

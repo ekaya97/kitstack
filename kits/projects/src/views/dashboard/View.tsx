@@ -4,6 +4,10 @@ import type { loader } from "./loader";
 type Data = ViewProps<typeof loader>["data"];
 
 export function DashboardView({ data }: { data: Data }) {
+  if (!data) {
+    return <div className="p-4 text-ks-muted">No project data.</div>;
+  }
+
   const totalWeekMinutes = data.weeklyTime.reduce((sum, w) => sum + w.totalMinutes, 0);
 
   return (

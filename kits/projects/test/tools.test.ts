@@ -2,6 +2,13 @@ import { describe, it, expect, beforeAll, afterEach } from "vitest";
 import { createTestKit } from "@kitstackco/sdk/testing";
 import kit from "../kit.config";
 
+type TestKitResult = Awaited<ReturnType<Awaited<ReturnType<typeof createTestKit>>["call"]>>;
+
+function textOf(result: TestKitResult): string {
+  const block = result.content[0];
+  return block.type === "text" ? block.text : "";
+}
+
 describe("projects kit", () => {
   let testKit: Awaited<ReturnType<typeof createTestKit>>;
 
@@ -18,7 +25,7 @@ describe("projects kit", () => {
   it("adds a client", async () => {
     const result = await testKit.call("add_client", { name: "Müller GmbH", industry: "Manufacturing" });
     expect(result.isError).toBeUndefined();
-    expect(result.content[0].text).toContain("Müller GmbH");
+    expect(textOf(result)).toContain("Müller GmbH");
   });
 
   // --- Project tools ---
@@ -32,8 +39,8 @@ describe("projects kit", () => {
       billing_type: "fixed",
     });
     expect(result.isError).toBeUndefined();
-    expect(result.content[0].text).toContain("Brand Redesign");
-    expect(result.content[0].text).toContain("Müller GmbH");
+    expect(textOf(result)).toContain("Brand Redesign");
+    expect(textOf(result)).toContain("Müller GmbH");
   });
 
   it("adds a project and reuses existing client", async () => {
@@ -43,28 +50,28 @@ describe("projects kit", () => {
       client: "Müller",
     });
     expect(result.isError).toBeUndefined();
-    expect(result.content[0].text).toContain("Website Relaunch");
+    expect(textOf(result)).toContain("Website Relaunch");
   });
 
   it("lists projects (empty)", async () => {
     const result = await testKit.call("list_projects", {});
     expect(result.isError).toBeUndefined();
-    expect(result.content[0].text).toContain("No projects found");
+    expect(textOf(result)).toContain("No projects found");
   });
 
   it("lists projects with data", async () => {
     await testKit.call("add_project", { name: "Alpha" });
     await testKit.call("add_project", { name: "Beta" });
     const result = await testKit.call("list_projects", {});
-    expect(result.content[0].text).toContain("Alpha");
-    expect(result.content[0].text).toContain("Beta");
+    expect(textOf(result)).toContain("Alpha");
+    expect(textOf(result)).toContain("Beta");
   });
 
   it("updates project status", async () => {
     await testKit.call("add_project", { name: "Test Project" });
     const result = await testKit.call("update_project", { project: "Test Project", status: "paused" });
     expect(result.isError).toBeUndefined();
-    expect(result.content[0].text).toContain("updated");
+    expect(textOf(result)).toContain("updated");
   });
 
   // --- Milestone tools ---
@@ -77,8 +84,8 @@ describe("projects kit", () => {
       due_date: "2026-05-20",
     });
     expect(result.isError).toBeUndefined();
-    expect(result.content[0].text).toContain("Logo Concepts");
-    expect(result.content[0].text).toContain("Redesign");
+    expect(textOf(result)).toContain("Logo Concepts");
+    expect(textOf(result)).toContain("Redesign");
   });
 
   it("returns not found for missing project milestone", async () => {
@@ -99,7 +106,7 @@ describe("projects kit", () => {
       priority: "high",
     });
     expect(result.isError).toBeUndefined();
-    expect(result.content[0].text).toContain("Design homepage");
+    expect(textOf(result)).toContain("Design homepage");
   });
 
   it("updates task status to done", async () => {
@@ -107,7 +114,7 @@ describe("projects kit", () => {
     await testKit.call("add_task", { project: "Website", title: "Wireframes" });
     const result = await testKit.call("update_task", { task: "Wireframes", status: "done" });
     expect(result.isError).toBeUndefined();
-    expect(result.content[0].text).toContain("updated");
+    expect(textOf(result)).toContain("updated");
   });
 
   it("lists tasks across projects", async () => {
@@ -116,8 +123,8 @@ describe("projects kit", () => {
     await testKit.call("add_task", { project: "A", title: "Task A1" });
     await testKit.call("add_task", { project: "B", title: "Task B1" });
     const result = await testKit.call("list_tasks", {});
-    expect(result.content[0].text).toContain("Task A1");
-    expect(result.content[0].text).toContain("Task B1");
+    expect(textOf(result)).toContain("Task A1");
+    expect(textOf(result)).toContain("Task B1");
   });
 
   // --- Time logging ---
@@ -130,8 +137,8 @@ describe("projects kit", () => {
       description: "Logo exploration",
     });
     expect(result.isError).toBeUndefined();
-    expect(result.content[0].text).toContain("2.0h");
-    expect(result.content[0].text).toContain("Müller Redesign");
+    expect(textOf(result)).toContain("2.0h");
+    expect(textOf(result)).toContain("Müller Redesign");
   });
 
   // --- Read / aggregate tools ---
@@ -142,15 +149,15 @@ describe("projects kit", () => {
     await testKit.call("log_time", { project: "Big Project", duration_minutes: 60 });
     const result = await testKit.call("project_overview", { project: "Big Project" });
     expect(result.isError).toBeUndefined();
-    expect(result.content[0].text).toContain("Big Project");
-    expect(result.content[0].text).toContain("Step 1");
+    expect(textOf(result)).toContain("Big Project");
+    expect(textOf(result)).toContain("Step 1");
   });
 
   it("shows dashboard", async () => {
     await testKit.call("add_project", { name: "Active One" });
     const result = await testKit.call("dashboard", {});
     expect(result.isError).toBeUndefined();
-    expect(result.content[0].text).toContain("Dashboard");
+    expect(textOf(result)).toContain("Dashboard");
   });
 
   it("shows time report", async () => {
@@ -158,7 +165,7 @@ describe("projects kit", () => {
     await testKit.call("log_time", { project: "Time Test", duration_minutes: 90, date: new Date().toISOString().split("T")[0] });
     const result = await testKit.call("time_report", { period: "this_month" });
     expect(result.isError).toBeUndefined();
-    expect(result.content[0].text).toContain("Time Test");
+    expect(textOf(result)).toContain("Time Test");
   });
 
   it("shows budget status", async () => {
@@ -171,8 +178,8 @@ describe("projects kit", () => {
     await testKit.call("log_time", { project: "Budget Test", duration_minutes: 2400 });
     const result = await testKit.call("budget_status", { project: "Budget Test" });
     expect(result.isError).toBeUndefined();
-    expect(result.content[0].text).toContain("Budget Status");
-    expect(result.content[0].text).toContain("€5000");
+    expect(textOf(result)).toContain("Budget Status");
+    expect(textOf(result)).toContain("€5000");
   });
 
   // --- Archive ---
@@ -181,10 +188,10 @@ describe("projects kit", () => {
     await testKit.call("add_project", { name: "Old Project" });
     const result = await testKit.call("archive", { entity_type: "project", name_or_id: "Old Project" });
     expect(result.isError).toBeUndefined();
-    expect(result.content[0].text).toContain("archived");
+    expect(textOf(result)).toContain("archived");
 
     // Should not appear in list
     const list = await testKit.call("list_projects", {});
-    expect(list.content[0].text).toContain("No projects found");
+    expect(textOf(list)).toContain("No projects found");
   });
 });
