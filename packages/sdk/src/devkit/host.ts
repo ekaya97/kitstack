@@ -33,7 +33,7 @@ export interface ToolCallLog {
  * const host = createMcpAppsHost({
  *   kit,
  *   db,
- *   ctx: { userId: "dev-user", kitId: kit.id },
+ *   ctx,
  *   onToolCall: (log) => console.log(`${log.toolName} took ${log.durationMs}ms`),
  * });
  * ```
@@ -231,7 +231,7 @@ export function createMcpAppsHost(options: McpAppsHostOptions) {
     const start = Date.now();
     try {
       const parsedArgs = tool.args.parse(args);
-      const result = await tool.handler!(db, parsedArgs, ctx);
+      const result = await tool.handler!(ctx, parsedArgs);
       const durationMs = Date.now() - start;
 
       const log: ToolCallLog = { timestamp: start, toolName, args, result, durationMs };
@@ -268,7 +268,7 @@ export function createMcpAppsHost(options: McpAppsHostOptions) {
     }
 
     try {
-      const data = await view.loader(db, ctx);
+      const data = await view.loader(ctx);
       return {
         jsonrpc: "2.0",
         id,
@@ -296,7 +296,7 @@ export function createMcpAppsHost(options: McpAppsHostOptions) {
     const view = kit.views?.find((v) => v.slug === viewSlug);
     if (!view) return null;
 
-    const data = await view.loader(db, ctx);
+    const data = await view.loader(ctx);
 
     return {
       jsonrpc: "2.0",

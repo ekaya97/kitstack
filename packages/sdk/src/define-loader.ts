@@ -1,4 +1,3 @@
-import type { LibSQLDatabase } from "drizzle-orm/libsql";
 import type { KitContext } from "./types";
 
 /**
@@ -16,8 +15,8 @@ import type { KitContext } from "./types";
  * import { defineLoader } from "@kitstack/sdk";
  * import { listContacts } from "../../tools/list-contacts";
  *
- * export const loader = defineLoader(async (db, ctx) => {
- *   return listContacts.load(db, { limit: 100 }, ctx);
+ * export const loader = defineLoader(async (ctx) => {
+ *   return listContacts.load(ctx, { limit: 100 });
  * });
  * ```
  *
@@ -28,17 +27,17 @@ import type { KitContext } from "./types";
  * import { pipelineDashboard } from "../../tools/pipeline-dashboard";
  * import { listContacts } from "../../tools/list-contacts";
  *
- * export const loader = defineLoader(async (db, ctx) => {
+ * export const loader = defineLoader(async (ctx) => {
  *   const [dashboard, contacts] = await Promise.all([
- *     pipelineDashboard.load(db, {}, ctx),
- *     listContacts.load(db, { limit: 5 }, ctx),
+ *     pipelineDashboard.load(ctx, {}),
+ *     listContacts.load(ctx, { limit: 5 }),
  *   ]);
  *   return { dashboard, recentContacts: contacts };
  * });
  * ```
  */
 export function defineLoader<T>(
-  fn: (db: LibSQLDatabase, ctx: KitContext) => Promise<T>
+  fn: (ctx: KitContext) => Promise<T>
 ): typeof fn {
   return fn;
 }

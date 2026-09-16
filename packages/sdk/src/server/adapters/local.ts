@@ -1,5 +1,6 @@
 import type { LibSQLDatabase } from "drizzle-orm/libsql";
 import type { KitDefinition, KitToolResult, KitContext, ToolDefinition, AuthzRequirement } from "../../types";
+import { createKitContext } from "../../context";
 import type { KitServerAdapter, ResolvedKit } from "../types";
 import { zodToJsonSchema } from "../../runtime/zod-to-json-schema";
 import { generateShell } from "../../shell-template";
@@ -11,6 +12,8 @@ export interface LocalAdapterOptions {
   db: LibSQLDatabase;
   /** User ID for single-user mode. Default: "dev-user". */
   userId?: string;
+  /** Host-supplied request context fields other than the database binding. */
+  context?: Partial<KitContext>;
   /** Pre-built shell HTML. If omitted, generated from shell-template. */
   shellHtml?: string;
   /** CDN URL for platform assets. */
@@ -85,7 +88,27 @@ export function localAdapter(options: LocalAdapterOptions): KitServerAdapter {
   };
 
   function makeCtx(userId: string): KitContext {
-    return { userId: userId || defaultUserId, kitId: kit.id };
+    const effectiveUserId = userId || defaultUserId;
+    const base = options.context;
+    return createKitContext({
+      db,
+      params: base?.params,
+      connectors: base?.connectors,
+      identity: {
+        principal: effectiveUserId,
+        actor: effectiveUserId,
+        ...base?.identity,
+      },
+      channel: { kind: "internal", ...base?.channel },
+      session: {
+        id: crypto.randomUUID(),
+        traceId: crypto.randomUUID(),
+        ...base?.session,
+      },
+      telemetry: base?.telemetry,
+      audit: base?.audit,
+      log: base?.log,
+    });
   }
 
   return {
@@ -129,7 +152,7 @@ export function localAdapter(options: LocalAdapterOptions): KitServerAdapter {
         }
       }
 
-      return tool.handler!(db, parsed.data, ctx);
+      return tool.handler!(ctx, parsed.data);
     },
 
     async executeLoader(kitId, viewSlug, userId) {
@@ -137,7 +160,7 @@ export function localAdapter(options: LocalAdapterOptions): KitServerAdapter {
       if (!view) {
         throw new Error(`Unknown view: "${viewSlug}"`);
       }
-      return view.loader(db, makeCtx(userId));
+      return view.loader(makeCtx(userId));
     },
 
     async getShellHtml() {

@@ -18,6 +18,7 @@ import { resolve, relative } from "node:path";
 import { spawn } from "node:child_process";
 import type { LibSQLDatabase } from "drizzle-orm/libsql";
 import type { KitDefinition, KitContext } from "../types";
+import { createKitContext } from "../context";
 import { generateProxyHtml } from "./proxy";
 
 export interface DevKitServerOptions {
@@ -31,7 +32,11 @@ export async function startDevKitServer(options: DevKitServerOptions): Promise<{
   const { kit, db, port = 5174 } = options;
   const vitePort = port + 1;
   const kitRoot = options.kitRoot || process.cwd();
-  const ctx: KitContext = { userId: "dev-user", kitId: kit.id };
+  const ctx: KitContext = createKitContext({
+    db,
+    identity: { principal: "dev-user", actor: "dev-user" },
+    channel: { kind: "devkit" },
+  });
 
   const toolMap = new Map(kit.tools.map((t) => [t.name, t]));
   const viewMap = new Map((kit.views ?? []).map((v) => [v.slug, v]));
@@ -245,7 +250,7 @@ module.exports = {
         return;
       }
       try {
-        const data = await view.loader(db, ctx);
+        const data = await view.loader(ctx);
         res.writeHead(200, { "Content-Type": "application/json" });
         res.end(JSON.stringify(data));
       } catch (err: any) {
@@ -269,7 +274,7 @@ module.exports = {
       }
       try {
         const parsed = tool.args.parse(args);
-        const result = await tool.handler!(db, parsed, ctx);
+        const result = await tool.handler!(ctx, parsed);
         res.writeHead(200, { "Content-Type": "application/json" });
         res.end(JSON.stringify(result));
       } catch (err: any) {

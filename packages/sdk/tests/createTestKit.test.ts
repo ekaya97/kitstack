@@ -16,10 +16,10 @@ const addItem = defineTool({
     name: z.string().describe("Item name"),
     quantity: z.number().optional().describe("How many"),
   }),
-  handler: async (db, args, ctx) => {
+  handler: async (ctx, args) => {
     const id = crypto.randomUUID();
     const qty = args.quantity ?? 1;
-    await db.run(sql`INSERT INTO items (id, name, quantity, owner) VALUES (${id}, ${args.name}, ${qty}, ${ctx.userId})`);
+    await ctx.db.run(sql`INSERT INTO items (id, name, quantity, owner) VALUES (${id}, ${args.name}, ${qty}, ${ctx.identity.principal})`);
     return kit.text(`Added "${args.name}" (qty: ${qty})`);
   },
 });
@@ -28,13 +28,13 @@ const listItems = defineTool({
   name: "list_items",
   description: "List all items in the inventory",
   args: z.object({}),
-  load: async (db) => {
-    return db.all<{ id: string; name: string; quantity: number; owner: string }>(
+  load: async (ctx) => {
+    return ctx.db.all<{ id: string; name: string; quantity: number; owner: string }>(
       sql`SELECT * FROM items ORDER BY name`
     );
   },
-  handler: async (db, _args, _ctx) => {
-    const rows = await db.all<{ name: string; quantity: number }>(
+  handler: async (ctx, _args) => {
+    const rows = await ctx.db.all<{ name: string; quantity: number }>(
       sql`SELECT * FROM items ORDER BY name`
     );
     if (rows.length === 0) return kit.text("No items.");
@@ -47,8 +47,8 @@ const countItems = defineTool({
   name: "count_items",
   description: "Count all items in the inventory",
   args: z.object({}),
-  load: async (db) => {
-    return db.get<{ total: number }>(sql`SELECT COUNT(*) as total FROM items`);
+  load: async (ctx) => {
+    return ctx.db.get<{ total: number }>(sql`SELECT COUNT(*) as total FROM items`);
   },
 });
 
@@ -148,7 +148,7 @@ describe("createTestKit", () => {
 
   it("callAs() uses custom context", async () => {
     testKit = await createTestKit(testKitDef);
-    await testKit.callAs({ userId: "alice" }, "add_item", { name: "Alice's Item" });
+    await testKit.callAs({ identity: { principal: "alice", actor: "alice" } }, "add_item", { name: "Alice's Item" });
 
     const rows = await testKit.db.all<{ owner: string }>(
       sql`SELECT owner FROM items`
@@ -156,7 +156,7 @@ describe("createTestKit", () => {
     expect(rows[0].owner).toBe("alice");
   });
 
-  it("callAs() default userId is test-user", async () => {
+  it("call() default principal is test-user", async () => {
     testKit = await createTestKit(testKitDef);
     await testKit.call("add_item", { name: "Default Owner" });
 

@@ -222,6 +222,7 @@ export async function buildKit(kitRoot: string) {
   writeFileSync(generatedHandlerPath, `
 import { createClient } from "@libsql/client/http";
 import { drizzle } from "drizzle-orm/libsql/web";
+import { createKitContext } from "@kitstackco/sdk";
 import kit from ${JSON.stringify(configPath)};
 
 interface KitInvocation {
@@ -232,6 +233,10 @@ interface KitInvocation {
   kitId: string;
   dbUrl: string;
   dbToken: string;
+  params?: Record<string, unknown>;
+  sessionId?: string;
+  traceId?: string;
+  parentId?: string;
 }
 
 const toolMap = new Map(kit.tools.map((t: any) => [t.name, t]));
@@ -240,12 +245,22 @@ const viewMap = new Map((kit.views ?? []).map((v: any) => [v.slug, v]));
 export const handler = async (event: KitInvocation) => {
   const client = createClient({ url: event.dbUrl, authToken: event.dbToken });
   const db = drizzle(client);
-  const ctx = { userId: event.userId, kitId: event.kitId };
+  const ctx = createKitContext({
+    db,
+    params: event.params,
+    identity: { principal: event.userId, actor: event.userId },
+    channel: { kind: "http" },
+    session: {
+      id: event.sessionId ?? crypto.randomUUID(),
+      traceId: event.traceId ?? crypto.randomUUID(),
+      parentId: event.parentId,
+    },
+  });
 
   if (event.loaderSlug) {
     const view = viewMap.get(event.loaderSlug);
     if (!view) return { data: null, error: \`Unknown view: \${event.loaderSlug}\` };
-    try { return { data: await view.loader(db, ctx) }; }
+    try { return { data: await view.loader(ctx) }; }
     catch (err: any) { return { data: null, error: err.message }; }
   }
 
@@ -261,7 +276,7 @@ export const handler = async (event: KitInvocation) => {
     return { content: [{ type: "text", text: \`Invalid arguments: \${parsed.error.issues.map((i: any) => \`\${i.path.join(".")}: \${i.message}\`).join(", ")}\` }], isError: true };
   }
 
-  return await tool.handler(db, parsed.data, ctx);
+  return await tool.handler(ctx, parsed.data);
 };
 `);
 

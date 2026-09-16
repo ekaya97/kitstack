@@ -3,27 +3,89 @@ import type { LibSQLDatabase } from "drizzle-orm/libsql";
 
 // --- Context ---
 
+/** The storage handle supplied by the host for a request. */
+export type StorageBinding = LibSQLDatabase;
+
+/** The authenticated subject and the actor making a request on its behalf. */
+export interface RequestIdentity {
+  principal: string;
+  actor: string;
+  /** Optional delegation chain or host-issued delegation identifier. */
+  delegation?: string | Readonly<Record<string, unknown>>;
+}
+
+/** Channel metadata preserved across a request's capability calls. */
+export interface ChannelContext {
+  kind: string;
+  id?: string;
+  metadata?: Readonly<Record<string, unknown>>;
+}
+
+/** Request/session correlation fields used by telemetry and audit sinks. */
+export interface SessionContext {
+  id: string;
+  traceId: string;
+  parentId?: string;
+}
+
+export type TelemetryAttributes = Readonly<Record<string, string | number | boolean | null>>;
+
+/** Minimal telemetry seam; hosts may adapt this to OpenTelemetry or another backend. */
+export interface TelemetrySink {
+  event(name: string, attributes?: TelemetryAttributes): void | Promise<void>;
+  metric(name: string, value: number, attributes?: TelemetryAttributes): void | Promise<void>;
+}
+
+/** Audit seam for durable, policy-relevant actions. */
+export interface AuditSink {
+  record(event: {
+    action: string;
+    outcome?: "success" | "failure" | "denied";
+    attributes?: Readonly<Record<string, unknown>>;
+  }): void | Promise<void>;
+}
+
+/** Host logging seam that keeps capability code independent of a logger package. */
+export interface Logger {
+  debug(message: string, attributes?: Readonly<Record<string, unknown>>): void;
+  info(message: string, attributes?: Readonly<Record<string, unknown>>): void;
+  warn(message: string, attributes?: Readonly<Record<string, unknown>>): void;
+  error(message: string, attributes?: Readonly<Record<string, unknown>>): void;
+}
+
+/** Placeholder registry seam for request-scoped external connectors. */
+export interface ConnectorRegistry {
+  get<T = unknown>(id: string): T | undefined;
+  require<T = unknown>(id: string): T;
+  has(id: string): boolean;
+}
+
 /**
  * Runtime context passed to every tool handler and loader invocation.
  *
- * Provides identity (`userId`) and kit scoping (`kitId`) without coupling
- * to infrastructure. In production the router populates this from the
- * authenticated session; in tests and dev mode, defaults are used.
+ * Hosts construct one instance per request. Instructions and memory are
+ * composed capabilities, not implicit context fields.
  *
  * @example
  * ```typescript
- * // Inside a tool handler — ctx is injected by the runtime
- * handler: async (db, args, ctx) => {
- *   const rows = await db.select().from(contacts)
- *     .where(eq(contacts.ownerId, ctx.userId));
+ * handler: async (ctx, args) => {
+ *   const rows = await ctx.db.select().from(contacts);
+ *   ctx.telemetry.event("contacts.loaded", { count: rows.length });
  *   return kit.json(rows);
  * }
  * ```
  */
 export interface KitContext {
-  userId: string;
-  kitId: string;
-  params?: Record<string, string>;
+  db: StorageBinding;
+  /** Request parameters supplied by the host for a view or capability call. */
+  params: Readonly<Record<string, unknown>>;
+  connectors: ConnectorRegistry;
+  identity: RequestIdentity;
+  channel: ChannelContext;
+  session: SessionContext;
+  telemetry: TelemetrySink;
+  audit: AuditSink;
+  log: Logger;
 }
 
 // --- Tool Result ---
@@ -91,14 +153,14 @@ export interface ToolBase {
 
 /** Tool with load() (handler auto-generated if omitted) */
 interface ToolWithLoad extends ToolBase {
-  load: (db: LibSQLDatabase, args: any, ctx: KitContext) => Promise<any>;
-  handler?: (db: LibSQLDatabase, args: any, ctx: KitContext) => Promise<KitToolResult>;
+  load: (ctx: KitContext, args: any) => Promise<any>;
+  handler?: (ctx: KitContext, args: any) => Promise<KitToolResult>;
 }
 
 /** Tool with handler() only (no data layer) */
 interface ToolHandlerOnly extends ToolBase {
   load?: undefined;
-  handler: (db: LibSQLDatabase, args: any, ctx: KitContext) => Promise<KitToolResult>;
+  handler: (ctx: KitContext, args: any) => Promise<KitToolResult>;
 }
 
 /**
@@ -114,8 +176,8 @@ interface ToolHandlerOnly extends ToolBase {
  *   description: "List all contacts in the CRM",
  *   args: z.object({ limit: z.number().optional().describe("Max results") }),
  *   load: loadContacts,
- *   handler: async (db, args, ctx) => {
- *     const data = await loadContacts(db, args, ctx);
+ *   handler: async (ctx, args) => {
+ *     const data = await loadContacts(ctx, args);
  *     return kit.text(formatTable(data));
  *   },
  * });
@@ -125,8 +187,8 @@ interface ToolHandlerOnly extends ToolBase {
  *   name: "add_contact",
  *   description: "Add a new contact to the CRM",
  *   args: z.object({ name: z.string() }),
- *   handler: async (db, args, ctx) => {
- *     await db.insert(contacts).values({ id: nanoid(), name: args.name });
+ *   handler: async (ctx, args) => {
+ *     await ctx.db.insert(contacts).values({ id: nanoid(), name: args.name });
  *     return kit.text(`Contact "${args.name}" added.`);
  *   },
  * });
@@ -137,15 +199,12 @@ export type ToolDefinition = ToolWithLoad | ToolHandlerOnly;
 // --- Loader ---
 
 /**
- * A server-side data function for a view. Receives the database and context,
+ * A server-side data function for a view. Receives the request context and
  * returns typed data that becomes the view component's props.
  *
  * Create loaders with {@link defineLoader}.
  */
-export type LoaderFn = (
-  db: LibSQLDatabase,
-  ctx: KitContext
-) => Promise<unknown>;
+export type LoaderFn = (ctx: KitContext) => Promise<unknown>;
 
 /**
  * Extract the return type from a view definition's loader.
@@ -494,6 +553,10 @@ export interface KitToolInvocation {
   kitId: string;
   dbUrl: string;
   dbToken: string;
+  params?: Record<string, unknown>;
+  sessionId?: string;
+  traceId?: string;
+  parentId?: string;
 }
 
 /**

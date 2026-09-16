@@ -41,15 +41,20 @@ interface ProxyResult {
  * ```typescript
  * // infra/runtime/third-party-handler.ts
  * import { createProxiedDbClient } from "@kitstack/sdk/runtime/proxied-db";
+ * import { createKitContext } from "@kitstack/sdk";
  * import kit from "./kit.mjs";
  *
  * export async function main(event) {
  *   const db = createProxiedDbClient(event.routerArn, event.invocationToken);
- *   const ctx = { userId: event.userId, kitId: event.kitId };
+ *   const ctx = createKitContext({
+ *     db,
+ *     identity: { principal: event.userId, actor: event.userId },
+ *     channel: { kind: "internal" },
+ *   });
  *
  *   const tool = kit.tools.find(t => t.name === event.toolName);
  *   const parsed = tool.args.parse(event.args);
- *   return tool.handler(db, parsed, ctx);
+ *   return tool.handler(ctx, parsed);
  * }
  * ```
  */

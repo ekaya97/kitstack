@@ -23,18 +23,18 @@ const addItem = defineTool({
     name: z.string().describe("Item name"),
     quantity: z.number().optional().describe("How many"),
   }),
-  handler: async (db, args, ctx) => {
+  handler: async (ctx, args) => {
     const id = crypto.randomUUID();
     const qty = args.quantity ?? 1;
-    await db.run(
+    await ctx.db.run(
       sql`INSERT INTO items (id, name, quantity) VALUES (${id}, ${args.name}, ${qty})`
     );
     return kit.text(`Added "${args.name}" (qty: ${qty})`);
   },
 });
 
-async function loadItems(db: any) {
-  return db.all(sql`SELECT * FROM items ORDER BY name`);
+async function loadItems(ctx: any) {
+  return ctx.db.all(sql`SELECT * FROM items ORDER BY name`);
 }
 
 const listItems = defineTool({
@@ -42,8 +42,8 @@ const listItems = defineTool({
   description: "List all items in the inventory",
   args: z.object({}),
   load: loadItems,
-  handler: async (db: any) => {
-    const rows = await loadItems(db);
+  handler: async (ctx: any) => {
+    const rows = await loadItems(ctx);
     if (rows.length === 0) return kit.text("No items.");
     return kit.text(
       rows.map((r: any) => `${r.name}: ${r.quantity}`).join("\n")
@@ -51,8 +51,8 @@ const listItems = defineTool({
   },
 });
 
-const itemsLoader = defineLoader(async (db: any) => {
-  return db.all(sql`SELECT * FROM items ORDER BY name`);
+const itemsLoader = defineLoader(async (ctx: any) => {
+  return ctx.db.all(sql`SELECT * FROM items ORDER BY name`);
 });
 
 // Minimal view definition (component is not used in handler tests)
@@ -309,7 +309,7 @@ describe("MCP handler: two-tool split", () => {
       const resourceBlock = result.content[1];
       expect(resourceBlock.type).toBe("resource");
       expect(resourceBlock.resource.mimeType).toBe("text/html;profile=mcp-app");
-      expect(resourceBlock.resource.uri).toBe("ui://kitstack/test-inv/items");
+      expect(resourceBlock.resource.uri).toBe("ui://kitstack/app");
       expect(resourceBlock.resource.text).toContain("<!DOCTYPE html>");
     });
 
@@ -334,10 +334,11 @@ describe("MCP handler: two-tool split", () => {
       expect(res!.error!.message).toContain("something_else");
     });
 
-    it("rejects unknown methods", async () => {
+    it("supports the MCP resources/list method", async () => {
       const res = await rpc("resources/list");
-      expect(res!.error).toBeDefined();
-      expect(res!.error!.code).toBe(-32601);
+      expect(res!.error).toBeUndefined();
+      expect((res!.result as any).resources).toHaveLength(1);
+      expect((res!.result as any).resources[0].uri).toBe("ui://kitstack/app");
     });
 
     it("returns null for notifications", async () => {

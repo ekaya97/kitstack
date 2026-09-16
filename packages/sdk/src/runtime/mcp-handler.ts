@@ -82,12 +82,13 @@ export interface McpHandler {
  */
 export function createMcpHandler(config: McpHandlerConfig): McpHandler {
   const { kit, db } = config;
-  const userId = config.ctx?.userId ?? "dev-user";
+  const userId = config.ctx?.identity?.principal ?? "dev-user";
 
   const adapter = localAdapter({
     kit,
     db,
     userId,
+    context: config.ctx,
     shellHtml: config.shellHtml,
     platformCdn: config.platformCdn,
     kitCdn: config.kitCdn,

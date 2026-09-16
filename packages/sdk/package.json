@@ -55,6 +55,7 @@
   },
   "scripts": {
     "build": "tsup",
+    "test": "vitest run --config vitest.config.ts",
     "prepublishOnly": "npm run build"
   },
   "peerDependencies": {

@@ -59,6 +59,7 @@ function setupDb() {
       kit_triggers TEXT,
       kit_instructions TEXT,
       lambda_resource TEXT,
+      migration_sql TEXT,
       visibility TEXT NOT NULL DEFAULT 'private',
       author_id TEXT,
       PRIMARY KEY (kit_id, tool_name)
@@ -70,6 +71,7 @@ function setupDb() {
       view_description TEXT,
       height INTEGER,
       shell_s3_key TEXT,
+      preview_s3_key TEXT,
       PRIMARY KEY (kit_id, view_slug)
     );
   `);

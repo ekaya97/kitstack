@@ -228,7 +228,6 @@ You are connected to the user's ${displayName}. Use the available tools to help 
 function exampleToolTemplate() {
   return `import { z } from "zod";
 import { desc } from "drizzle-orm";
-import type { LibSQLDatabase } from "drizzle-orm/libsql";
 import { defineTool, kit } from "@kitstackco/sdk";
 import type { KitContext } from "@kitstackco/sdk";
 import { items } from "../schema";
@@ -237,8 +236,8 @@ const listItemsArgs = z.object({
   limit: z.number().optional().default(25).describe("Maximum number of items to return"),
 });
 
-async function loadItems(db: LibSQLDatabase, args: z.infer<typeof listItemsArgs>, ctx: KitContext) {
-  return db
+async function loadItems(ctx: KitContext, args: z.infer<typeof listItemsArgs>) {
+  return ctx.db
     .select()
     .from(items)
     .orderBy(desc(items.createdAt))
@@ -251,8 +250,8 @@ export const listItems = defineTool({
   args: listItemsArgs,
   load: loadItems,
 
-  handler: async (db, args, ctx) => {
-    const result = await loadItems(db, args, ctx);
+  handler: async (ctx, args) => {
+    const result = await loadItems(ctx, args);
     if (result.length === 0) return kit.text("No items yet.");
 
     let text = \`\${result.length} item(s):\\n\\n| ID | Name | Description |\\n|----|------|-------------|\\n\`;
@@ -285,8 +284,8 @@ function viewLoaderTemplate() {
   return `import { defineLoader } from "@kitstackco/sdk";
 import { listItems } from "../../tools/example";
 
-export const loader = defineLoader(async (db, ctx) => {
-  return listItems.load(db, { limit: 100 }, ctx);
+export const loader = defineLoader(async (ctx) => {
+  return listItems.load(ctx, { limit: 100 });
 });
 `;
 }

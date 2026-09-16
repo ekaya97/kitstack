@@ -95,7 +95,7 @@ describe("createTestKit — authorize hook", () => {
     const requirements: any[] = [];
     const testKit = await createTestKit(testKitDef, {
       checkAuthz: async (_db, req, ctx) => {
-        requirements.push({ ...req, userId: ctx.userId });
+        requirements.push({ ...req, userId: ctx.identity.principal });
         return true;
       },
     });

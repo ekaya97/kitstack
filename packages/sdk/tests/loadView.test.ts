@@ -12,16 +12,16 @@ const addItem = defineTool({
   name: "add_item",
   description: "Add an item to the inventory",
   args: z.object({ name: z.string().describe("Item name") }),
-  handler: async (db, args) => {
-    await db.run(
+  handler: async (ctx, args) => {
+    await ctx.db.run(
       sql`INSERT INTO items (id, name, owner) VALUES (${crypto.randomUUID()}, ${args.name}, 'test-user')`
     );
     return kit.text("Added.");
   },
 });
 
-const itemsLoader = defineLoader(async (db, ctx) => {
-  return db.all(sql`SELECT * FROM items WHERE owner = ${ctx.userId} ORDER BY name`);
+const itemsLoader = defineLoader(async (ctx) => {
+  return ctx.db.all(sql`SELECT * FROM items WHERE owner = ${ctx.identity.principal} ORDER BY name`);
 });
 
 const itemsView = defineView({
@@ -83,8 +83,8 @@ describe("TestKit.loadView", () => {
     // Insert with default user
     await testKit.call("add_item", { name: "DefaultItem" });
 
-    // loadView with different userId — should return empty (no items for "alice")
-    const data = (await testKit.loadView("items", { userId: "alice" })) as any[];
+    // loadView with a different principal — should return empty for "alice"
+    const data = (await testKit.loadView("items", { identity: { principal: "alice", actor: "alice" } })) as any[];
     expect(data).toHaveLength(0);
     await testKit.cleanup();
   });

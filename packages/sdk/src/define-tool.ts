@@ -1,5 +1,4 @@
 import type { z } from "zod";
-import type { LibSQLDatabase } from "drizzle-orm/libsql";
 import type { ToolBase, ToolDefinition, KitToolResult, KitContext, AuthzRequirement } from "./types";
 import { kit } from "./result";
 
@@ -19,8 +18,8 @@ import { kit } from "./result";
  * ```
  */
 export interface TypedToolWithLoad<T extends z.ZodType, TData> extends ToolBase {
-  load: (db: LibSQLDatabase, args: z.infer<T>, ctx: KitContext) => Promise<TData>;
-  handler: (db: LibSQLDatabase, args: z.infer<T>, ctx: KitContext) => Promise<KitToolResult>;
+  load: (ctx: KitContext, args: z.infer<T>) => Promise<TData>;
+  handler: (ctx: KitContext, args: z.infer<T>) => Promise<KitToolResult>;
 }
 
 /**
@@ -28,8 +27,8 @@ export interface TypedToolWithLoad<T extends z.ZodType, TData> extends ToolBase 
  * LLM and the kit's data.
  *
  * Tools have two faces:
- * - `load(db, args, ctx)` — returns typed data (for views and loaders)
- * - `handler(db, args, ctx)` — returns text/markdown (for the LLM)
+ * - `load(ctx, args)` — returns typed data (for views and loaders)
+ * - `handler(ctx, args)` — returns text/markdown (for the LLM)
  *
  * If `handler` is omitted, the framework auto-wraps `load()` with
  * `kit.json()`. This means the laziest possible tool is just
@@ -38,8 +37,8 @@ export interface TypedToolWithLoad<T extends z.ZodType, TData> extends ToolBase 
  * @example
  * ```typescript
  * // Read tool with both load and handler (CRM kit)
- * async function loadContacts(db, args, ctx) {
- *   return db.select().from(contacts).limit(args.limit);
+ * async function loadContacts(ctx, args) {
+ *   return ctx.db.select().from(contacts).limit(args.limit);
  * }
  *
  * export const listContacts = defineTool({
@@ -47,8 +46,8 @@ export interface TypedToolWithLoad<T extends z.ZodType, TData> extends ToolBase 
  *   description: "List all contacts in the CRM",
  *   args: z.object({ limit: z.number().optional().describe("Max results") }),
  *   load: loadContacts,
- *   handler: async (db, args, ctx) => {
- *     const data = await loadContacts(db, args, ctx);
+ *   handler: async (ctx, args) => {
+ *     const data = await loadContacts(ctx, args);
  *     return kit.text(formatMarkdownTable(data));
  *   },
  * });
@@ -64,9 +63,9 @@ export interface TypedToolWithLoad<T extends z.ZodType, TData> extends ToolBase 
  *     name: z.string().describe("Contact's full name"),
  *     company: z.string().optional().describe("Company name"),
  *   }),
- *   handler: async (db, args, ctx) => {
+ *   handler: async (ctx, args) => {
  *     const id = nanoid();
- *     await db.insert(contacts).values({ id, name: args.name });
+ *     await ctx.db.insert(contacts).values({ id, name: args.name });
  *     return kit.text(`Contact "${args.name}" added (ID: ${id}).`);
  *   },
  * });
@@ -79,8 +78,8 @@ export interface TypedToolWithLoad<T extends z.ZodType, TData> extends ToolBase 
  *   name: "list_proposals",
  *   description: "List proposals with optional deal filter",
  *   args: z.object({ dealId: z.string().optional() }),
- *   load: async (db, args) => {
- *     return db.select().from(proposals);
+ *   load: async (ctx, args) => {
+ *     return ctx.db.select().from(proposals);
  *   },
  * });
  * ```
@@ -91,8 +90,8 @@ export function defineTool<T extends z.ZodType, TData>(config: {
   description: string;
   args: T;
   authorize?: (args: z.infer<T>, ctx: KitContext) => AuthzRequirement[];
-  load: (db: LibSQLDatabase, args: z.infer<T>, ctx: KitContext) => Promise<TData>;
-  handler?: (db: LibSQLDatabase, args: z.infer<T>, ctx: KitContext) => Promise<KitToolResult>;
+  load: (ctx: KitContext, args: z.infer<T>) => Promise<TData>;
+  handler?: (ctx: KitContext, args: z.infer<T>) => Promise<KitToolResult>;
 }): TypedToolWithLoad<T, TData>;
 
 // Overload 2: handler only (no load)
@@ -101,14 +100,14 @@ export function defineTool<T extends z.ZodType>(config: {
   description: string;
   args: T;
   authorize?: (args: z.infer<T>, ctx: KitContext) => AuthzRequirement[];
-  handler: (db: LibSQLDatabase, args: z.infer<T>, ctx: KitContext) => Promise<KitToolResult>;
+  handler: (ctx: KitContext, args: z.infer<T>) => Promise<KitToolResult>;
 }): ToolDefinition;
 
 // Implementation
 export function defineTool(config: any): any {
   if (config.load && !config.handler) {
-    config.handler = async (db: LibSQLDatabase, args: any, ctx: KitContext) => {
-      const data = await config.load(db, args, ctx);
+    config.handler = async (ctx: KitContext, args: any) => {
+      const data = await config.load(ctx, args);
       return kit.json(data);
     };
   }

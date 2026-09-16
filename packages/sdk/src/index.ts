@@ -1,6 +1,15 @@
 // Types
 export type {
   KitContext,
+  StorageBinding,
+  ConnectorRegistry,
+  RequestIdentity,
+  ChannelContext,
+  SessionContext,
+  TelemetryAttributes,
+  TelemetrySink,
+  AuditSink,
+  Logger,
   KitToolResult,
   KitToolContentBlock,
   ToolDefinition,
@@ -39,6 +48,7 @@ export { defineTool } from "./define-tool";
 export { defineView } from "./define-view";
 export { defineLoader } from "./define-loader";
 export { defineAgent } from "./define-agent";
+export { createKitContext, type CreateKitContextOptions } from "./context";
 
 // Plugins
 export {

@@ -1,6 +1,7 @@
 import { createClient } from "@libsql/client";
 import { drizzle, type LibSQLDatabase } from "drizzle-orm/libsql";
 import type { KitDefinition, KitContext, KitToolResult, AuthzRequirement } from "../types";
+import { createKitContext } from "../context";
 import { kit } from "../result";
 import { MigrationError } from "../errors";
 import { resolveMigrationSql } from "../migrations";
@@ -53,7 +54,7 @@ export interface TestKit {
 
   /**
    * Call a tool by name with arguments. Uses the default context
-   * `{ userId: "test-user", kitId: "<kit-id>" }`.
+   * `{ identity: { principal: "test-user", actor: "test-user" } }`.
    *
    * Returns a `KitToolResult` — check `result.isError` and read
    * `result.content[0].text` for the response body.
@@ -79,16 +80,16 @@ export interface TestKit {
 
   /**
    * Call a tool with a custom context. Use this to test multi-user
-   * scenarios or to override the default `userId`.
+   * scenarios or to override the default request identity.
    *
-   * @param ctx - Partial context overrides (e.g. `{ userId: "alice" }`)
+   * @param ctx - Partial context overrides (e.g. `{ identity: { principal: "alice", actor: "alice" } }`)
    * @param toolName - The snake_case tool name
    * @param args - Arguments matching the tool's Zod schema
    *
    * @example
    * ```typescript
    * const result = await testKit.callAs(
-   *   { userId: "custom-user-123" },
+   *   { identity: { principal: "custom-user-123", actor: "custom-user-123" } },
    *   "add_contact",
    *   { name: "Custom User Contact" },
    * );
@@ -247,14 +248,30 @@ export async function createTestKit(
 
   const toolMap = new Map(kitDef.tools.map((t) => [t.name, t]));
   const viewMap = new Map((kitDef.views ?? []).map((v) => [v.slug, v]));
-  const defaultCtx: KitContext = { userId: "test-user", kitId: kitDef.id };
+  const defaultIdentity = { principal: "test-user", actor: "test-user" };
 
   async function callAs(
     ctxOverrides: Partial<KitContext>,
     toolName: string,
     args: Record<string, unknown> = {}
   ): Promise<KitToolResult> {
-    const ctx = { ...defaultCtx, ...ctxOverrides };
+    // A new context is created for every call. All capabilities invoked by
+    // this call receive this same request-scoped object.
+    const ctx = createKitContext({
+      db,
+      params: ctxOverrides.params,
+      connectors: ctxOverrides.connectors,
+      identity: { ...defaultIdentity, ...ctxOverrides.identity },
+      channel: { kind: "test", ...ctxOverrides.channel },
+      session: {
+        id: crypto.randomUUID(),
+        traceId: crypto.randomUUID(),
+        ...ctxOverrides.session,
+      },
+      telemetry: ctxOverrides.telemetry,
+      audit: ctxOverrides.audit,
+      log: ctxOverrides.log,
+    });
     const tool = toolMap.get(toolName);
     if (!tool) {
       return kit.error(
@@ -294,10 +311,10 @@ export async function createTestKit(
 
     // If handler exists, call it. If only load exists, auto-wrap with kit.json().
     if (tool.handler) {
-      return tool.handler(db, parsed.data, ctx);
+      return tool.handler(ctx, parsed.data);
     }
     if (tool.load) {
-      const data = await tool.load(db, parsed.data, ctx);
+      const data = await tool.load(ctx, parsed.data);
       return kit.json(data);
     }
 
@@ -321,8 +338,22 @@ export async function createTestKit(
           `Unknown view: "${viewSlug}". Available views: ${[...viewMap.keys()].join(", ") || "(none)"}`
         );
       }
-      const ctx = { ...defaultCtx, ...ctxOverrides };
-      return view.loader(db, ctx);
+      const ctx = createKitContext({
+        db,
+        params: ctxOverrides.params,
+        connectors: ctxOverrides.connectors,
+        identity: { ...defaultIdentity, ...ctxOverrides.identity },
+        channel: { kind: "test", ...ctxOverrides.channel },
+        session: {
+          id: crypto.randomUUID(),
+          traceId: crypto.randomUUID(),
+          ...ctxOverrides.session,
+        },
+        telemetry: ctxOverrides.telemetry,
+        audit: ctxOverrides.audit,
+        log: ctxOverrides.log,
+      });
+      return view.loader(ctx);
     },
 
     async reset() {

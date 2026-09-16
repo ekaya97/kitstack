@@ -2,6 +2,9 @@ import { describe, it, expect } from "vitest";
 import { z } from "zod";
 import { defineTool } from "../src/define-tool";
 import { kit } from "../src/result";
+import type { KitContext } from "../src/types";
+
+const ctx = {} as KitContext;
 
 describe("defineTool", () => {
   describe("load-only tool", () => {
@@ -14,7 +17,7 @@ describe("defineTool", () => {
       });
 
       expect(tool.handler).toBeDefined();
-      const result = await tool.handler!(null as any, {}, null as any);
+      const result = await tool.handler!(ctx, {});
       const block = result.content[0] as { type: "text"; text: string };
       const data = JSON.parse(block.text);
       expect(data).toEqual([{ id: "1", name: "Widget" }]);
@@ -61,7 +64,7 @@ describe("defineTool", () => {
       });
 
       expect(tool.handler).toBe(handlerFn);
-      const result = await tool.handler!(null as any, {}, null as any);
+      const result = await tool.handler!(ctx, {});
       expect((result.content[0] as { type: "text"; text: string }).text).toBe("custom output");
     });
 
@@ -70,11 +73,11 @@ describe("defineTool", () => {
         name: "list_items",
         description: "List all items with typed data",
         args: z.object({ limit: z.number().optional() }),
-        load: async (_db: any, args: any) => Array(args.limit ?? 10).fill(null),
+        load: async (_ctx: KitContext, args: any) => Array(args.limit ?? 10).fill(null),
         handler: async () => kit.text("table here"),
       });
 
-      const data = await tool.load(null as any, { limit: 3 }, null as any);
+      const data = await tool.load(ctx, { limit: 3 });
       expect(data).toHaveLength(3);
     });
   });

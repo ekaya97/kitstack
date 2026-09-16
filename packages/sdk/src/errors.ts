@@ -114,7 +114,7 @@ export class KitValidationError extends KitStackError {
  *   name: "addContact",  // should be "add_contact"
  *   description: "Add a new contact to the CRM",
  *   args: z.object({ name: z.string() }),
- *   handler: async (db, args) => kit.text(`Added ${args.name}`),
+ *   handler: async (ctx, args) => kit.text(`Added ${args.name}`),
  * });
  *
  * // defineKit() throws ToolValidationError with code "TOOL_INVALID_NAME"

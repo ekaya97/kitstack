@@ -26,9 +26,9 @@ const addItem = defineTool({
   args: z.object({
     name: z.string().describe("Item name"),
   }),
-  handler: async (db, args, ctx) => {
+  handler: async (ctx, args) => {
     const id = nanoid();
-    await db.insert(items).values({ id, name: args.name });
+    await ctx.db.insert(items).values({ id, name: args.name });
     return kit.result(kit.created(id, "item", `Item "${args.name}" added.`));
   },
 });
@@ -46,8 +46,11 @@ export default defineKit({
 });
 ```
 
-`handler(db, args, ctx)` receives a typed Drizzle handle, the Zod-parsed
-arguments, and a context with the caller identity and kit ID.
+`handler(ctx, args)` receives one request-scoped `KitContext` and the
+Zod-parsed arguments. The database is `ctx.db`; identity is available through
+`ctx.identity`, with channel/session correlation and telemetry, audit, logging,
+and connector seams on the same context. View loaders use `loader(ctx)` and
+tool data functions use `load(ctx, args)`.
 
 ## Define an agent
 
