@@ -1,5 +1,5 @@
 import type { Client, InValue } from "@libsql/client";
-import type { TelemetryStore } from "../telemetry/index.js";
+import type { TelemetryStore } from "../plugins/telemetry/index.js";
 
 export type MemoryStatus = "candidate" | "approved" | "published";
 
