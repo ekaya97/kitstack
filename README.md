@@ -252,7 +252,7 @@ and absent from telemetry.
 
 ```bash
 npm install
-npm test                                   # 547 tests across the workspace gates
+npm test                                   # 561 tests across the workspace gates
 npm run demo:server                        # HTTP host on 127.0.0.1:3001, simulator by default
 npm run dev --workspace kitstack-web       # web app; open /demo
 ```
