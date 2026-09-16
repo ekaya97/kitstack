@@ -11,6 +11,7 @@ import type { ClaimDueInput, CompleteCallInput, FailCallInput, ScheduleCallInput
 import { createScheduledCallStore } from "../../scheduler/index.js";
 import { createTelemetryStore, type TelemetryStore } from "../../telemetry/index.js";
 import { VoiceSimulator } from "../../adapters/voice/index.js";
+import { createLibsqlStorageAdapter } from "../../storage/libsql.js";
 
 export interface DemoApp {
   readonly client: Client;
@@ -55,9 +56,10 @@ export async function createDemoApp(options: CreateDemoAppOptions = {}): Promise
     ...(options.authToken ? { authToken: options.authToken } : {}),
   });
   const telemetry = await createTelemetryStore({ client });
+  const storage = createLibsqlStorageAdapter(client, { scope: { orgId, kitId: "kit:debrief" } });
   const apps = createAppRegistry({ secret: options.secret ?? "demo-secret-at-least-32-characters-long" });
   const memory = createMemoryStore(client, telemetry);
-  const debriefStore = createDebriefPersistence(client);
+  const debriefStore = createDebriefPersistence(client, { storage });
   const scheduledCallStore = createScheduledCallStore(client);
   const initialSessions = await debriefStore.loadSessions(orgId, "kit:debrief");
   const instructions = createInstructionPlugin({ kitId: "kit:debrief", context: "prebrief" });

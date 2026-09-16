@@ -1,4 +1,6 @@
 import type { Client, InValue } from "@libsql/client";
+import type { StorageAdapter, StorageSqlAdapter } from "@kitstackco/sdk";
+import { createLibsqlStorageAdapter } from "../storage/libsql.js";
 import type { DebriefSession, DebriefState } from "./index.js";
 
 export type CustomerEventType =
@@ -65,6 +67,8 @@ export interface DebriefPersistence {
 export interface CreateDebriefPersistenceOptions {
   now?: () => string;
   createCustomerId?: () => string;
+  /** Host-bound storage capability; defaults to a libSQL adapter for compatibility. */
+  storage?: StorageAdapter;
 }
 
 const CREATE_SCHEMA_SQL = `
@@ -146,12 +150,17 @@ export class LibsqlDebriefPersistence implements DebriefPersistence {
   ) {
     this.now = options.now ?? (() => new Date().toISOString());
     this.createCustomerId = options.createCustomerId ?? (() => `customer-${crypto.randomUUID()}`);
-    this.initialized = client.executeMultiple(CREATE_SCHEMA_SQL).then(() => undefined);
+    this.sql = options.storage?.sql ?? createLibsqlStorageAdapter(client, {
+      scope: { orgId: "compat", kitId: "kit:debrief" },
+    }).sql;
+    this.initialized = this.sql.batch(schemaStatements(CREATE_SCHEMA_SQL)).then(() => undefined);
   }
+
+  private readonly sql: StorageSqlAdapter;
 
   async loadSessions(orgId: string, kitId: string): Promise<DebriefSession[]> {
     await this.initialized;
-    const result = await this.client.execute({
+    const result = await this.sql.execute({
       sql: `SELECT * FROM demo_debrief_sessions
         WHERE org_id = ? AND kit_id = ? ORDER BY created_at ASC, session_id ASC`,
       args: [orgId, kitId],
@@ -161,7 +170,7 @@ export class LibsqlDebriefPersistence implements DebriefPersistence {
 
   async saveSession(session: DebriefSession): Promise<void> {
     await this.initialized;
-    await this.client.execute({
+    await this.sql.execute({
       sql: `INSERT INTO demo_debrief_sessions (
         session_id, org_id, kit_id, customer_id, state, goal, callback_at,
         scheduled_call_at, callback_timezone, call_id, instruction_version,
@@ -203,7 +212,7 @@ export class LibsqlDebriefPersistence implements DebriefPersistence {
     await this.initialized;
     const normalized = normalizeCustomer(identity);
     const identityKey = customerIdentityKey(normalized);
-    const existing = await this.client.execute({
+    const existing = await this.sql.execute({
       sql: "SELECT * FROM demo_customers WHERE org_id = ? AND identity_key = ? LIMIT 1",
       args: [orgId, identityKey],
     });
@@ -211,14 +220,14 @@ export class LibsqlDebriefPersistence implements DebriefPersistence {
     let customerId: string;
     if (existing.rows.length) {
       customerId = String((existing.rows[0] as Row).customer_id);
-      await this.client.execute({
+      await this.sql.execute({
         sql: `UPDATE demo_customers SET company = ?, contact_name = ?, location = ?, updated_at = ?
           WHERE org_id = ? AND customer_id = ?`,
         args: [normalized.company, normalized.contactName, normalized.location, timestamp, orgId, customerId],
       });
     } else {
       customerId = this.createCustomerId();
-      await this.client.execute({
+      await this.sql.execute({
         sql: `INSERT INTO demo_customers
           (customer_id, org_id, identity_key, company, contact_name, location, created_at, updated_at)
           VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
@@ -232,7 +241,7 @@ export class LibsqlDebriefPersistence implements DebriefPersistence {
 
   async getCustomer(orgId: string, customerId: string): Promise<CustomerRecord | null> {
     await this.initialized;
-    const result = await this.client.execute({
+    const result = await this.sql.execute({
       sql: "SELECT * FROM demo_customers WHERE org_id = ? AND customer_id = ? LIMIT 1",
       args: [orgId, customerId],
     });
@@ -244,7 +253,7 @@ export class LibsqlDebriefPersistence implements DebriefPersistence {
     const args: InValue[] = [orgId, customerId];
     const kitClause = kitId === undefined ? "" : " AND kit_id = ?";
     if (kitId !== undefined) args.push(kitId);
-    const result = await this.client.execute({
+    const result = await this.sql.execute({
       sql: `SELECT * FROM demo_customer_events
         WHERE org_id = ? AND customer_id = ?${kitClause}
         ORDER BY occurred_at ASC, event_id ASC`,
@@ -255,7 +264,7 @@ export class LibsqlDebriefPersistence implements DebriefPersistence {
 
   async appendCustomerEvent(event: CustomerEventRecord): Promise<void> {
     await this.initialized;
-    await this.client.execute({
+    await this.sql.execute({
       sql: `INSERT INTO demo_customer_events
         (event_id, org_id, customer_id, session_id, kit_id, type, occurred_at, payload_json)
         VALUES (?, ?, ?, ?, ?, ?, ?, ?)
@@ -275,7 +284,7 @@ export class LibsqlDebriefPersistence implements DebriefPersistence {
 
   async getDraft(orgId: string, sessionId: string): Promise<DebriefDraftRecord | null> {
     await this.initialized;
-    const result = await this.client.execute({
+    const result = await this.sql.execute({
       sql: "SELECT * FROM demo_debrief_drafts WHERE org_id = ? AND session_id = ? LIMIT 1",
       args: [orgId, sessionId],
     });
@@ -284,7 +293,7 @@ export class LibsqlDebriefPersistence implements DebriefPersistence {
 
   async saveDraft(draft: DebriefDraftRecord): Promise<void> {
     await this.initialized;
-    await this.client.execute({
+    await this.sql.execute({
       sql: `INSERT INTO demo_debrief_drafts
         (draft_id, org_id, customer_id, session_id, kit_id, status, fields_json, updated_at)
         VALUES (?, ?, ?, ?, ?, ?, ?, ?)
@@ -303,10 +312,10 @@ export class LibsqlDebriefPersistence implements DebriefPersistence {
     await this.initialized;
     // The demo owns these tables for one org. Delete dependent rows first so
     // this remains safe if foreign keys are enabled by a future host.
-    await this.client.execute({ sql: "DELETE FROM demo_debrief_drafts WHERE org_id = ? AND kit_id = ?", args: [orgId, kitId] });
-    await this.client.execute({ sql: "DELETE FROM demo_customer_events WHERE org_id = ? AND kit_id = ?", args: [orgId, kitId] });
-    await this.client.execute({ sql: "DELETE FROM demo_debrief_sessions WHERE org_id = ? AND kit_id = ?", args: [orgId, kitId] });
-    await this.client.execute({ sql: "DELETE FROM demo_customers WHERE org_id = ?", args: [orgId] });
+    await this.sql.execute({ sql: "DELETE FROM demo_debrief_drafts WHERE org_id = ? AND kit_id = ?", args: [orgId, kitId] });
+    await this.sql.execute({ sql: "DELETE FROM demo_customer_events WHERE org_id = ? AND kit_id = ?", args: [orgId, kitId] });
+    await this.sql.execute({ sql: "DELETE FROM demo_debrief_sessions WHERE org_id = ? AND kit_id = ?", args: [orgId, kitId] });
+    await this.sql.execute({ sql: "DELETE FROM demo_customers WHERE org_id = ?", args: [orgId] });
   }
 }
 
@@ -315,6 +324,10 @@ export function createDebriefPersistence(
   options: CreateDebriefPersistenceOptions = {},
 ): LibsqlDebriefPersistence {
   return new LibsqlDebriefPersistence(client, options);
+}
+
+function schemaStatements(schema: string): { sql: string }[] {
+  return schema.split(";").map((statement) => statement.trim()).filter(Boolean).map((sql) => ({ sql }));
 }
 
 export function normalizeCustomer(identity: CustomerIdentityInput): CustomerIdentityInput {

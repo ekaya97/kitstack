@@ -7,6 +7,7 @@ import type {
   RequestIdentity,
   SessionContext,
   StorageBinding,
+  StorageAdapter,
   TelemetrySink,
 } from "./types";
 
@@ -18,6 +19,7 @@ import type {
  */
 export interface CreateKitContextOptions {
   db: StorageBinding;
+  storage?: StorageAdapter;
   params?: Readonly<Record<string, unknown>>;
   connectors?: ConnectorRegistry;
   identity?: RequestIdentity;
@@ -72,6 +74,7 @@ export function createKitContext(options: CreateKitContextOptions): KitContext {
 
   return Object.freeze({
     db: options.db,
+    ...(options.storage ? { storage: options.storage } : {}),
     params: options.params ?? {},
     connectors: options.connectors ?? emptyConnectors,
     identity,

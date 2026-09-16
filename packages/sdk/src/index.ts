@@ -52,6 +52,23 @@ export type {
   AgentDefinition,
 } from "./types";
 
+// Provider-neutral storage boundary. Driver implementations live in kits or hosts.
+export {
+  assertStorageScope,
+  requireStorageObjects,
+  requireStorageSql,
+  type StorageAdapter,
+  type StorageObject,
+  type StorageObjectAdapter,
+  type StorageObjectInput,
+  type StorageProvider,
+  type StorageResult,
+  type StorageScope,
+  type StorageSqlAdapter,
+  type StorageStatement,
+  type StorageValue,
+} from "./storage";
+
 // Append-only, metadata-only audit storage
 export {
   HashChainedAuditStore,
