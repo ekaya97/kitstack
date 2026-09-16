@@ -6,12 +6,16 @@ import {
   createSignedSessionTokenCodec,
   createSessionBindingStore,
   createTwilioCallsClient,
+  createTwilioSmsClient,
   createTwilioSignatureValidator,
   generateBidirectionalStreamTwiml,
   startRealtimeCall,
+  twilioSmsConnector,
+  twilioVoiceConnector,
   type OpenAIRealtimeSocket,
   type VoiceWebSocket,
 } from "./realtime.js";
+import { bindConnector } from "@kitstackco/sdk";
 
 class FakeSocket implements VoiceWebSocket, OpenAIRealtimeSocket {
   readonly sent: string[] = [];
@@ -79,6 +83,30 @@ describe("Twilio and OpenAI Realtime boundary", () => {
     });
     expect(result).toMatchObject({ callId: "CA123", provider: "twilio-openai-realtime", status: "connecting", recording: false, retention: false });
     expect(fetcher).toHaveBeenCalledTimes(1);
+  });
+
+  it("binds voice and SMS clients through the same secret seam", async () => {
+    const fetcher = vi.fn(async (input: string, init?: RequestInit) => {
+      expect(init?.headers).toMatchObject({ authorization: expect.stringContaining("Basic ") });
+      if (input.endsWith("Messages.json")) return new Response(JSON.stringify({ sid: "SM123", status: "queued" }), { status: 201 });
+      return new Response(JSON.stringify({ sid: "CA123", status: "queued" }), { status: 201 });
+    });
+    const secretStore = { get: vi.fn(async (reference: string) => reference === "org/twilio/auth" ? "server-only-auth-token" : undefined) };
+    const config = { accountSid: "AC123", apiBaseUrl: "https://api.twilio.example", fetch: fetcher };
+    const voice = await bindConnector(twilioVoiceConnector, { connectorId: "twilio.voice", config, secretRefs: { authToken: "org/twilio/auth" } }, secretStore);
+    const sms = await bindConnector(twilioSmsConnector, { connectorId: "twilio.sms", config, secretRefs: { authToken: "org/twilio/auth" } }, secretStore);
+
+    await expect(voice.createCall({ to: "+491234567890", from: "+491234567891", twiml: "<Response/>", record: false })).resolves.toMatchObject({ sid: "CA123" });
+    await expect(sms.sendMessage({ to: "+491234567890", from: "+491234567891", body: "Your appointment is confirmed." })).resolves.toMatchObject({ sid: "SM123" });
+    expect(secretStore.get).toHaveBeenCalledTimes(2);
+    expect(JSON.stringify(fetcher.mock.calls)).not.toContain("server-only-auth-token");
+  });
+
+  it("keeps SMS provider errors and request boundaries free of credentials", async () => {
+    const fetcher = vi.fn(async () => new Response("provider unavailable", { status: 503 }));
+    const sms = createTwilioSmsClient({ accountSid: "AC123", authToken: "sms-secret", apiBaseUrl: "https://api.twilio.example", fetch: fetcher });
+    await expect(sms.sendMessage({ to: "+491234567890", from: "+491234567891", body: "hello" })).rejects.toThrow("Twilio Messages API returned HTTP 503");
+    expect(JSON.stringify(fetcher.mock.calls)).not.toContain("sms-secret");
   });
 
   it("preserves safe Twilio provider error details without exposing credentials", async () => {
