@@ -1,6 +1,6 @@
 import { createHmac, timingSafeEqual } from "node:crypto";
 import WebSocket from "ws";
-import { defineAgent, type AgentInput, type AgentLifecycleEvent, type AgentRunResult } from "@kitstackco/sdk";
+import { defineAgent, type AgentInput, type AgentLifecycleEvent, type AgentRunResult, type AgentTurnMetadata } from "@kitstackco/sdk";
 import { jwtVerify, SignJWT } from "jose";
 import type { TelemetryEventInput, TelemetryStore } from "../../telemetry/index.js";
 
@@ -323,14 +323,63 @@ export interface DefineAgentVoiceLoopOptions {
   createId?: () => string;
   tools?: Parameters<typeof defineAgent>[0]["tools"];
   provider?: string | null;
+  model?: string | null;
   callId?: string | null;
   memoryIds?: readonly string[];
+  estimateCostUsd?: (usage: { requestTokens?: number | null; responseTokens?: number | null }) => number | null;
   onStop?: (reason: string) => Promise<void>;
   onError?: (error: Error) => Promise<void>;
 }
 
 export interface DefineAgentVoiceLoop extends VoiceAgentLoopAdapter {
   readonly done: Promise<AgentRunResult>;
+}
+
+function lifecycleOutcome(event: AgentLifecycleEvent): "success" | "error" {
+  if (event.type === "tool_called") return event.outcome === "completed" ? "success" : "error";
+  if (event.type === "turn_finished") return event.outcome === "error" ? "error" : "success";
+  if (event.type === "run_finished") {
+    return event.status === "completed" ? "success" : "error";
+  }
+  return "success";
+}
+
+/** Adapt the SDK's content-free lifecycle event to the debrief W6-T1 sink. */
+function toVoiceLifecycleTelemetry(
+  event: AgentLifecycleEvent,
+  options: DefineAgentVoiceLoopOptions,
+): TelemetryEventInput {
+  const metadata = "provider" in event
+    ? {
+        provider: event.provider ?? options.provider ?? null,
+        model: event.model ?? options.model ?? null,
+        requestTokens: event.requestTokens ?? null,
+        responseTokens: event.responseTokens ?? null,
+        estimatedCostUsd: event.costUsd ?? null,
+        latencyMs: "latencyMs" in event ? event.latencyMs ?? null : ("durationMs" in event ? event.durationMs : null),
+        ...(event.routingReason === undefined ? {} : { routingReason: event.routingReason }),
+        ...(event.cancellationReason === undefined ? {} : { cancellationReason: event.cancellationReason }),
+        ...(event.timeoutReason === undefined ? {} : { timeoutReason: event.timeoutReason }),
+      }
+    : {};
+  return {
+    id: options.createId?.() ?? crypto.randomUUID(),
+    timestamp: new Date(event.at).toISOString(),
+    orgId: options.orgId,
+    appId: options.appId,
+    sessionId: event.sessionId,
+    traceId: event.traceId,
+    parentId: event.parentId ?? null,
+    channel: "voice",
+    kitId: "kit:debrief",
+    type: event.type === "tool_called" ? "mcp.tool_call" : "voice.call",
+    operation: `agent.${event.type}`,
+    callId: options.callId ?? null,
+    outcome: lifecycleOutcome(event),
+    ...metadata,
+    instructionVersions: event.type === "run_started" ? [event.instructionsVersion] : undefined,
+    memoryIds: event.type === "run_started" ? options.memoryIds : undefined,
+  };
 }
 
 /**
@@ -370,34 +419,25 @@ export function createDefineAgentVoiceLoop(options: DefineAgentVoiceLoopOptions)
     tools: options.tools ?? [],
     turnSource: { next: async () => next() },
     model: {
-      turn: async () => ({ type: "message" as const, content: "provider_turn_completed" }),
+      provider: options.provider ?? undefined,
+      model: options.model ?? undefined,
+      estimateCostUsd: options.estimateCostUsd,
+      turn: async ({ input }) => ({
+        type: "message" as const,
+        content: "provider_turn_completed",
+        metadata: input?.metadata as AgentTurnMetadata | undefined,
+      }),
     },
     output: { emit: async () => undefined },
     maxTurns: 30,
     maxDurationMs: 10 * 60_000,
     hooks: {
       onEvent: async (event: AgentLifecycleEvent) => {
-        await options.telemetry.append({
-          id: options.createId?.() ?? crypto.randomUUID(),
-          timestamp: options.now?.() ?? new Date().toISOString(),
-          orgId: options.orgId,
-          appId: options.appId,
-          sessionId: options.sessionId,
-          traceId: options.sessionId,
-          channel: "voice",
-          kitId: "kit:debrief",
-          type: event.type === "tool_called" ? "mcp.tool_call" : "voice.call",
-          operation: `agent.${event.type}`,
-          provider: options.provider ?? null,
-          callId: options.callId ?? null,
-          outcome: event.type === "turn_finished" && event.outcome === "error" ? "error" : "success",
-          instructionVersions: event.type === "run_started" ? [event.instructionsVersion] : undefined,
-          memoryIds: event.type === "run_started" ? options.memoryIds : undefined,
-        });
+        await options.telemetry.append(toVoiceLifecycleTelemetry(event, options));
       },
     },
   });
-  void agent.run({ sessionId: options.sessionId, context: { orgId: options.orgId, appId: options.appId }, signal: controller.signal })
+  void agent.run({ sessionId: options.sessionId, traceId: options.sessionId, context: { orgId: options.orgId, appId: options.appId }, signal: controller.signal })
     .then((value) => { result = value; resolveDone(value); })
     .catch((error) => {
       result = {
@@ -418,7 +458,16 @@ export function createDefineAgentVoiceLoop(options: DefineAgentVoiceLoopOptions)
   return {
     done,
     async onProviderTurn(event) {
-      if (event.kind === "turn_completed") push({ content: "provider_turn_completed", metadata: { latencyMs: event.latencyMs ?? null } });
+      if (event.kind === "turn_completed") {
+        push({
+          content: "provider_turn_completed",
+          metadata: {
+            requestTokens: event.usage?.inputTokens ?? null,
+            responseTokens: event.usage?.outputTokens ?? null,
+            latencyMs: event.latencyMs ?? null,
+          },
+        });
+      }
     },
     async onInterruption() {
       push({ content: "provider_interruption", metadata: { interruption: true } });

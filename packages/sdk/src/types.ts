@@ -371,6 +371,10 @@ export interface AgentTrigger {
 /** Session state shared by a turn source, model connector, and tools. */
 export interface AgentSession<TContext extends Record<string, unknown> = Record<string, unknown>> {
   id: string;
+  /** Trace correlation shared by every turn in this run. */
+  traceId: string;
+  /** Optional parent span/session supplied by the host. */
+  parentId?: string;
   context: TContext;
 }
 
@@ -393,10 +397,24 @@ export interface AgentToolDefinition<TContext extends Record<string, unknown> = 
   execute: (args: unknown, session: AgentSession<TContext>, signal: AbortSignal) => Promise<unknown>;
 }
 
+/** Metadata returned by a model/provider connector; bodies are never accepted here. */
+export interface AgentTurnMetadata {
+  provider?: string | null;
+  model?: string | null;
+  requestTokens?: number | null;
+  responseTokens?: number | null;
+  /** Estimated provider cost for this model turn, in USD. */
+  costUsd?: number | null;
+  latencyMs?: number | null;
+  routingReason?: string | null;
+  cancellationReason?: string | null;
+  timeoutReason?: string | null;
+}
+
 /** A model response: either emit a message or request one declared tool. */
 export type AgentModelResponse =
-  | { type: "message"; content: string; terminal?: boolean }
-  | { type: "tool_call"; toolCallId?: string; name: string; args: unknown };
+  | { type: "message"; content: string; terminal?: boolean; metadata?: AgentTurnMetadata }
+  | { type: "tool_call"; toolCallId?: string; name: string; args: unknown; metadata?: AgentTurnMetadata };
 
 /** Input contract for a provider/model connector. */
 export interface AgentModelTurn<TContext extends Record<string, unknown> = Record<string, unknown>> {
@@ -409,6 +427,14 @@ export interface AgentModelTurn<TContext extends Record<string, unknown> = Recor
 }
 
 export interface AgentModelConnector<TContext extends Record<string, unknown> = Record<string, unknown>> {
+  /** Static provider identity used when a response does not repeat it. */
+  provider?: string;
+  /** Static model identity used when a response does not repeat it. */
+  model?: string;
+  /** Optional reason for declarative/model routing decisions. */
+  routingReason?: string;
+  /** Estimate cost from provider usage when the response omits it. */
+  estimateCostUsd?: (usage: { requestTokens?: number | null; responseTokens?: number | null }) => number | null;
   turn: (request: AgentModelTurn<TContext>) => Promise<AgentModelResponse>;
 }
 
@@ -436,6 +462,8 @@ export type AgentLifecycleEvent =
       triggerId: string;
       triggerIdentity: string;
       sessionId: string;
+      traceId: string;
+      parentId?: string;
       instructionsVersion: string;
       at: number;
     }
@@ -444,6 +472,8 @@ export type AgentLifecycleEvent =
       kitId: string;
       agentId: string;
       sessionId: string;
+      traceId: string;
+      parentId?: string;
       turn: number;
       at: number;
     }
@@ -452,9 +482,19 @@ export type AgentLifecycleEvent =
       kitId: string;
       agentId: string;
       sessionId: string;
+      traceId: string;
+      parentId?: string;
       turn: number;
       outcome: "message" | "tool_call" | "error";
       durationMs: number;
+      provider?: string | null;
+      model?: string | null;
+      requestTokens?: number | null;
+      responseTokens?: number | null;
+      costUsd?: number | null;
+      routingReason?: string | null;
+      cancellationReason?: string | null;
+      timeoutReason?: string | null;
       at: number;
     }
   | {
@@ -462,10 +502,20 @@ export type AgentLifecycleEvent =
       kitId: string;
       agentId: string;
       sessionId: string;
+      traceId: string;
+      parentId?: string;
       turn: number;
       toolName: string;
       outcome: "completed" | "failed" | "rejected";
       durationMs: number;
+      provider?: string | null;
+      model?: string | null;
+      requestTokens?: number | null;
+      responseTokens?: number | null;
+      costUsd?: number | null;
+      routingReason?: string | null;
+      cancellationReason?: string | null;
+      timeoutReason?: string | null;
       at: number;
     }
   | {
@@ -474,6 +524,8 @@ export type AgentLifecycleEvent =
       agentId: string;
       triggerId: string;
       sessionId: string;
+      traceId: string;
+      parentId?: string;
       status: AgentRunStatus;
       turns: number;
       toolCalls: number;
@@ -533,6 +585,8 @@ export interface AgentDefinition<TContext extends Record<string, unknown> = Reco
   extends Omit<DefineAgentConfig<TContext>, "hooks"> {
   run: (options: {
     sessionId: string;
+    traceId?: string;
+    parentId?: string;
     context?: TContext;
     signal?: AbortSignal;
   }) => Promise<AgentRunResult>;

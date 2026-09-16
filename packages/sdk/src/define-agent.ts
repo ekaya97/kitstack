@@ -4,6 +4,7 @@ import type {
   AgentLifecycleEvent,
   AgentMessage,
   AgentModelResponse,
+  AgentTurnMetadata,
   AgentRunError,
   AgentRunResult,
   AgentSession,
@@ -135,6 +136,48 @@ async function emitEvent(hooks: DefineAgentConfig["hooks"], event: AgentLifecycl
   }
 }
 
+function safeString(value: string | null | undefined): string | null | undefined {
+  if (value === null) return null;
+  if (typeof value !== "string" || value.trim().length === 0) return undefined;
+  return value.trim().slice(0, 256);
+}
+
+function safeNumber(value: number | null | undefined): number | null | undefined {
+  if (value === null) return null;
+  if (typeof value !== "number" || !Number.isFinite(value) || value < 0) return undefined;
+  return value;
+}
+
+/** Copy only the documented metadata fields; provider response bodies stay out of hooks. */
+function metadataFor<TContext extends Record<string, unknown>>(
+  config: DefineAgentConfig<TContext>,
+  responseMetadata: AgentTurnMetadata | undefined,
+  durationMs: number,
+): AgentTurnMetadata {
+  const metadata = responseMetadata ?? {};
+  const requestTokens = safeNumber(metadata.requestTokens);
+  const responseTokens = safeNumber(metadata.responseTokens);
+  const responseCost = safeNumber(metadata.costUsd);
+  const estimatedCost = responseCost !== undefined
+    ? responseCost
+    : config.model.estimateCostUsd?.({ requestTokens, responseTokens });
+  return {
+    provider: safeString(metadata.provider ?? config.model.provider),
+    model: safeString(metadata.model ?? config.model.model),
+    requestTokens,
+    responseTokens,
+    costUsd: safeNumber(estimatedCost),
+    latencyMs: safeNumber(metadata.latencyMs) ?? durationMs,
+    routingReason: safeString(metadata.routingReason ?? config.model.routingReason),
+  };
+}
+
+function controlMetadata(reason: ControlReason): AgentTurnMetadata {
+  return reason === "timed_out"
+    ? { timeoutReason: "max_duration_ms_exceeded" }
+    : { cancellationReason: "abort_signal" };
+}
+
 function createResult<TContext extends Record<string, unknown>>(
   config: DefineAgentConfig<TContext>,
   sessionId: string,
@@ -179,6 +222,8 @@ export function defineAgent<TContext extends Record<string, unknown> = Record<st
 
   const run = async (options: {
     sessionId: string;
+    traceId?: string;
+    parentId?: string;
     context?: TContext;
     signal?: AbortSignal;
   }): Promise<AgentRunResult> => {
@@ -189,6 +234,8 @@ export function defineAgent<TContext extends Record<string, unknown> = Record<st
     const startedAt = Date.now();
     const session: AgentSession<TContext> = {
       id: options.sessionId,
+      traceId: options.traceId ?? crypto.randomUUID(),
+      ...(options.parentId === undefined ? {} : { parentId: options.parentId }),
       // A new top-level object makes independent runs safe even when callers
       // reuse their seed context. Nested values remain caller-owned by design.
       context: { ...(options.context ?? ({} as TContext)) },
@@ -222,6 +269,8 @@ export function defineAgent<TContext extends Record<string, unknown> = Record<st
       triggerId: config.trigger.id,
       triggerIdentity: config.trigger.identity,
       sessionId: session.id,
+      traceId: session.traceId,
+      ...(session.parentId === undefined ? {} : { parentId: session.parentId }),
       instructionsVersion: config.instructions.version,
       at: startedAt,
     });
@@ -246,6 +295,8 @@ export function defineAgent<TContext extends Record<string, unknown> = Record<st
         agentId: config.id,
         triggerId: config.trigger.id,
         sessionId: session.id,
+        traceId: session.traceId,
+        ...(session.parentId === undefined ? {} : { parentId: session.parentId }),
         status: result.status,
         turns: result.turns,
         toolCalls: result.toolCalls,
@@ -289,6 +340,8 @@ export function defineAgent<TContext extends Record<string, unknown> = Record<st
             kitId: config.kitId,
             agentId: config.id,
             sessionId: session.id,
+            traceId: session.traceId,
+            ...(session.parentId === undefined ? {} : { parentId: session.parentId }),
             turn: turns,
             at: turnStartedAt,
           });
@@ -307,14 +360,19 @@ export function defineAgent<TContext extends Record<string, unknown> = Record<st
               controller.signal
             );
           } catch (error) {
+            const cancellation = error instanceof AgentControlError ? controlMetadata(error.reason) : {};
             await emitEvent(config.hooks, {
               type: "turn_finished",
               kitId: config.kitId,
               agentId: config.id,
               sessionId: session.id,
+              traceId: session.traceId,
+              ...(session.parentId === undefined ? {} : { parentId: session.parentId }),
               turn: turns,
               outcome: "error",
               durationMs: Date.now() - turnStartedAt,
+              ...metadataFor(config, undefined, Date.now() - turnStartedAt),
+              ...cancellation,
               at: Date.now(),
             });
             if (error instanceof AgentControlError) throw error;
@@ -330,9 +388,12 @@ export function defineAgent<TContext extends Record<string, unknown> = Record<st
               kitId: config.kitId,
               agentId: config.id,
               sessionId: session.id,
+              traceId: session.traceId,
+              ...(session.parentId === undefined ? {} : { parentId: session.parentId }),
               turn: turns,
               outcome: "message",
               durationMs: Date.now() - turnStartedAt,
+              ...metadataFor(config, response.metadata, Date.now() - turnStartedAt),
               at: Date.now(),
             });
             try {
@@ -361,9 +422,12 @@ export function defineAgent<TContext extends Record<string, unknown> = Record<st
               kitId: config.kitId,
               agentId: config.id,
               sessionId: session.id,
+              traceId: session.traceId,
+              ...(session.parentId === undefined ? {} : { parentId: session.parentId }),
               turn: turns,
               outcome: "tool_call",
               durationMs: Date.now() - turnStartedAt,
+              ...metadataFor(config, response.metadata, Date.now() - turnStartedAt),
               at: Date.now(),
             });
             await emitEvent(config.hooks, {
@@ -371,10 +435,13 @@ export function defineAgent<TContext extends Record<string, unknown> = Record<st
               kitId: config.kitId,
               agentId: config.id,
               sessionId: session.id,
+              traceId: session.traceId,
+              ...(session.parentId === undefined ? {} : { parentId: session.parentId }),
               turn: turns,
               toolName: response.name,
               outcome: "rejected",
               durationMs: 0,
+              ...metadataFor(config, response.metadata, Date.now() - turnStartedAt),
               at: Date.now(),
             });
             status = "failed";
@@ -398,26 +465,61 @@ export function defineAgent<TContext extends Record<string, unknown> = Record<st
               kitId: config.kitId,
               agentId: config.id,
               sessionId: session.id,
+              traceId: session.traceId,
+              ...(session.parentId === undefined ? {} : { parentId: session.parentId }),
               turn: turns,
               toolName: tool.name,
               outcome: "completed",
               durationMs: Date.now() - toolStartedAt,
+              ...metadataFor(config, response.metadata, Date.now() - turnStartedAt),
+              at: Date.now(),
+            });
+            await emitEvent(config.hooks, {
+              type: "turn_finished",
+              kitId: config.kitId,
+              agentId: config.id,
+              sessionId: session.id,
+              traceId: session.traceId,
+              ...(session.parentId === undefined ? {} : { parentId: session.parentId }),
+              turn: turns,
+              outcome: "tool_call",
+              durationMs: Date.now() - turnStartedAt,
+              ...metadataFor(config, response.metadata, Date.now() - turnStartedAt),
               at: Date.now(),
             });
           } catch (error) {
-            if (error instanceof AgentControlError) throw error;
+            const cancellation = error instanceof AgentControlError ? controlMetadata(error.reason) : {};
             history.push({ role: "tool", toolCallId, name: tool.name, result: null, isError: true });
             await emitEvent(config.hooks, {
               type: "tool_called",
               kitId: config.kitId,
               agentId: config.id,
               sessionId: session.id,
+              traceId: session.traceId,
+              ...(session.parentId === undefined ? {} : { parentId: session.parentId }),
               turn: turns,
               toolName: tool.name,
               outcome: "failed",
               durationMs: Date.now() - toolStartedAt,
+              ...metadataFor(config, response.metadata, Date.now() - turnStartedAt),
+              ...cancellation,
               at: Date.now(),
             });
+            await emitEvent(config.hooks, {
+              type: "turn_finished",
+              kitId: config.kitId,
+              agentId: config.id,
+              sessionId: session.id,
+              traceId: session.traceId,
+              ...(session.parentId === undefined ? {} : { parentId: session.parentId }),
+              turn: turns,
+              outcome: "error",
+              durationMs: Date.now() - turnStartedAt,
+              ...metadataFor(config, response.metadata, Date.now() - turnStartedAt),
+              ...cancellation,
+              at: Date.now(),
+            });
+            if (error instanceof AgentControlError) throw error;
             status = "failed";
             runError = asError(error, errorCodeFor("tool"));
             return await finish();

@@ -27,6 +27,7 @@ export type {
   AgentInput,
   AgentMessage,
   AgentToolDefinition,
+  AgentTurnMetadata,
   AgentModelResponse,
   AgentModelTurn,
   AgentModelConnector,
