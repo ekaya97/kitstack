@@ -372,21 +372,15 @@ function createLiveVoiceScheduler(app: DemoApp, liveVoice: DemoLiveVoiceRoute): 
     const result = await startScheduledLiveVoiceCall(payload.sessionId, liveVoice.http);
     return result.callId;
   });
-  const startCall = async (job: import("../scheduler/index.js").ScheduledCallRecord) => {
-    // The session is read from DebriefService's durable hydration, not a
-    // process-local voice context, before the provider seam is invoked.
-    const session = await app.debrief.hydrateSession(job.sessionId);
-    if (session.orgId !== job.orgId) throw new Error("Scheduled call organization mismatch");
-    const result = await startScheduledLiveVoiceCall(job.sessionId, liveVoice.http);
-    return result.callId;
-  };
   return new ScheduledCallPoller({
     operations: app.scheduler,
     orgId: app.orgId,
     workerId: process.env.KITSTACK_DEMO_SCHEDULER_WORKER_ID?.trim() || `demo-voice-${process.pid}`,
     intervalMs: Number(process.env.KITSTACK_DEMO_SCHEDULER_INTERVAL_MS ?? 1_000),
-    job: createScheduledCallJob(startCall),
-    invokeTrigger: async (job) => {
+    // The declared job owns the scheduler dispatch boundary. Its provider
+    // seam invokes the trigger contract, so both W5 contracts are exercised
+    // by the live path without maintaining two competing callbacks.
+    job: createScheduledCallJob(async (job) => {
       const invoked = await dispatchTrigger(scheduledTrigger, {
         kitId: "kit:debrief",
         payload: { sessionId: job.sessionId },
@@ -395,9 +389,6 @@ function createLiveVoiceScheduler(app: DemoApp, liveVoice: DemoLiveVoiceRoute): 
         channel: { kind: "schedule", id: scheduledTrigger.id },
         session: { id: job.sessionId, traceId: `schedule:${job.sessionId}` },
       }, {
-        // T-0206 supplies the mandatory audit seam; durable audit storage is a
-        // separate ticket. Existing metadata telemetry keeps this demo path
-        // observable without persisting payloads.
         audit: async (event) => {
           await app.telemetry.append({
             id: crypto.randomUUID(), timestamp: new Date().toISOString(), orgId: app.orgId,
@@ -413,7 +404,7 @@ function createLiveVoiceScheduler(app: DemoApp, liveVoice: DemoLiveVoiceRoute): 
         throw new Error(block?.type === "text" ? block.text : "Scheduled trigger failed");
       }
       return invoked.value ?? null;
-    },
+    }),
     onProviderFailure: async (job, error) => {
       try { await app.debrief.markFailed(job.sessionId, error); } catch { /* Keep the scheduler failure durable. */ }
     },

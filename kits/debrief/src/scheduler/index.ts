@@ -273,7 +273,7 @@ export class ScheduledCallPoller {
       const providerCallId = this.options.job
         ? await invokeScheduledJob(this.options.job, job, this.options.jobContext)
         : this.options.invokeTrigger
-        ? this.options.invokeTrigger(job)
+        ? await this.options.invokeTrigger(job)
         : await this.options.startCall!(job);
       await this.options.onProviderStart?.(job, providerCallId);
       return await this.options.operations.complete({
