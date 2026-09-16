@@ -137,7 +137,7 @@ export async function dispatch(
         const target = resolution.target;
         const validation = target.validate?.(envelope.args);
         if (validation && !validation.success) {
-          result = dispatchError("invalid_arguments", validation.message);
+          result = dispatchError("invalid_arguments", `Invalid arguments: ${validation.message}`);
         } else {
           const args = validation?.data ?? envelope.args;
           const ctx = dependencies.createContext?.(envelope, args);

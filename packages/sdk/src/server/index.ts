@@ -22,6 +22,15 @@ export type {
   McpToolDefinition,
   ProtocolHandler,
 } from "./types";
+export {
+  dispatch,
+  createDispatchEnvelope,
+  type DispatchEnvelope,
+  type DispatchRequestContext,
+  type DispatchDependencies,
+  type DispatchResult,
+  type DispatchErrorCode,
+} from "./dispatch";
 
 /** Database connection config passed to `@libsql/client`'s `createClient()`. */
 interface DbConfig {

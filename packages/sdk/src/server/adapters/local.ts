@@ -2,6 +2,8 @@ import type { LibSQLDatabase } from "drizzle-orm/libsql";
 import type { KitDefinition, KitToolResult, KitContext, ToolDefinition, AuthzRequirement } from "../../types";
 import { createKitContext } from "../../context";
 import type { KitServerAdapter, ResolvedKit } from "../types";
+import { createDispatchEnvelope, dispatch } from "../dispatch";
+import type { DispatchTarget } from "../dispatch";
 import { zodToJsonSchema } from "../../runtime/zod-to-json-schema";
 import { generateShell } from "../../shell-template";
 
@@ -87,7 +89,7 @@ export function localAdapter(options: LocalAdapterOptions): KitServerAdapter {
     })),
   };
 
-  function makeCtx(userId: string): KitContext {
+  function makeCtx(userId: string, session?: KitContext["session"]): KitContext {
     const effectiveUserId = userId || defaultUserId;
     const base = options.context;
     return createKitContext({
@@ -101,8 +103,9 @@ export function localAdapter(options: LocalAdapterOptions): KitServerAdapter {
       },
       channel: { kind: "internal", ...base?.channel },
       session: {
-        id: crypto.randomUUID(),
-        traceId: crypto.randomUUID(),
+        id: session?.id ?? crypto.randomUUID(),
+        traceId: session?.traceId ?? crypto.randomUUID(),
+        ...(session?.parentId ? { parentId: session.parentId } : {}),
         ...base?.session,
       },
       telemetry: base?.telemetry,
@@ -119,40 +122,84 @@ export function localAdapter(options: LocalAdapterOptions): KitServerAdapter {
 
     async executeTool(kitId, toolName, args, userId) {
       const tool = toolMap.get(toolName);
-      if (!tool) {
-        return {
-          content: [{ type: "text", text: `Unknown tool: "${toolName}". Available: ${[...toolMap.keys()].join(", ")}` }],
-          isError: true,
-        };
-      }
 
-      const parsed = tool.args.safeParse(args);
-      if (!parsed.success) {
-        const issues = parsed.error.issues
-          .map((i) => `${i.path.join(".")}: ${i.message}`)
-          .join(", ");
-        return {
-          content: [{ type: "text", text: `Invalid arguments: ${issues}` }],
-          isError: true,
-        };
-      }
+      const envelope = createDispatchEnvelope({
+        kitId,
+        command: toolName,
+        args: args as Record<string, unknown>,
+        principal: userId || defaultUserId,
+        context: {
+          channel: options.context?.channel ?? { kind: "internal" },
+          session: options.context?.session,
+        },
+      });
+      const target: DispatchTarget | undefined = tool
+        ? {
+            kitId,
+            command: toolName,
+            validate(input) {
+              const parsed = tool.args.safeParse(input);
+              if (!parsed.success) {
+                return {
+                  success: false,
+                  message: parsed.error.issues
+                    .map((issue) => `${issue.path.join(".")}: ${issue.message}`)
+                    .join(", "),
+                };
+              }
+              return { success: true, data: parsed.data as Record<string, unknown> };
+            },
+            authorize: tool.authorize
+              ? (input, ctx) => tool.authorize!(input, ctx)
+              : undefined,
+          }
+        : undefined;
 
-      // Run authorize hook if present and checkAuthz is configured
-      const ctx = makeCtx(userId);
-      if (tool.authorize && options.checkAuthz) {
-        const requirements = tool.authorize(parsed.data, ctx);
-        for (const req of requirements) {
-          const allowed = await options.checkAuthz(db, req, ctx);
-          if (!allowed) {
+      return dispatch(envelope, {
+        resolve: async (request) => {
+          if (request.kitId !== kit.id) {
             return {
-              content: [{ type: "text", text: `Forbidden: missing "${req.relation}" on ${req.objectType} "${req.objectId}"` }],
-              isError: true,
+              error: { code: "unknown_kit", message: `Kit "${request.kitId}" not found.` },
             };
           }
-        }
-      }
-
-      return tool.handler!(ctx, parsed.data);
+          if (request.command !== toolName) {
+            return {
+              error: {
+                code: "unknown_tool",
+                message: `Unknown tool: "${request.command}". Available: ${[...toolMap.keys()].join(", ")}`,
+              },
+            };
+          }
+          if (!target) {
+            return {
+              error: {
+                code: "unknown_tool",
+                message: `Unknown tool: "${request.command}". Available: ${[...toolMap.keys()].join(", ")}`,
+              },
+            };
+          }
+          return { target };
+        },
+        createContext: (request) => makeCtx(request.identity.principal, request.session),
+        checkGrant: options.checkAuthz
+          ? async (request, requirements, ctx) => {
+              for (const requirement of requirements) {
+                const allowed = await options.checkAuthz!(db, requirement, ctx!);
+                if (!allowed) {
+                  return {
+                    allowed: false,
+                    reason: `Forbidden: missing "${requirement.relation}" on ${requirement.objectType} "${requirement.objectId}"`,
+                  };
+                }
+              }
+              return { allowed: true };
+            }
+          : undefined,
+        invoke: async (_request, _target, parsedArgs, ctx) => {
+          if (!tool) throw new Error(`Unknown tool: "${toolName}"`);
+          return tool.handler!(ctx!, parsedArgs);
+        },
+      });
     },
 
     async executeLoader(kitId, viewSlug, userId) {
