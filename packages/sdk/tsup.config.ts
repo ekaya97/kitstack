@@ -10,6 +10,7 @@ export default defineConfig({
     "server/index": "src/server/index.ts",
     "tailwind-preset": "src/tailwind-preset.ts",
     "build": "src/build.ts",
+    "container-artifact": "src/container-artifact.ts",
 
     // CLI
     "cli/index": "src/cli/index.ts",

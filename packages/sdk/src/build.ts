@@ -18,6 +18,16 @@ import { KitStackError, MigrationError } from "./errors";
 import { generateShell } from "./shell-template";
 import { generatePreview } from "./preview-template";
 import { zodToJsonSchema } from "./runtime/zod-to-json-schema";
+import { emitContainerArtifact, type ContainerArtifactResult } from "./container-artifact";
+
+export interface BuildKitOptions {
+  /** Image reference written to the deployment manifest. */
+  image?: string;
+  /** Base image used by the generated Containerfile. */
+  baseImage?: string;
+  /** HMAC key used to sign the generated artifact metadata. */
+  signingKey?: string;
+}
 
 // Resolve the SDK package root — works both in monorepo (symlink) and from node_modules
 const _require = createRequire(import.meta.url);
@@ -45,6 +55,8 @@ export interface BuildResult {
   manifest: Record<string, unknown>;
   /** Absolute path to the build output directory (.kitstack/build/). */
   outputDir: string;
+  /** Generated portable container context and deployment metadata. */
+  container: ContainerArtifactResult;
 }
 
 function log(icon: string, msg: string) {
@@ -97,7 +109,7 @@ function fileSizeKB(filePath: string): string {
  * await buildKit(process.cwd());
  * ```
  */
-export async function buildKit(kitRoot: string) {
+export async function buildKit(kitRoot: string, options: BuildKitOptions = {}) {
   const configPath = resolve(kitRoot, "kit.config.ts");
   const outputDir = resolve(kitRoot, ".kitstack", "build");
   const entriesDir = resolve(outputDir, "_entries");
@@ -502,7 +514,7 @@ export default defineConfig({
   // ── 9. MANIFEST ────────────────────────────────────────────
 
   const serverBundlePath = resolve(outputDir, "kit.mjs");
-  const manifest = {
+  const manifest: Record<string, any> = {
     kitId: kit.id,
     kitName: kit.name,
     kitDescription: kit.description,
@@ -567,10 +579,34 @@ export default defineConfig({
       .filter(Boolean),
   };
 
+  const image = options.image ?? `${kit.id}:${kit.version}`;
+  manifest.container = {
+    image,
+    context: "container",
+    containerfile: "container/Containerfile",
+    deploymentFile: "kitstack.yaml",
+    artifactFile: "artifact.json",
+  };
+
   writeFileSync(resolve(outputDir, "manifest.json"), JSON.stringify(manifest, null, 2));
   log("\u2713", "Manifest: .kitstack/build/manifest.json");
 
+  const container = emitContainerArtifact({
+    kitRoot,
+    buildDir: outputDir,
+    manifest,
+    image,
+    baseImage: options.baseImage,
+    signingKey: options.signingKey,
+  });
+  log("\u2713", `Container context: .kitstack/build/container (image ${image})`);
+  log("\u2713", "Deployment file: .kitstack/build/kitstack.yaml");
+  log("\u2713", `Artifact digest: ${container.digest}`);
+  if (!container.signature) {
+    console.warn("  Warning: artifact is unsigned. Set KITSTACK_SIGNING_KEY or pass --sign-key before deployment.\n");
+  }
+
   console.log(`\n  Kit "${kit.name}" built successfully.\n`);
 
-  return { manifest, outputDir };
+  return { manifest, outputDir, container };
 }
