@@ -6,8 +6,7 @@ selection, instructions, and transport-neutral channel/trigger contracts.
 
 The host owns concrete providers. Persistence, AI, telemetry, HTTP, Twilio,
 and authentication are supplied as plugins or adapters by the host. The kit
-does not import `packages/demo` and does not require a particular database,
-voice provider, or HTTP framework.
+does not require a particular database, voice provider, or HTTP framework.
 
 ## Public surface
 
@@ -88,8 +87,7 @@ The router resolves the debrief shell from the fixed registry-compatible key
 supplies the CDN origin in MCP App CSP metadata. Existing kits continue to use
 their registry-provided shell keys.
 
-The local demo host binds this boundary through its registered persistence,
-memory, instruction, AI, telemetry, trigger, and channel plugins. The kit
-package remains host-agnostic; the concrete wiring lives in
-`packages/demo/src/app/index.ts` so another codebase can replace those
-providers without changing sales policy or tool schemas.
+The local host binds this boundary through its registered persistence, memory,
+instruction, AI, telemetry, trigger, and channel plugins. The concrete wiring
+for this repository lives in `src/composition/app/index.ts`; another codebase
+can replace those providers without changing sales policy or tool schemas.

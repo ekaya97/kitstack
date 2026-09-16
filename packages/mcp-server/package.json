@@ -4,13 +4,10 @@
   "private": true,
   "type": "module",
   "exports": {
-    "./framework/dynamo": "./src/framework/dynamo.ts",
-    "./framework/types": "./src/framework/types.ts",
+    "./db/dynamo": "./src/db/dynamo.ts",
+    "./db/provisioner": "./src/db/provisioner.ts",
     "./db/schema": "./src/db/schema.ts",
-    "./kits/crm/migrations": "./src/kits/crm/migrations.ts",
-    "./kits/meeting/migrations": "./src/kits/meeting/migrations.ts",
-    "./kits/expense/migrations": "./src/kits/expense/migrations.ts",
-    "./kits/outreach/migrations": "./src/kits/outreach/migrations.ts"
+    "./router/types": "./src/router/types.ts"
   },
   "dependencies": {
     "@aws-sdk/client-apigatewaymanagementapi": "^3.1037.0",

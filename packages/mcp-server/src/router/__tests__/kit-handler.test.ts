@@ -70,7 +70,7 @@ const mockUserDbs: UserKitDbItem[] = [
   },
 ];
 
-vi.mock("../../framework/dynamo", () => ({
+vi.mock("../../db/dynamo", () => ({
   getUserKitDb: vi.fn(async (userId: string, kitId: string) => {
     return mockUserDbs.find((d) => d.userId === userId && d.kitId === kitId) ?? null;
   }),

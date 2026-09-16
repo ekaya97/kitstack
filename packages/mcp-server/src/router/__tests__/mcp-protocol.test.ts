@@ -67,7 +67,7 @@ const invokeKitLambda = vi.fn(async () => ({
   content: [{ type: "text", text: "Meeting processed" }],
 }));
 
-vi.mock("../../framework/dynamo", () => ({
+vi.mock("../../db/dynamo", () => ({
   getUserKitDb: vi.fn(async (userId: string, kitId: string) => {
     return mockUserDbs.find((d) => d.userId === userId && d.kitId === kitId) ?? null;
   }),

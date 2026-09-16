@@ -83,12 +83,12 @@ packages/
                          CLI, build + deploy pipeline, serve() self-host runtime
   mcp-server/            MCP router (onion-pattern dispatch, entitlements)
     src/router/          Protocol handling, kit tool dispatch
-    src/framework/       Shared MCP framework (tool defs, DB provisioning)
+    src/db/              Registry DB access and Turso database provisioning
     src/app-data/        AppData Lambda for interactive view iframes
   mcp-apps/              Vite-built interactive UI components (iframes)
   authz/                 Authorization primitives
 
-kits/                    Reference kits (crm, expenses, content-planner, …)
+kits/                    Reference kits (debrief, crm, expenses, …)
 skills/                  Downloadable skill packages
 infra/                   SST infrastructure (storage, web, mcp)
 docs/                    Specs and research

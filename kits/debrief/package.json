@@ -11,6 +11,9 @@
   },
   "dependencies": {
     "@kitstackco/sdk": "*",
+    "@libsql/client": "^0.14",
+    "jose": "^5.2.3",
+    "ws": "^8.18.0",
     "zod": "^3.22.0"
   },
   "devDependencies": {
@@ -20,6 +23,8 @@
   "scripts": {
     "build": "kitstack build",
     "publish:assets": "npm run build && sst shell -- npx tsx scripts/publish-assets.ts",
+    "start": "tsx src/transports/server.ts",
+    "start:stdio": "tsx src/transports/mcp/stdio.ts",
     "typecheck": "tsc -p tsconfig.json --noEmit",
     "test": "vitest run --config vitest.config.ts"
   }

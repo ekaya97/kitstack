@@ -19,7 +19,7 @@ const invokeKitLambda = vi.fn(async () => ({
   content: [{ type: "text", text: "Done" }],
 }));
 
-vi.mock("../../framework/dynamo", () => ({
+vi.mock("../../db/dynamo", () => ({
   getUserKitDb: vi.fn(),
 }));
 

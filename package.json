@@ -8,13 +8,14 @@
     "packages/sdk",
     "packages/mcp-server",
     "packages/authz",
-    "packages/demo"
+    "kits/debrief"
   ],
   "scripts": {
     "dev": "sst dev",
-    "test": "vitest",
-    "test:run": "vitest run",
-    "demo:server": "npm run start --workspace @kitstackco/demo",
+    "test": "npm run test:debrief",
+    "test:run": "npm run test:debrief",
+    "test:debrief": "npm test --workspace @kitstackco/debrief-kit",
+    "demo:server": "npm run start --workspace @kitstackco/debrief-kit",
     "db:generate": "drizzle-kit generate",
     "db:seed": "tsx web/src/db/seed.ts",
     "dev:db": "turso dev --db-file databases/local.db",

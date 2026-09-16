@@ -1,18 +1,18 @@
 import { describe, it, expect, vi, beforeEach } from "vitest";
 import { NextRequest } from "next/server";
 
-vi.mock("@kitstackco/mcp-server/framework/dynamo", () => ({
+vi.mock("@kitstackco/mcp-server/db/dynamo", () => ({
   getUserKitDb: vi.fn(),
   putUserKitDb: vi.fn(),
 }));
 
-vi.mock("@kitstackco/mcp-server/framework/db-provisioner", () => ({
+vi.mock("@kitstackco/mcp-server/db/provisioner", () => ({
   provisionKitDatabase: vi.fn(),
 }));
 
 import { POST } from "../route";
-import { getUserKitDb } from "@kitstackco/mcp-server/framework/dynamo";
-import { provisionKitDatabase } from "@kitstackco/mcp-server/framework/db-provisioner";
+import { getUserKitDb } from "@kitstackco/mcp-server/db/dynamo";
+import { provisionKitDatabase } from "@kitstackco/mcp-server/db/provisioner";
 
 beforeEach(() => {
   vi.clearAllMocks();

@@ -5,7 +5,7 @@
  * Runs migrations via Turso's HTTP pipeline endpoint — no native libsql binary needed.
  */
 
-import { putUserKitDb } from "@kitstackco/mcp-server/framework/dynamo";
+import { putUserKitDb } from "@kitstackco/mcp-server/db/dynamo";
 import { Resource } from "sst";
 
 const TURSO_API_BASE = "https://api.turso.tech/v1";

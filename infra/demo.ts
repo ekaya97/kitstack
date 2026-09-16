@@ -30,7 +30,7 @@ export const demoVoice = new sst.aws.Service("DemoVoice", {
   memory: "1 GB",
   image: {
     context: ".",
-    dockerfile: "packages/demo/Dockerfile",
+    dockerfile: "kits/debrief/Dockerfile",
   },
   environment: {
     HOST: "0.0.0.0",
@@ -89,7 +89,7 @@ export const demoVoice = new sst.aws.Service("DemoVoice", {
   },
   dev: {
     url: "http://localhost:3001",
-    command: "npm run demo:server",
+    command: "npm run start --workspace @kitstackco/debrief-kit",
     directory: ".",
     autostart: false,
   },

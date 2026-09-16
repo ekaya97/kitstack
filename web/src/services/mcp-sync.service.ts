@@ -12,8 +12,8 @@ import {
   getUserKitDbs,
   deleteUserKitDb,
   updateUserKitDbStatus,
-} from "@kitstackco/mcp-server/framework/dynamo";
-import type { UserKitDbItem } from "@kitstackco/mcp-server/framework/types";
+} from "@kitstackco/mcp-server/db/dynamo";
+import type { UserKitDbItem } from "@kitstackco/mcp-server/router/types";
 
 import {
   provisionKitDatabase,
@@ -110,4 +110,3 @@ export async function deleteKitDb(
     `deleteUserKitDb(${kitId})`
   );
 }
-

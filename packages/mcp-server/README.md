@@ -100,13 +100,10 @@ This was removed because:
 
 ```
 src/
-  framework/         Core types, DynamoDB access, kit/tool definition helpers
-    types.ts         KitToolInput, KitRegistryItem, UserKitDbItem, etc.
+  db/                Registry DB access and database provisioning
     dynamo.ts        DynamoDB operations for registry and user kit DBs
-    define-kit.ts    defineKit() helper for kit authors
-    define-tool.ts   defineTool() helper for kit authors
-    db-provisioner.ts  Turso database provisioning per user per kit
-    audit.ts         Audit logging
+    provisioner.ts   Turso database provisioning per user per kit
+    schema.ts        Router database schema
 
   router/            MCP protocol handling
     handler.ts       Lambda entry point: OAuth, auth, rate limiting, routing
