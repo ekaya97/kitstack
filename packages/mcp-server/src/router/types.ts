@@ -39,6 +39,8 @@ export interface KitRegistryItem {
   kitTriggers?: string;
   kitInstructions?: string;
   lambdaResource?: string | null;
+  /** v0.2 tool autonomy gate; absent legacy tools are assist-only. */
+  mode?: "assist" | "act";
 }
 
 export interface UserKitDbItem {

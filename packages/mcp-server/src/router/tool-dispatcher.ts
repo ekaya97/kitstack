@@ -1,6 +1,10 @@
 import type { KitRegistryItem, KitToolInvocation, KitToolResult } from "./types";
 import { getUserKitDb } from "../db/dynamo";
-import { mcpCheckTuple } from "./authz";
+import {
+  authorizeToolInvocation,
+  interactiveIdentity,
+  mcpCheckTuple,
+} from "./authz";
 import { audit } from "./audit";
 import { log } from "./logger";
 import { getKitFunctionId, getKitAuthzSlug } from "./kit-resources";
@@ -107,23 +111,37 @@ export async function dispatchToolCall(
     };
   }
 
-  // Authz: tuple check is authoritative — user must have activator relation
+  // Authz: platform grants are authoritative. Legacy marketplace
+  // `activator` tuples are intentionally not accepted here.
   const kitSlug = getKitAuthzSlug(tool.kitId);
-  {
-    const allowed = await mcpCheckTuple(userId, "activator", "kit", kitSlug);
-    if (!allowed) {
-      log.warn("Kit not authorized for user", { userId, toolName, kitId: tool.kitId });
-      audit({ action: "tool.call.error", userId, toolName, kitId: tool.kitId, detail: "kit not authorized" });
-      return {
-        content: [
-          {
-            type: "text",
-            text: `Kit "${tool.kitName}" is not activated. Please activate it at kitstack.co/dashboard first.`,
-          },
-        ],
-        isError: true,
-      };
-    }
+  const identity = requestContext?.identity ?? interactiveIdentity(userId);
+  const authorization = await authorizeToolInvocation(
+    {
+      identity,
+      mode: tool.mode ?? "assist",
+      kitSlug,
+    },
+    mcpCheckTuple,
+  );
+  if (!authorization.allowed) {
+    log.warn("Kit not authorized for user", {
+      userId,
+      toolName,
+      kitId: tool.kitId,
+      reason: authorization.reason,
+    });
+    // Deliberately omit args: authorization denials must not leak sensitive
+    // tool input into CloudWatch audit records.
+    audit({ action: "tool.call.error", userId, toolName, kitId: tool.kitId, detail: "kit not authorized" });
+    return {
+      content: [
+        {
+          type: "text",
+          text: `Kit "${tool.kitName}" is not authorized for this operation (not activated).`,
+        },
+      ],
+      isError: true,
+    };
   }
 
   // Circuit breaker: check if kit is temporarily disabled
