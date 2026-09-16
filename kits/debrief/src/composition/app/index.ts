@@ -19,6 +19,7 @@ export interface DemoApp {
   readonly orgId: string;
   readonly appId: string | null;
   readonly telemetry: TelemetryStore;
+  readonly modelRouter: ReturnType<typeof createDeclarativeModelRouter>;
   readonly apps: AppRegistry;
   readonly memory: MemoryStore;
   readonly instructions: InstructionPlugin;
@@ -410,7 +411,7 @@ export async function createDemoApp(options: CreateDemoAppOptions = {}): Promise
   };
 
   return {
-    client, orgId, appId, telemetry, apps, memory, instructions, debrief, voice, scheduler, plugins, mcpAuthMode, adminToken,
+    client, orgId, appId, telemetry, modelRouter, apps, memory, instructions, debrief, voice, scheduler, plugins, mcpAuthMode, adminToken,
     async reset() {
       debrief.clearSessions();
       await plugins.dispatch("memory:default", {

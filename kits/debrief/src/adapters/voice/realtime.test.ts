@@ -148,7 +148,7 @@ describe("Twilio and OpenAI Realtime boundary", () => {
       twilioSocket: twilio,
       openai: { socketFactory: { connect: vi.fn(async () => openai) }, url: "wss://openai.example/realtime", apiKey: "server-key", model: "gpt-4o-realtime-preview" },
       verifier: { verify: vi.fn(async (token: string) => { expect(token).toBe("signed-session"); return { sessionId: "session-1", orgId: "org-demo", appId: "app-sales" }; }) },
-      bindings: createSessionBindingStore(), telemetry: store, agent, onCallCompleted, now: () => "2026-01-01T00:00:00.000Z", createId: (() => { let i = 0; return () => `event-${++i}`; })(),
+      bindings: createSessionBindingStore(), telemetry: store, agent, routingReason: "declarative-task-class", onCallCompleted, now: () => "2026-01-01T00:00:00.000Z", createId: (() => { let i = 0; return () => `event-${++i}`; })(),
     });
     twilio.emit("message", JSON.stringify({ event: "start", streamSid: "MZ123", start: { streamSid: "MZ123", callSid: "CA123", customParameters: { kitstack_session_token: "signed-session" } } }));
     await expect(bridge.binding).resolves.toMatchObject({ streamSid: "MZ123", sessionId: "session-1" });
@@ -171,7 +171,7 @@ describe("Twilio and OpenAI Realtime boundary", () => {
     openai.emit("message", JSON.stringify({ type: "response.done", response: { usage: { input_tokens: 12, output_tokens: 8 } } }));
     await new Promise((resolve) => setTimeout(resolve, 0));
     expect(agent.onProviderTurn).toHaveBeenCalledWith(expect.objectContaining({ kind: "turn_completed", sessionId: "session-1", usage: { inputTokens: 12, outputTokens: 8 } }));
-    expect(store.append).toHaveBeenCalledWith(expect.objectContaining({ type: "inference", model: "gpt-4o-realtime-preview", requestTokens: 12, responseTokens: 8 }));
+    expect(store.append).toHaveBeenCalledWith(expect.objectContaining({ type: "inference", model: "gpt-4o-realtime-preview", routingReason: "declarative-task-class", requestTokens: 12, responseTokens: 8 }));
 
     twilio.emit("message", JSON.stringify({ event: "stop", streamSid: "MZ123" }));
     await bridge.done;

@@ -126,7 +126,7 @@ describe("DemoApp", () => {
       callbackTimezone: "Europe/Berlin",
       bufferMinutes: 5,
     });
-    expect(prepared.prebrief).toContain("Known: Company: Acme Corp");
+    expect("prebrief" in prepared && prepared.prebrief).toContain("Known: Company: Acme Corp");
     expect(await app.telemetry.query({ type: "model.route" })).toEqual([
       expect.objectContaining({ model: "strong-extraction", routingReason: "declarative-task-class" }),
     ]);

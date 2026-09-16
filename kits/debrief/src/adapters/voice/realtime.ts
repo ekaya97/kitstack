@@ -409,6 +409,7 @@ export interface DefineAgentVoiceLoopOptions {
   tools?: Parameters<typeof defineAgent>[0]["tools"];
   provider?: string | null;
   model?: string | null;
+  routingReason?: string | null;
   callId?: string | null;
   memoryIds?: readonly string[];
   estimateCostUsd?: (usage: { requestTokens?: number | null; responseTokens?: number | null }) => number | null;
@@ -442,7 +443,9 @@ function toVoiceLifecycleTelemetry(
         responseTokens: event.responseTokens ?? null,
         estimatedCostUsd: event.costUsd ?? null,
         latencyMs: "latencyMs" in event ? event.latencyMs ?? null : ("durationMs" in event ? event.durationMs : null),
-        ...(event.routingReason === undefined ? {} : { routingReason: event.routingReason }),
+        ...(event.routingReason === undefined && options.routingReason === undefined
+          ? {}
+          : { routingReason: event.routingReason ?? options.routingReason ?? null }),
         ...(event.cancellationReason === undefined ? {} : { cancellationReason: event.cancellationReason }),
         ...(event.timeoutReason === undefined ? {} : { timeoutReason: event.timeoutReason }),
       }
@@ -647,6 +650,7 @@ export interface VoiceWebSocket {
 export interface TwilioOpenAIBridgeOptions {
   twilioSocket: VoiceWebSocket;
   openai: RealtimeSessionOptions;
+  routingReason?: string | null;
   verifier: SignedSessionTokenVerifier;
   bindings?: SessionBindingStore;
   signature?: { validator: TwilioSignatureValidator; url: string; params: Readonly<Record<string, string | string[] | undefined>>; value: string | undefined };
@@ -789,6 +793,7 @@ export function bridgeTwilioToOpenAI(options: TwilioOpenAIBridgeOptions): Twilio
         type: "inference", operation: "realtime_turn", model: options.openai.model,
         provider: REALTIME_PROVIDER, callId: current?.callSid ?? null,
         requestTokens: usage.inputTokens ?? null, responseTokens: usage.outputTokens ?? null,
+        routingReason: options.routingReason ?? null,
         latencyMs: latencyMs ?? null, estimatedCostUsd: options.estimateCostUsd?.(usage) ?? null, outcome: "success",
       });
       turnStartedAt = undefined;

@@ -293,6 +293,13 @@ async function composeLiveVoiceRoute(app: DemoApp): Promise<DemoLiveVoiceRoute |
     instructions: instructionsContent,
     voice: process.env.OPENAI_REALTIME_VOICE?.trim() || "marin",
   };
+  const conversationRoute = await app.modelRouter.resolve("conversation", {
+    orgId: app.orgId,
+    appId: app.appId,
+    kitId: "kit:debrief",
+    pluginId: "channel:voice",
+  });
+  openai.model = conversationRoute.model;
   const signatureValidator = createTwilioSignatureValidator(values.TWILIO_AUTH_TOKEN);
 
   return {
@@ -336,6 +343,7 @@ async function composeLiveVoiceRoute(app: DemoApp): Promise<DemoLiveVoiceRoute |
       socket,
       verifier: tokenCodec,
       openai,
+      routingReason: conversationRoute.reason,
       telemetry: app.telemetry,
       instructionsFor: async (binding) => (await voiceContextFor(binding)).content,
       onCallCompleted: async (call) => finalizeLiveCall(app, call),
@@ -355,6 +363,7 @@ async function composeLiveVoiceRoute(app: DemoApp): Promise<DemoLiveVoiceRoute |
         telemetry: app.telemetry,
         provider: "twilio-openai-realtime",
         model: openai.model,
+        routingReason: conversationRoute.reason,
         callId: binding.callSid ?? null,
         memoryIds: context.memoryIds,
         onStop: async () => { await app.debrief.awaitConfirmation(binding.sessionId); },

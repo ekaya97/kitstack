@@ -20,6 +20,7 @@ export const TELEMETRY_EVENT_TYPES = [
   "instruction.served",
   "voice.call",
   "inference",
+  "model.route",
   "session.completed",
 ] as const;
 

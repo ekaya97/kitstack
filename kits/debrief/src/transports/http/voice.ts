@@ -164,6 +164,7 @@ export interface VoiceMediaBridgeOptions {
   signature?: { validator: TwilioSignatureValidator; url: string; params: Readonly<Record<string, string | string[] | undefined>>; value: string | undefined };
   verifier: SignedSessionTokenVerifier;
   openai: { socketFactory: OpenAIRealtimeSocketFactory; url: string; apiKey: string; model: string; instructions?: string; voice?: string };
+  routingReason?: string | null;
   instructionsFor?: (binding: SessionBinding) => Promise<string>;
   onCallCompleted?: (call: { sessionId: string; orgId: string; appId: string | null; callId: string | null; reason: string; occurredAt: string }) => Promise<void>;
   telemetry: Pick<TelemetryStore, "append">;
@@ -174,7 +175,7 @@ export interface VoiceMediaBridgeOptions {
 export function attachVoiceMediaBridge(options: VoiceMediaBridgeOptions): TwilioOpenAIBridge {
   return bridgeTwilioToOpenAI({
     twilioSocket: options.socket, signature: options.signature, verifier: options.verifier,
-    openai: options.openai, telemetry: options.telemetry, agent: options.agent, instructionsFor: options.instructionsFor,
+    openai: options.openai, routingReason: options.routingReason, telemetry: options.telemetry, agent: options.agent, instructionsFor: options.instructionsFor,
     onCallCompleted: options.onCallCompleted,
   });
 }
