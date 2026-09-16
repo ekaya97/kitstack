@@ -1,9 +1,11 @@
 import { describe, expect, it, vi } from "vitest";
 import { jwtVerify } from "jose";
 import { platformAdapter } from "../platform-adapter";
+import { createRouterPlatformDataSource } from "../platform-host";
 import { readAppResource } from "../app-resources";
 import { DEBRIEF_SHELL_S3_KEY } from "../platform-adapter";
 import type { KitRegistryItem, UserKitDbItem } from "../types";
+import type { KitContext } from "../../../../sdk/src/types";
 
 vi.mock("../tool-dispatcher", () => ({
   dispatchToolCall: vi.fn(async () => ({ content: [{ type: "text", text: "crm result" }] })),
@@ -208,6 +210,82 @@ describe("platform debrief adapter", () => {
       expect.any(Function),
       requestContext,
     );
+  });
+
+  it("binds platform tools and Views to the host-provided source", async () => {
+    const source = {
+      authorize: vi.fn(async () => true),
+      snapshot: vi.fn(async () => ({
+        events: [],
+        aggregate: {
+          totalEvents: 1,
+          totalRequestTokens: 10,
+          totalResponseTokens: 5,
+          totalEstimatedCostUsd: 0.01,
+          totalLatencyMs: 20,
+          successCount: 1,
+          errorCount: 0,
+        },
+        apps: [], kits: [], plugins: [], sessions: [], providerHealth: [],
+      })),
+      listGrants: vi.fn(async () => []),
+    } as any;
+    const adapter = platformAdapter({
+      getAllTools: vi.fn(async () => []),
+      getUserKitDbs: vi.fn(async () => []),
+      invokeKitLambda: vi.fn(),
+      platformDataSource: source,
+      platformDb: {} as KitContext["db"],
+    });
+
+    const kits = await adapter.resolveUserKits("user-1");
+    expect(kits.find((kit) => kit.id === "platform")?.views.map((view) => view.slug))
+      .toEqual(["overview", "usage-finops", "registry", "grants"]);
+
+    const result = await adapter.executeTool("platform", "get_platform_overview", { orgId: "org-demo" }, "user-1");
+    expect(result.isError).toBeUndefined();
+    expect(JSON.parse(result.content[0].type === "text" ? result.content[0].text : "{}")).toMatchObject({
+      aggregate: { totalEvents: 1 },
+    });
+    expect(source.authorize).toHaveBeenCalledWith(
+      { relation: "kit:telemetry", objectType: "organization", objectId: "org-demo" },
+      expect.objectContaining({ identity: { principal: "user-1", actor: "user-1" } }),
+    );
+
+    await expect(adapter.executeLoader("platform", "overview", "user-1"))
+      .resolves.toMatchObject({ aggregate: { totalEvents: 1 } });
+  });
+
+  it("adapts the existing observability route and registry reader", async () => {
+    const fetcher = vi.fn(async (input: RequestInfo | URL) => response({
+      events: [{ id: "event-1", orgId: "org-demo", timestamp: "2026-01-01T00:00:00.000Z", channel: "mcp", type: "mcp.tool_call", operation: "kit", outcome: "success" }],
+      aggregate: { totalEvents: 1, totalRequestTokens: 2, totalResponseTokens: 3, totalEstimatedCostUsd: 0.004, totalLatencyMs: 9, successCount: 1, errorCount: 0 },
+      apps: [{ id: "app-sales", name: "Sales", org: "org-demo", scopes: ["observability"], createdAt: "2026-01-01T00:00:00.000Z" }],
+      plugins: [], sessions: [], providerHealth: [],
+    }));
+    const source = createRouterPlatformDataSource({
+      fetch: fetcher,
+      voiceServiceUrl: "https://voice.example",
+      voiceInternalSecret: SECRET,
+      getRegistryItems: vi.fn(async () => [{
+        kitId: "crm", toolName: "list_contacts", toolDescription: "List", inputSchema: "{}", kitName: "CRM",
+      }]),
+      checkTuple: vi.fn(async () => true),
+    });
+    const ctx = {
+      identity: { principal: "user-1", actor: "user-1" },
+      session: { id: "session-1", traceId: "trace-1" },
+    } as KitContext;
+
+    await expect(source.snapshot({ orgId: "org-demo", appId: "app-sales" }, ctx)).resolves.toMatchObject({
+      apps: [{ id: "app-sales" }],
+      events: [{ id: "event-1" }],
+    });
+    expect(String(fetcher.mock.calls[0]?.[0])).toContain("orgId=org-demo");
+    expect(String(fetcher.mock.calls[0]?.[0])).toContain("appId=app-sales");
+    await expect(source.snapshot({ orgId: "org-demo" }, ctx)).resolves.toMatchObject({
+      kits: [{ id: "crm", version: "registry", status: "ready" }],
+    });
   });
 
 });
