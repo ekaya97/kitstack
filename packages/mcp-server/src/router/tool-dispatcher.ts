@@ -1,4 +1,6 @@
 import type { KitRegistryItem, KitToolInvocation, KitToolResult } from "./types";
+import { createDispatchEnvelope, dispatch } from "../../../sdk/src/server/dispatch";
+import type { DispatchTarget } from "../../../sdk/src/server/dispatch";
 import { getUserKitDb } from "../db/dynamo";
 import {
   authorizeToolInvocation,
@@ -96,135 +98,109 @@ export async function dispatchToolCall(
   invokeKitLambda: (arn: string, payload: unknown) => Promise<unknown>,
   requestContext?: PlatformAdapterRequestContext,
 ): Promise<KitToolResult> {
-  const start = Date.now();
-
-  // Find the tool in registry
+  // Resolve the registry once; all later stages run through the SDK dispatch
+  // core so local and deployed runtimes share the same ordering and errors.
   const allTools = await getAllTools();
   const tool = allTools.find((t) => t.toolName === toolName);
-
-  if (!tool) {
-    log.warn("Unknown tool requested", { userId, toolName });
-    audit({ action: "tool.call.error", userId, toolName, detail: "unknown tool" });
-    return {
-      content: [{ type: "text", text: `Unknown tool: ${toolName}` }],
-      isError: true,
-    };
-  }
-
-  // Authz: platform grants are authoritative. Legacy marketplace
-  // `activator` tuples are intentionally not accepted here.
-  const kitSlug = getKitAuthzSlug(tool.kitId);
   const identity = requestContext?.identity ?? interactiveIdentity(userId);
-  const authorization = await authorizeToolInvocation(
-    {
-      identity,
-      mode: tool.mode ?? "assist",
-      kitSlug,
-    },
-    mcpCheckTuple,
-  );
-  if (!authorization.allowed) {
-    log.warn("Kit not authorized for user", {
-      userId,
-      toolName,
-      kitId: tool.kitId,
-      reason: authorization.reason,
-    });
-    // Deliberately omit args: authorization denials must not leak sensitive
-    // tool input into CloudWatch audit records.
-    audit({ action: "tool.call.error", userId, toolName, kitId: tool.kitId, detail: "kit not authorized" });
-    return {
-      content: [
-        {
-          type: "text",
-          text: `Kit "${tool.kitName}" is not authorized for this operation (not activated).`,
-        },
-      ],
-      isError: true,
-    };
-  }
-
-  // Circuit breaker: check if kit is temporarily disabled
-  const circuitOk = await checkCircuitBreaker(tool.kitId);
-  if (!circuitOk) {
-    log.warn("Circuit breaker open", { userId, toolName, kitId: tool.kitId });
-    return {
-      content: [{ type: "text", text: `Kit "${tool.kitName}" is temporarily disabled due to repeated errors. Try again in a few minutes.` }],
-      isError: true,
-    };
-  }
-
-  // Daily invocation cap
-  const withinCap = await checkDailyCap(userId, tool.kitId);
-  if (!withinCap) {
-    log.warn("Daily invocation cap reached", { userId, toolName, kitId: tool.kitId });
-    return {
-      content: [{ type: "text", text: `Daily usage limit reached for "${tool.kitName}" (${DAILY_INVOCATION_CAP} calls/day). Resets at midnight UTC.` }],
-      isError: true,
-    };
-  }
-
-  // Fetch database credentials from DynamoDB
-  const userDb = await getUserKitDb(userId, tool.kitId);
-  if (!userDb) {
-    log.warn("Kit DB not found for user", { userId, toolName, kitId: tool.kitId });
-    audit({ action: "tool.call.error", userId, toolName, kitId: tool.kitId, detail: "kit db not provisioned" });
-    return {
-      content: [
-        {
-          type: "text",
-          text: `Kit "${tool.kitName}" database is not provisioned. Please re-activate it at kitstack.co/dashboard.`,
-        },
-      ],
-      isError: true,
-    };
-  }
-
-  // Resolve Lambda function identifier from SST Resource at runtime
-  const functionId = getKitFunctionId(tool.kitId, allTools);
-  if (!functionId) {
-    log.error("No Lambda function for kit", { kitId: tool.kitId });
-    return {
-      content: [{ type: "text", text: `Kit "${tool.kitName}" is not configured.` }],
-      isError: true,
-    };
-  }
-
-  // Build the invocation payload
-  const invocation: KitToolInvocation = {
-    toolName,
+  const kitId = tool?.kitId ?? "unknown";
+  const requestId = requestContext?.requestId?.trim() || `mcp-${crypto.randomUUID()}`;
+  const sessionId = requestContext?.sessionId?.trim() || requestId;
+  const traceId = requestContext?.traceId?.trim() || requestId;
+  const envelope = createDispatchEnvelope({
+    kitId,
+    command: toolName,
     args,
-    userId,
-    kitId: tool.kitId,
-    dbUrl: userDb.dbUrl,
-    dbToken: userDb.dbToken,
-    ...(requestContext?.sessionId ? { sessionId: requestContext.sessionId } : {}),
-    ...(requestContext?.traceId ? { traceId: requestContext.traceId } : {}),
-    ...(requestContext?.parentId ? { parentId: requestContext.parentId } : {}),
-  };
-
-  // Invoke the kit Lambda
-  let result: KitToolResult;
-  try {
-    result = (await invokeKitLambda(functionId, invocation)) as KitToolResult;
-  } catch (err: any) {
-    log.error("Kit Lambda invocation failed", { kitId: tool.kitId, toolName, userId, functionId, error: err.message });
-    audit({ action: "tool.call.error", userId, toolName, kitId: tool.kitId, durationMs: Date.now() - start, detail: err.message });
-    return { isError: true, content: [{ type: "text" as const, text: `Kit invocation failed: ${err.message}` }] };
-  }
-
-  // Track circuit breaker + daily cap (non-blocking)
-  recordCircuitBreakerResult(tool.kitId, !!result.isError).catch(() => {});
-  incrementDailyCap(userId, tool.kitId).catch(() => {});
-
-  audit({
-    action: result.isError ? "tool.call.error" : "tool.call",
-    userId,
-    toolName,
-    kitId: tool.kitId,
-    durationMs: Date.now() - start,
-    ...(result.isError && result.content[0]?.type === "text" ? { detail: result.content[0].text } : {}),
+    principal: identity.principal,
+    context: {
+      actor: identity.actor,
+      ...(identity.delegation ? { delegation: identity.delegation } : {}),
+      channel: { kind: "mcp", id: requestId },
+      session: { id: sessionId, traceId, ...(requestContext?.parentId ? { parentId: requestContext.parentId } : {}) },
+    },
   });
+  const target: DispatchTarget | undefined = tool
+    ? { kitId: tool.kitId, command: toolName, mode: tool.mode ?? "assist" }
+    : undefined;
 
-  return result;
+  return dispatch(envelope, {
+    resolve: async () => {
+      if (!target) {
+        log.warn("Unknown tool requested", { userId, toolName });
+        audit({ action: "tool.call.error", userId, toolName, detail: "unknown tool" });
+        return { error: { code: "unknown_tool", message: `Unknown tool: ${toolName}` } };
+      }
+      return { target };
+    },
+    checkGrant: async () => {
+      if (!tool) return { allowed: false, reason: "Unknown tool" };
+      const authorization = await authorizeToolInvocation(
+        { identity, mode: tool.mode ?? "assist", kitSlug: getKitAuthzSlug(tool.kitId) },
+        mcpCheckTuple,
+      );
+      if (authorization.allowed) return { allowed: true };
+      log.warn("Kit not authorized for user", { userId, toolName, kitId: tool.kitId, reason: authorization.reason });
+      audit({ action: "tool.call.error", userId, toolName, kitId: tool.kitId, detail: "kit not authorized" });
+      return { allowed: false, reason: `Kit "${tool.kitName}" is not authorized for this operation (not activated).` };
+    },
+    checkPolicy: async () => {
+      if (!tool) return { allowed: false, reason: "Unknown tool" };
+      if (!(await checkCircuitBreaker(tool.kitId))) {
+        log.warn("Circuit breaker open", { userId, toolName, kitId: tool.kitId });
+        return { allowed: false, reason: `Kit "${tool.kitName}" is temporarily disabled due to repeated errors. Try again in a few minutes.` };
+      }
+      if (!(await checkDailyCap(identity.principal, tool.kitId))) {
+        log.warn("Daily invocation cap reached", { userId, toolName, kitId: tool.kitId });
+        return { allowed: false, reason: `Daily usage limit reached for "${tool.kitName}" (${DAILY_INVOCATION_CAP} calls/day). Resets at midnight UTC.` };
+      }
+      return { allowed: true };
+    },
+    invoke: async () => {
+      if (!tool) return { isError: true, content: [{ type: "text" as const, text: `Unknown tool: ${toolName}` }] };
+      const userDb = await getUserKitDb(identity.principal, tool.kitId);
+      if (!userDb) {
+        log.warn("Kit DB not found for user", { userId, toolName, kitId: tool.kitId });
+        audit({ action: "tool.call.error", userId, toolName, kitId: tool.kitId, detail: "kit db not provisioned" });
+        return { isError: true, content: [{ type: "text" as const, text: `Kit "${tool.kitName}" database is not provisioned. Please re-activate it at kitstack.co/dashboard.` }] };
+      }
+      const functionId = getKitFunctionId(tool.kitId, allTools);
+      if (!functionId) {
+        log.error("No Lambda function for kit", { kitId: tool.kitId });
+        return { isError: true, content: [{ type: "text" as const, text: `Kit "${tool.kitName}" is not configured.` }] };
+      }
+      const invocation: KitToolInvocation = {
+        toolName,
+        args,
+        userId: identity.principal,
+        kitId: tool.kitId,
+        dbUrl: userDb.dbUrl,
+        dbToken: userDb.dbToken,
+        sessionId,
+        traceId,
+        ...(requestContext?.parentId ? { parentId: requestContext.parentId } : {}),
+      };
+      let result: KitToolResult;
+      try {
+        result = (await invokeKitLambda(functionId, invocation)) as KitToolResult;
+      } catch (err: any) {
+        log.error("Kit Lambda invocation failed", { kitId: tool.kitId, toolName, userId, functionId, error: err.message });
+        audit({ action: "tool.call.error", userId, toolName, kitId: tool.kitId, detail: err.message });
+        return { isError: true, content: [{ type: "text" as const, text: `Kit invocation failed: ${err.message}` }], errorCode: "provider_failure" as const };
+      }
+      recordCircuitBreakerResult(tool.kitId, !!result.isError).catch(() => {});
+      incrementDailyCap(identity.principal, tool.kitId).catch(() => {});
+      return result;
+    },
+    onComplete: async (_request, result, durationMs) => {
+      if (!tool || result.errorCode === "unknown_tool" || result.errorCode === "missing_grant") return;
+      audit({
+        action: result.isError ? "tool.call.error" : "tool.call",
+        userId,
+        toolName,
+        kitId: tool.kitId,
+        durationMs,
+        ...(result.isError && result.content[0]?.type === "text" ? { detail: result.content[0].text } : {}),
+      });
+    },
+  });
 }
