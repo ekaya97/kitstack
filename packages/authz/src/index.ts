@@ -1,6 +1,18 @@
-export { authzTuples } from "./schema";
+export { authzTuples, authzMemberships, authzIdentityMappings, authzVersion } from "./schema";
 export { check, listObjects, listSubjects } from "./engine";
-export { grantRelation, revokeRelation, revokeAllForSubject } from "./lifecycle";
+export { VersionedGrantCache } from "./engine";
+export {
+  grantRelation,
+  revokeRelation,
+  revokeAllForSubject,
+  grantMembership,
+  revokeMembership,
+  revokeAllMembershipsForMember,
+  grantIdentityMapping,
+  revokeIdentityMapping,
+  listIdentityMappings,
+} from "./lifecycle";
+export { getAuthorizationVersion, bumpAuthorizationVersion } from "./version";
 export { authorize } from "./middleware";
 export { canActivateKit } from "./policies";
 export type {
@@ -12,5 +24,11 @@ export type {
   CheckResult,
   AuthzContext,
   AuthzRequirement,
+  SubjectMembership,
+  AuthzVersion,
+  AuthzCacheOptions,
+  IdentityMappingType,
+  IdentityMapping,
 } from "./types";
+export { AUTHZ_CACHE_TTL_MS } from "./types";
 export type { AuthorizeResult } from "./middleware";

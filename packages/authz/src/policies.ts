@@ -11,7 +11,7 @@ const PLAN_LIMITS: Record<string, number> = {
 
 /**
  * Check whether a user can activate a new kit.
- * Combines a tuple lookup (has any subscription?) with a count-based plan limit check.
+ * Combines a tuple lookup with a count-based plan limit check.
  *
  * @param plan - The user's current subscription plan name (e.g. "starter", "pro")
  */
@@ -21,7 +21,7 @@ export async function canActivateKit(
   plan: string
 ): Promise<CheckResult> {
   const limit = PLAN_LIMITS[plan] ?? 0;
-  const activeKits = await listObjects(db, userId, "activator", "kit");
+  const activeKits = await listObjects(db, userId, "kit:use", "kit");
 
   if (activeKits.length >= limit) {
     return {

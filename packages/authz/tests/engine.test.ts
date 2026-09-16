@@ -12,10 +12,10 @@ beforeEach(async () => {
 
 describe("check", () => {
   it("returns allowed:true when the tuple exists", async () => {
-    await grantRelation(db, "user-1", "activator", "kit", "crm");
+    await grantRelation(db, "user-1", "kit:use", "kit", "crm");
     const result = await check(db, {
       subjectId: "user-1",
-      relation: "activator",
+      relation: "kit:use",
       objectType: "kit",
       objectId: "crm",
     });
@@ -25,7 +25,7 @@ describe("check", () => {
   it("returns allowed:false when the tuple does not exist", async () => {
     const result = await check(db, {
       subjectId: "user-1",
-      relation: "activator",
+      relation: "kit:use",
       objectType: "kit",
       objectId: "crm",
     });
@@ -33,10 +33,10 @@ describe("check", () => {
   });
 
   it("defaults subjectType to 'user'", async () => {
-    await grantRelation(db, "user-1", "activator", "kit", "crm", "user");
+    await grantRelation(db, "user-1", "kit:use", "kit", "crm", "user");
     const result = await check(db, {
       subjectId: "user-1",
-      relation: "activator",
+      relation: "kit:use",
       objectType: "kit",
       objectId: "crm",
       // no subjectType — should default to "user"
@@ -45,11 +45,11 @@ describe("check", () => {
   });
 
   it("respects explicit subjectType", async () => {
-    await grantRelation(db, "team-1", "activator", "kit", "crm", "team");
+    await grantRelation(db, "team-1", "kit:use", "kit", "crm", "team");
     const result = await check(db, {
       subjectType: "team",
       subjectId: "team-1",
-      relation: "activator",
+      relation: "kit:use",
       objectType: "kit",
       objectId: "crm",
     });
@@ -57,11 +57,11 @@ describe("check", () => {
   });
 
   it("does not match across different subjectTypes", async () => {
-    await grantRelation(db, "id-1", "activator", "kit", "crm", "team");
+    await grantRelation(db, "id-1", "kit:use", "kit", "crm", "team");
     const result = await check(db, {
       subjectType: "user",
       subjectId: "id-1",
-      relation: "activator",
+      relation: "kit:use",
       objectType: "kit",
       objectId: "crm",
     });
@@ -69,10 +69,10 @@ describe("check", () => {
   });
 
   it("does not match across different relations", async () => {
-    await grantRelation(db, "user-1", "subscriber", "kit", "crm");
+    await grantRelation(db, "user-1", "kit:telemetry", "kit", "crm");
     const result = await check(db, {
       subjectId: "user-1",
-      relation: "activator",
+      relation: "kit:use",
       objectType: "kit",
       objectId: "crm",
     });
@@ -80,10 +80,10 @@ describe("check", () => {
   });
 
   it("does not match across different objectIds", async () => {
-    await grantRelation(db, "user-1", "activator", "kit", "crm");
+    await grantRelation(db, "user-1", "kit:use", "kit", "crm");
     const result = await check(db, {
       subjectId: "user-1",
-      relation: "activator",
+      relation: "kit:use",
       objectType: "kit",
       objectId: "expense",
     });
@@ -93,11 +93,11 @@ describe("check", () => {
 
 describe("listObjects", () => {
   it("returns all matching objectIds", async () => {
-    await grantRelation(db, "user-1", "activator", "kit", "crm");
-    await grantRelation(db, "user-1", "activator", "kit", "expense");
-    await grantRelation(db, "user-1", "activator", "kit", "outreach");
+    await grantRelation(db, "user-1", "kit:use", "kit", "crm");
+    await grantRelation(db, "user-1", "kit:use", "kit", "expense");
+    await grantRelation(db, "user-1", "kit:use", "kit", "outreach");
 
-    const objects = await listObjects(db, "user-1", "activator", "kit");
+    const objects = await listObjects(db, "user-1", "kit:use", "kit");
     expect(objects).toHaveLength(3);
     expect(objects).toContain("crm");
     expect(objects).toContain("expense");
@@ -105,36 +105,36 @@ describe("listObjects", () => {
   });
 
   it("returns empty array when no tuples match", async () => {
-    const objects = await listObjects(db, "user-1", "activator", "kit");
+    const objects = await listObjects(db, "user-1", "kit:use", "kit");
     expect(objects).toEqual([]);
   });
 
   it("does not return objects for a different relation", async () => {
-    await grantRelation(db, "user-1", "subscriber", "kit", "crm");
-    const objects = await listObjects(db, "user-1", "activator", "kit");
+    await grantRelation(db, "user-1", "kit:telemetry", "kit", "crm");
+    const objects = await listObjects(db, "user-1", "kit:use", "kit");
     expect(objects).toEqual([]);
   });
 
   it("does not return objects for a different subject", async () => {
-    await grantRelation(db, "user-2", "activator", "kit", "crm");
-    const objects = await listObjects(db, "user-1", "activator", "kit");
+    await grantRelation(db, "user-2", "kit:use", "kit", "crm");
+    const objects = await listObjects(db, "user-1", "kit:use", "kit");
     expect(objects).toEqual([]);
   });
 
   it("supports team subjectType", async () => {
-    await grantRelation(db, "team-1", "activator", "kit", "crm", "team");
-    const objects = await listObjects(db, "team-1", "activator", "kit", "team");
+    await grantRelation(db, "team-1", "kit:use", "kit", "crm", "team");
+    const objects = await listObjects(db, "team-1", "kit:use", "kit", "team");
     expect(objects).toEqual(["crm"]);
   });
 });
 
 describe("listSubjects", () => {
   it("returns all subjects with the given relation on the object", async () => {
-    await grantRelation(db, "user-1", "activator", "kit", "crm");
-    await grantRelation(db, "user-2", "activator", "kit", "crm");
-    await grantRelation(db, "user-3", "activator", "kit", "crm");
+    await grantRelation(db, "user-1", "kit:use", "kit", "crm");
+    await grantRelation(db, "user-2", "kit:use", "kit", "crm");
+    await grantRelation(db, "user-3", "kit:use", "kit", "crm");
 
-    const subjects = await listSubjects(db, "activator", "kit", "crm");
+    const subjects = await listSubjects(db, "kit:use", "kit", "crm");
     expect(subjects).toHaveLength(3);
     expect(subjects).toContain("user-1");
     expect(subjects).toContain("user-2");
@@ -142,19 +142,19 @@ describe("listSubjects", () => {
   });
 
   it("returns empty array when no subjects match", async () => {
-    const subjects = await listSubjects(db, "activator", "kit", "crm");
+    const subjects = await listSubjects(db, "kit:use", "kit", "crm");
     expect(subjects).toEqual([]);
   });
 
   it("does not return subjects with a different relation", async () => {
-    await grantRelation(db, "user-1", "subscriber", "kit", "crm");
-    const subjects = await listSubjects(db, "activator", "kit", "crm");
+    await grantRelation(db, "user-1", "kit:telemetry", "kit", "crm");
+    const subjects = await listSubjects(db, "kit:use", "kit", "crm");
     expect(subjects).toEqual([]);
   });
 
   it("does not return subjects for a different objectId", async () => {
-    await grantRelation(db, "user-1", "activator", "kit", "expense");
-    const subjects = await listSubjects(db, "activator", "kit", "crm");
+    await grantRelation(db, "user-1", "kit:use", "kit", "expense");
+    const subjects = await listSubjects(db, "kit:use", "kit", "crm");
     expect(subjects).toEqual([]);
   });
 });
