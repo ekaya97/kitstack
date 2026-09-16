@@ -19,12 +19,23 @@ import { getKitApps, getKitShellS3Key, readAppResource } from "./app-resources";
 import { kitCdnUrl, demoInternalSecret, demoOrgId, demoVoiceServiceUrl } from "../config";
 import { SignJWT } from "jose";
 import { createDebriefTools } from "../../../../kits/debrief/src/tools";
+import platformKit from "../../../../kits/platform/kit.config";
+import {
+  createPlatformDataSource,
+  type PlatformDataSource,
+} from "../../../../kits/platform/src/plugins/platform-data";
 import { zodToJsonSchema } from "../../../sdk/src/runtime/zod-to-json-schema";
 import { parseTraceparent, traceparentFromIds } from "./trace-context";
-import type { McpRequestIdentity } from "./authz";
+import { interactiveIdentity, type McpRequestIdentity } from "./authz";
+import { createRouterPlatformDataSource } from "./platform-host";
+import { createKitContext } from "../../../sdk/src/context";
+import { createDispatchEnvelope, dispatch } from "../../../sdk/src/server/dispatch";
+import type { KitContext, ToolDefinition } from "../../../sdk/src/types";
+import { getTursoDb } from "./authz";
 
 const APP_SHELL_URI = "ui://kitstack/app";
 const DEBRIEF_KIT_ID = "debrief";
+const PLATFORM_KIT_ID = "platform";
 /** Published by kits/debrief/scripts/publish-assets.ts to KitAssets. */
 export const DEBRIEF_SHELL_S3_KEY = "apps/kits/debrief/shell.html";
 const INTERNAL_TOKEN_TTL_SECONDS = 60;
@@ -96,6 +107,10 @@ export interface PlatformAdapterDeps {
   getDebriefShellHtml?: () => Promise<string>;
   fetch?: typeof globalThis.fetch;
   requestContext?: PlatformAdapterRequestContext;
+  /** Host-bound platform source. Defaults to the router's concrete readers. */
+  platformDataSource?: PlatformDataSource;
+  /** Test/self-hosted database binding for in-process platform tools. */
+  platformDb?: KitContext["db"];
 }
 
 /**
@@ -112,6 +127,12 @@ export function platformAdapter(deps: PlatformAdapterDeps): KitServerAdapter {
     requestContext,
   } = deps;
 
+  const platformDataSource = deps.platformDataSource ?? createRouterPlatformDataSource({
+    fetch: fetcher,
+    voiceServiceUrl: resolveString(deps.voiceServiceUrl, demoVoiceServiceUrl),
+    voiceInternalSecret: resolveSecret(deps.voiceInternalSecret, demoInternalSecret),
+  });
+
   const debriefKit: ResolvedKit = {
     ...DEBRIEF_KIT,
     views: [...(debriefViews ?? DEBRIEF_VIEW_METADATA)],
@@ -125,7 +146,10 @@ export function platformAdapter(deps: PlatformAdapterDeps): KitServerAdapter {
       ]);
 
       const activatedKitIds = new Set(userDbs.map((db) => db.kitId));
-      const kits = new Map<string, ResolvedKit>([[DEBRIEF_KIT_ID, debriefKit]]);
+      const kits = new Map<string, ResolvedKit>([
+        [DEBRIEF_KIT_ID, debriefKit],
+        [PLATFORM_KIT_ID, resolvedPlatformKit()],
+      ]);
 
       for (const tool of allTools) {
         if (tool.kitId === DEBRIEF_KIT_ID) continue;
@@ -163,7 +187,10 @@ export function platformAdapter(deps: PlatformAdapterDeps): KitServerAdapter {
 
       // Populate views for each kit
       for (const [kitId, kit] of kits) {
-        if (kitId === DEBRIEF_KIT_ID) continue;
+        // First-party platform Views come from the platform kit manifest, not
+        // from Dynamo app rows. External kits continue to resolve their
+        // published app metadata here.
+        if (kitId === DEBRIEF_KIT_ID || kitId === PLATFORM_KIT_ID) continue;
         const apps = await getKitApps(kitId);
         kit.views = apps.map((a) => ({
           slug: a.slug,
@@ -181,6 +208,9 @@ export function platformAdapter(deps: PlatformAdapterDeps): KitServerAdapter {
       args: Record<string, unknown>,
       userId: string
     ): Promise<KitToolResult> {
+      if (kitId === PLATFORM_KIT_ID) {
+        return executePlatformTool(platformDataSource, platformKit.tools, toolName, args, userId, deps.platformDb, requestContext);
+      }
       if (kitId === DEBRIEF_KIT_ID) {
         return callDebriefVoiceService({
           operation: "tool",
@@ -210,6 +240,11 @@ export function platformAdapter(deps: PlatformAdapterDeps): KitServerAdapter {
       viewSlug: string,
       userId: string
     ): Promise<unknown> {
+      if (kitId === PLATFORM_KIT_ID) {
+        const view = platformKit.views?.find((candidate) => candidate.slug === viewSlug);
+        if (!view) throw new Error(`Unknown platform View "${viewSlug}"`);
+        return view.loader(platformContext(platformDataSource, userId, deps.platformDb, requestContext, { orgId: demoOrgId() }));
+      }
       if (kitId === DEBRIEF_KIT_ID) {
         const result = await callDebriefVoiceService({
           operation: "view",
@@ -248,6 +283,10 @@ export function platformAdapter(deps: PlatformAdapterDeps): KitServerAdapter {
     },
 
     async getShellHtml(kitId: string): Promise<string> {
+      if (kitId === PLATFORM_KIT_ID) {
+        const resource = await readAppResource(APP_SHELL_URI, "system", new Set([PLATFORM_KIT_ID]));
+        return resource?.text || "";
+      }
       if (kitId === DEBRIEF_KIT_ID) {
         if (getDebriefShellHtml) {
           return getDebriefShellHtml();
@@ -273,6 +312,119 @@ export function platformAdapter(deps: PlatformAdapterDeps): KitServerAdapter {
     getCdnUrl(): string {
       return kitCdnUrl();
     },
+  };
+}
+
+function resolvedPlatformKit(): ResolvedKit {
+  return {
+    id: PLATFORM_KIT_ID,
+    name: platformKit.name,
+    description: platformKit.description,
+    triggers: platformKit.triggers ?? [],
+    instructions: platformKit.instructions || null,
+    tools: platformKit.tools.map((tool) => ({
+      name: tool.name,
+      description: tool.description,
+      inputSchema: schemaForMcp(tool.args),
+    })),
+    views: (platformKit.views ?? []).map((view) => ({
+      slug: view.slug,
+      name: view.name,
+      description: view.description,
+    })),
+  };
+}
+
+async function executePlatformTool(
+  source: PlatformDataSource,
+  tools: readonly ToolDefinition[],
+  toolName: string,
+  args: Record<string, unknown>,
+  userId: string,
+  db: KitContext["db"] | undefined,
+  requestContext: PlatformAdapterRequestContext | undefined,
+): Promise<KitToolResult> {
+  const tool = tools.find((candidate) => candidate.name === toolName);
+  const identity = requestContext?.identity ?? interactiveIdentity(userId);
+  const envelope = createDispatchEnvelope({
+    kitId: PLATFORM_KIT_ID,
+    command: toolName,
+    args,
+    principal: identity.principal,
+    context: {
+      actor: identity.actor,
+      ...(identity.delegation ? { delegation: identity.delegation } : {}),
+      channel: { kind: "mcp", id: "kitstack.mcp" },
+      session: sessionFor(requestContext),
+    },
+  });
+  const target = tool ? {
+    kitId: PLATFORM_KIT_ID,
+    command: toolName,
+    validate(input: Record<string, unknown>) {
+      const parsed = tool.args.safeParse(input);
+      return parsed.success
+        ? { success: true as const, data: parsed.data as Record<string, unknown> }
+        : { success: false as const, message: parsed.error.issues.map((issue) => `${issue.path.join(".")}: ${issue.message}`).join(", ") };
+    },
+    authorize: tool.authorize
+      ? (input: Record<string, unknown>, ctx: KitContext) => tool.authorize!(input, ctx)
+      : undefined,
+  } : undefined;
+
+  return dispatch(envelope, {
+    resolve: async () => target
+      ? { target }
+      : { error: { code: "unknown_tool", message: `Unknown platform tool: "${toolName}"` } },
+    createContext: () => platformContext(source, userId, db, requestContext),
+    checkGrant: async (_request, requirements, ctx) => {
+      for (const requirement of requirements) {
+        if (!(await source.authorize(requirement, ctx!))) {
+          return { allowed: false, reason: `Forbidden: missing "${requirement.relation}" on ${requirement.objectType} "${requirement.objectId}"` };
+        }
+      }
+      return { allowed: true };
+    },
+    invoke: async (_request, _target, parsedArgs, ctx) => tool!.handler!(ctx!, parsedArgs),
+  });
+}
+
+function platformContext(
+  source: PlatformDataSource,
+  userId: string,
+  db: KitContext["db"] | undefined,
+  requestContext: PlatformAdapterRequestContext | undefined,
+  params: Readonly<Record<string, unknown>> = {},
+): KitContext {
+  const identity = requestContext?.identity ?? interactiveIdentity(userId);
+  return createKitContext({
+    db: db ?? getTursoDb(),
+    params,
+    connectors: {
+      get: <T>(id: string) => id === "platform.data" ? source as T : undefined,
+      require: <T>(id: string) => {
+        if (id !== "platform.data") throw new Error(`Connector "${id}" is not registered`);
+        return source as T;
+      },
+      has: (id: string) => id === "platform.data",
+    },
+    identity: {
+      principal: identity.principal,
+      actor: identity.actor,
+      ...(identity.delegation ? { delegation: identity.delegation } : {}),
+    },
+    channel: { kind: "mcp", id: "kitstack.mcp" },
+    session: sessionFor(requestContext),
+  });
+}
+
+function sessionFor(requestContext?: PlatformAdapterRequestContext): { id: string; traceId: string; parentId?: string } {
+  const id = requestContext?.sessionId?.trim() || requestContext?.requestId?.trim() || `mcp-${crypto.randomUUID()}`;
+  const traceId = requestContext?.traceId?.trim() || id;
+  return {
+    id,
+    traceId,
+    ...(requestContext?.parentId?.trim() ? { parentId: requestContext.parentId.trim() } : {}),
   };
 }
 
