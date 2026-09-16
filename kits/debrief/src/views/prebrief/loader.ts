@@ -101,9 +101,9 @@ export function toPrebriefViewData(
 }
 
 function requiredParam(ctx: KitContext, name: string): string {
-  const value = ctx.params?.[name]?.trim();
-  if (!value) throw new Error(`Prebrief View requires params.${name}`);
-  return value;
+  const value = ctx.params?.[name];
+  if (typeof value !== "string" || !value.trim()) throw new Error(`Prebrief View requires params.${name}`);
+  return value.trim();
 }
 
 /**
@@ -111,7 +111,7 @@ function requiredParam(ctx: KitContext, name: string): string {
  * Keeping the loader on the SDK LoaderFn contract lets the same View bundle
  * run locally and behind the voice-service adapter.
  */
-export const loader = defineLoader(async (_db, ctx): Promise<PrebriefViewData> => {
+export const loader = defineLoader(async (ctx): Promise<PrebriefViewData> => {
   const sessionId = requiredParam(ctx, "session_id");
   const customerId = requiredParam(ctx, "customer_id");
   const encodedSnapshot = requiredParam(ctx, "snapshot");

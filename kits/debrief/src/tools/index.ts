@@ -1,4 +1,5 @@
 import { defineTool, kit, type KitContext, type KitToolResult } from "@kitstackco/sdk";
+import { withToolMetadata } from "../tool-metadata";
 import { z } from "zod";
 import type {
   DebriefDraftUpdate,
@@ -20,9 +21,8 @@ export type DebriefToolName =
 export type { DebriefToolHandler } from "../contracts";
 
 const fallback = async (
-  _db: unknown,
-  _args: Record<string, unknown>,
   _ctx: KitContext,
+  _args: Record<string, unknown>,
 ): Promise<KitToolResult> => kit.error("Debrief service is not bound to this kit runtime");
 
 function tool(
@@ -31,7 +31,7 @@ function tool(
   args: z.ZodType<any>,
   handlers: Partial<Record<DebriefToolName, DebriefToolHandler>>,
 ) {
-  return defineTool({
+  return withToolMetadata(defineTool({
     name,
     description,
     // The repository currently has two installed Zod declaration copies
@@ -39,9 +39,9 @@ function tool(
     // keep this adapter boundary explicit until workspace dependency hoisting
     // is normalized.
     args: args as any,
-    handler: (db, parsedArgs, ctx) =>
-      (handlers[name] ?? fallback)(db, parsedArgs as Record<string, unknown>, ctx),
-  });
+    handler: (ctx, parsedArgs) =>
+      (handlers[name] ?? fallback)(ctx, parsedArgs as Record<string, unknown>),
+  }), name.startsWith("get_") ? "assist" : "act", "sensitive");
 }
 
 /** Create the stable MCP-facing tool definitions for the debrief kit. */
@@ -129,7 +129,7 @@ export function createDebriefToolHandlers(
   operations: DebriefOperations,
 ): Record<DebriefToolName, DebriefToolHandler> {
   return {
-    prepare_debrief: async (_db, args, ctx) => kit.json(
+    prepare_debrief: async (ctx, args) => kit.json(
       await operations.prepareDebrief({
         goal: String(args.goal),
         company: String(args.company),
@@ -140,33 +140,33 @@ export function createDebriefToolHandlers(
         buffer_minutes: typeof args.buffer_minutes === "number" ? args.buffer_minutes : 0,
       } satisfies PrepareDebriefInput, ctx),
     ),
-    get_session: async (_db, args, ctx) => kit.json(
+    get_session: async (ctx, args) => kit.json(
       await operations.getSession(String(args.session_id), ctx),
     ),
-    get_debrief: async (_db, args, ctx) => kit.json(
+    get_debrief: async (ctx, args) => kit.json(
       await operations.getDebrief(String(args.session_id), ctx),
     ),
-    get_debrief_for_confirmation: async (_db, args, ctx) => kit.json(
+    get_debrief_for_confirmation: async (ctx, args) => kit.json(
       await operations.getDebriefForConfirmation(String(args.session_id), ctx),
     ),
-    update_debrief_draft: async (_db, args, ctx) => kit.json(
+    update_debrief_draft: async (ctx, args) => kit.json(
       await operations.updateDebriefDraft(
         String(args.session_id),
         pickDraftUpdate(args),
         ctx,
       ),
     ),
-    confirm_debrief_draft: async (_db, args, ctx) => kit.json(
+    confirm_debrief_draft: async (ctx, args) => kit.json(
       await operations.confirmDebriefDraft(String(args.session_id), ctx),
     ),
-    confirm_debrief: async (_db, args, ctx) => kit.json(
+    confirm_debrief: async (ctx, args) => kit.json(
       await operations.confirmDebrief(
         String(args.session_id),
         args.outcome === "partial" ? "partial" : "confirmed",
         ctx,
       ),
     ),
-    teach_from_correction: async (_db, args, ctx) => kit.json(
+    teach_from_correction: async (ctx, args) => kit.json(
       await operations.teachFromCorrection(
         String(args.session_id),
         String(args.correction),

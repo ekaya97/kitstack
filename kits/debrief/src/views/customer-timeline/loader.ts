@@ -101,7 +101,7 @@ export function toCustomerTimelineViewData(
   };
 }
 
-export const loader = defineLoader(async (_db, ctx): Promise<CustomerTimelineViewData> => {
+export const loader = defineLoader(async (ctx): Promise<CustomerTimelineViewData> => {
   const sessionId = requiredParam(ctx, "session_id");
   const customerId = requiredParam(ctx, "customer_id");
   const encodedSnapshot = requiredParam(ctx, "snapshot");
@@ -193,7 +193,7 @@ function finiteNumber(value: number | null | undefined): number {
 }
 
 function requiredParam(ctx: KitContext, name: string): string {
-  const value = ctx.params?.[name]?.trim();
-  if (!value) throw new Error(`Customer timeline View requires params.${name}`);
-  return value;
+  const value = ctx.params?.[name];
+  if (typeof value !== "string" || !value.trim()) throw new Error(`Customer timeline View requires params.${name}`);
+  return value.trim();
 }

@@ -1,4 +1,5 @@
 import { describe, expect, it } from "vitest";
+import { createKitContext } from "@kitstackco/sdk";
 import kit from "../kit.config";
 import { loader, toPrebriefViewData, type PrebriefLoaderSnapshot } from "../src/views/prebrief/loader";
 
@@ -30,15 +31,15 @@ describe("debrief prebrief View", () => {
   });
 
   it("loads a keyed snapshot and makes empty history explicit", async () => {
-    const data = await loader(null as never, {
-      userId: "user-1",
-      kitId: "debrief",
+    const data = await loader(createKitContext({
+      db: null as never,
+      identity: { principal: "user-1", actor: "user-1" },
       params: {
         session_id: snapshot.session_id,
         customer_id: snapshot.customer_id,
         snapshot: JSON.stringify(snapshot),
       },
-    });
+    }));
 
     expect(data).toMatchObject({
       sessionId: "session-1",

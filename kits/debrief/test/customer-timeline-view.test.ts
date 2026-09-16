@@ -1,4 +1,5 @@
 import { describe, expect, it } from "vitest";
+import { createKitContext } from "@kitstackco/sdk";
 import kit from "../kit.config";
 import { loader, toCustomerTimelineViewData, type CustomerTimelineLoaderSnapshot } from "../src/views/customer-timeline/loader";
 
@@ -60,15 +61,15 @@ describe("customer timeline View", () => {
   });
 
   it("loads newest-first customer events and summarizes metadata without leaking payloads", async () => {
-    const data = await loader(null as never, {
-      userId: "user-1",
-      kitId: "debrief",
+    const data = await loader(createKitContext({
+      db: null as never,
+      identity: { principal: "user-1", actor: "user-1" },
       params: {
         session_id: snapshot.session_id,
         customer_id: snapshot.customer_id,
         snapshot: JSON.stringify(snapshot),
       },
-    });
+    }));
 
     expect(data.events.map((event) => event.eventId)).toEqual(["confirmed-1", "address-1", "prebrief-1"]);
     expect(data.events[0]).toMatchObject({

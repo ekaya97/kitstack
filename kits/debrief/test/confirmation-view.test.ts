@@ -1,4 +1,5 @@
 import { describe, expect, it } from "vitest";
+import { createKitContext } from "@kitstackco/sdk";
 import kit from "../kit.config";
 import { loader, toConfirmationViewData, type ConfirmationLoaderSnapshot } from "../src/views/confirmation/loader";
 
@@ -17,11 +18,11 @@ const snapshot: ConfirmationLoaderSnapshot = {
 
 describe("debrief confirmation View", () => {
   it("loads the keyed editable draft", async () => {
-    const data = await loader(null as never, {
-      userId: "user-1",
-      kitId: "debrief",
+    const data = await loader(createKitContext({
+      db: null as never,
+      identity: { principal: "user-1", actor: "user-1" },
       params: { session_id: snapshot.session_id, snapshot: JSON.stringify(snapshot) },
-    });
+    }));
     expect(data).toMatchObject({
       sessionId: "session-1",
       state: "awaiting_confirmation",

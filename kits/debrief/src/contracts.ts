@@ -185,7 +185,6 @@ export interface DebriefOperations {
 }
 
 export type DebriefToolHandler = (
-  db: unknown,
-  args: Record<string, unknown>,
   ctx: KitContext,
+  args: Record<string, unknown>,
 ) => Promise<KitToolResult>;

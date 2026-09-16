@@ -37,7 +37,7 @@ export interface ConfirmationViewData {
   addressEventId: string | null;
 }
 
-export const loader = defineLoader(async (_db, ctx): Promise<ConfirmationViewData> => {
+export const loader = defineLoader(async (ctx): Promise<ConfirmationViewData> => {
   const sessionId = requiredParam(ctx, "session_id");
   const encodedSnapshot = requiredParam(ctx, "snapshot");
   let snapshot: ConfirmationLoaderSnapshot;
@@ -67,9 +67,9 @@ export function toConfirmationViewData(snapshot: ConfirmationLoaderSnapshot): Co
 }
 
 function requiredParam(ctx: KitContext, name: string): string {
-  const value = ctx.params?.[name]?.trim();
-  if (!value) throw new Error(`Confirmation View requires params.${name}`);
-  return value;
+  const value = ctx.params?.[name];
+  if (typeof value !== "string" || !value.trim()) throw new Error(`Confirmation View requires params.${name}`);
+  return value.trim();
 }
 
 function stringValue(value: unknown): string {

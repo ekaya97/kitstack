@@ -1,4 +1,5 @@
 import { describe, expect, it } from "vitest";
+import { createKitContext } from "@kitstackco/sdk";
 import kit from "../kit.config";
 
 describe("debrief kit boundary", () => {
@@ -20,20 +21,36 @@ describe("debrief kit boundary", () => {
     expect(kit.views?.map((view) => view.slug)).toEqual(["prebrief", "confirmation", "customer-timeline"]);
   });
 
+  it("declares v0.2 mode, classification, and MCP hints on every tool", () => {
+    expect(kit.tools.every((tool) => {
+      const metadata = tool as typeof tool & {
+        mode?: string;
+        classification?: string;
+        annotations?: { readOnlyHint?: boolean; destructiveHint?: boolean };
+      };
+      return metadata.mode && metadata.classification && metadata.annotations;
+    })).toBe(true);
+    expect((kit.tools.find((tool) => tool.name === "get_session") as any).annotations).toEqual({
+      readOnlyHint: true,
+      destructiveHint: false,
+    });
+    expect((kit.tools.find((tool) => tool.name === "confirm_debrief") as any).annotations).toEqual({
+      readOnlyHint: false,
+      destructiveHint: false,
+    });
+  });
+
   it("keeps an unbound kit visibly unbound", async () => {
     const prepare = kit.tools.find((tool) => tool.name === "prepare_debrief");
     if (!prepare?.handler) throw new Error("prepare_debrief handler was not registered");
 
-    const result = await prepare.handler({} as never, {
+    const result = await prepare.handler!(createKitContext({ db: null as never }), {
       goal: "test",
       company: "Acme",
       contact_name: "Jane Doe",
       location: "Köln Café",
       callback_at: "22:05",
       callback_timezone: "Europe/Berlin",
-    }, {
-      userId: "test-user",
-      kitId: "debrief",
     });
 
     expect(result.isError).toBe(true);
