@@ -21,6 +21,7 @@ import { SignJWT } from "jose";
 import { createDebriefTools } from "../../../../kits/debrief/src/tools";
 import { zodToJsonSchema } from "../../../sdk/src/runtime/zod-to-json-schema";
 import { parseTraceparent, traceparentFromIds } from "./trace-context";
+import type { McpRequestIdentity } from "./authz";
 
 const APP_SHELL_URI = "ui://kitstack/app";
 const DEBRIEF_KIT_ID = "debrief";
@@ -79,6 +80,7 @@ export interface PlatformAdapterRequestContext {
   traceId?: string;
   parentId?: string;
   traceparent?: string;
+  identity?: McpRequestIdentity;
 }
 
 export interface PlatformAdapterDeps {
