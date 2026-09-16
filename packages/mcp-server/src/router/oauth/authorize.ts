@@ -34,6 +34,9 @@ export async function validateAuthorizeRequest(
   if (!params.code_challenge) {
     return { valid: false, error: "invalid_request: missing code_challenge" };
   }
+  if (params.code_challenge_method !== "S256") {
+    return { valid: false, error: "invalid_request: code_challenge_method must be S256" };
+  }
 
   // Validate redirect_uri against registered client
   const client = await getOAuthItem(`CLIENT#${params.client_id}`, "REGISTRATION");

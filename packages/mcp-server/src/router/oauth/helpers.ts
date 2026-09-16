@@ -11,10 +11,15 @@ export function verifyCodeChallenge(
   codeChallenge: string,
   method: "S256" | "plain" = "S256"
 ): boolean {
-  if (method === "plain") return codeVerifier === codeChallenge;
-  const hash = crypto.createHash("sha256").update(codeVerifier).digest();
-  const computed = hash.toString("base64url");
-  return computed === codeChallenge;
+  if (method !== "S256" || !codeVerifier || !codeChallenge) return false;
+  const expected = crypto.createHash("sha256").update(codeVerifier).digest();
+  let received: Buffer;
+  try {
+    received = Buffer.from(codeChallenge, "base64url");
+  } catch {
+    return false;
+  }
+  return received.length === expected.length && crypto.timingSafeEqual(received, expected);
 }
 
 // --- Authorization Codes ---

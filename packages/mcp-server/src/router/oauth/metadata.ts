@@ -12,3 +12,16 @@ export function getOAuthMetadata(serverUrl: string) {
     scopes_supported: ["mcp"],
   };
 }
+
+/** RFC 9728 Protected Resource Metadata for MCP clients. */
+export function getProtectedResourceMetadata(
+  resourceUrl: string,
+  authorizationServerUrl = resourceUrl,
+) {
+  return {
+    resource: resourceUrl.replace(/\/$/, ""),
+    authorization_servers: [authorizationServerUrl.replace(/\/$/, "")],
+    scopes_supported: ["mcp"],
+    bearer_methods_supported: ["header"],
+  };
+}
