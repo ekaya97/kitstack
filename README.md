@@ -98,8 +98,8 @@ export const addContact = defineTool({
     name: z.string().describe("Full name"),
     email: z.string().email().optional().describe("Work email"),
   }),
-  handler: async (db, args, ctx) => {
-    const id = await insertContact(db, args);
+  handler: async (ctx, args) => {
+    const id = await insertContact(ctx.db, args);
     return kit.result(kit.created(id, "contact", `Contact ${args.name} added.`));
   },
 });
@@ -252,7 +252,7 @@ and absent from telemetry.
 
 ```bash
 npm install
-npm test                                   # 136 tests across the debrief kit and host
+npm test                                   # 547 tests across the workspace gates
 npm run demo:server                        # HTTP host on 127.0.0.1:3001, simulator by default
 npm run dev --workspace kitstack-web       # web app; open /demo
 ```
