@@ -1,5 +1,5 @@
 import type { KitToolResult, KitToolContentBlock } from "../types";
-import type { KitServerAdapter, ResolvedKit } from "./types";
+import type { KitServerAdapter, ResolvedKit, ServerRequestContext } from "./types";
 
 const APP_SHELL_URI = "ui://kitstack/app";
 
@@ -12,7 +12,8 @@ const APP_SHELL_URI = "ui://kitstack/app";
 export async function handleKitViewCall(
   args: { id?: string; view?: string },
   userId: string,
-  adapter: KitServerAdapter
+  adapter: KitServerAdapter,
+  context?: ServerRequestContext,
 ): Promise<KitToolResult> {
   if (!args.id) {
     return error("Provide a kit ID. Use kit() to see available kits.");
@@ -31,7 +32,7 @@ export async function handleKitViewCall(
   }
 
   // kit_view(id, view) → render
-  return handleRenderView(kit, args.view, userId, adapter);
+  return handleRenderView(kit, args.view, userId, adapter, context);
 }
 
 // --- List Views ---
@@ -56,7 +57,8 @@ async function handleRenderView(
   kit: ResolvedKit,
   viewSlug: string,
   userId: string,
-  adapter: KitServerAdapter
+  adapter: KitServerAdapter,
+  context?: ServerRequestContext,
 ): Promise<KitToolResult> {
   const view = kit.views.find((v) => v.slug === viewSlug);
   if (!view) {
@@ -67,7 +69,7 @@ async function handleRenderView(
   // Execute the loader
   let loaderData: unknown = null;
   try {
-    loaderData = await adapter.executeLoader(kit.id, viewSlug, userId);
+    loaderData = await adapter.executeLoader(kit.id, viewSlug, userId, context);
   } catch (err: any) {
     console.error(`[kit_view] Loader failed for ${kit.id}/${viewSlug}:`, err.message);
   }

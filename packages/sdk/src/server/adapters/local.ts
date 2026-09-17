@@ -1,7 +1,7 @@
 import type { LibSQLDatabase } from "drizzle-orm/libsql";
 import type { KitDefinition, KitToolResult, KitContext, ToolDefinition, AuthzRequirement } from "../../types";
 import { createKitContext } from "../../context";
-import type { KitServerAdapter, ResolvedKit } from "../types";
+import type { KitServerAdapter, ResolvedKit, ServerRequestContext } from "../types";
 import { createDispatchEnvelope, dispatch } from "../dispatch";
 import type { DispatchTarget } from "../dispatch";
 import { zodToJsonSchema } from "../../runtime/zod-to-json-schema";
@@ -202,12 +202,41 @@ export function localAdapter(options: LocalAdapterOptions): KitServerAdapter {
       });
     },
 
-    async executeLoader(kitId, viewSlug, userId) {
+    async executeLoader(kitId, viewSlug, userId, requestContext?: ServerRequestContext) {
       const view = viewMap.get(viewSlug);
       if (!view) {
         throw new Error(`Unknown view: "${viewSlug}"`);
       }
-      return view.loader(makeCtx(userId));
+      const sessionId = requestContext?.sessionId ?? requestContext?.requestId;
+      const traceId = requestContext?.traceId ?? sessionId;
+      const result = await dispatch(
+        createDispatchEnvelope({
+          kitId,
+          command: `view:${viewSlug}`,
+          principal: userId || defaultUserId,
+          context: {
+            channel: options.context?.channel ?? { kind: "internal", id: requestContext?.requestId },
+            session: {
+              id: sessionId ?? crypto.randomUUID(),
+              traceId: traceId ?? crypto.randomUUID(),
+              ...(requestContext?.parentId ? { parentId: requestContext.parentId } : {}),
+            },
+          },
+        }),
+        {
+          resolve: async () => ({ target: { kitId, command: `view:${viewSlug}` } }),
+          createContext: (request) => makeCtx(request.identity.principal, request.session),
+          invoke: async (_request, _target, _args, ctx) => ({
+            content: [{ type: "text" as const, text: JSON.stringify(await view.loader(ctx!)) }],
+          }),
+        },
+      );
+      if (result.isError) {
+        const message = result.content.find((block) => block.type === "text")?.text ?? "View loader failed";
+        throw new Error(message);
+      }
+      const payload = result.content.find((block) => block.type === "text");
+      return payload?.type === "text" ? JSON.parse(payload.text) : null;
     },
 
     async getShellHtml() {

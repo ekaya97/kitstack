@@ -6,6 +6,7 @@ import { readAppResource } from "../app-resources";
 import { DEBRIEF_SHELL_S3_KEY } from "../platform-adapter";
 import type { KitRegistryItem, UserKitDbItem } from "../types";
 import type { KitContext } from "../../../../sdk/src/types";
+import { parseMcpServerManifest } from "../../../../sdk/src/server/manifest";
 
 vi.mock("../tool-dispatcher", () => ({
   dispatchToolCall: vi.fn(async () => ({ content: [{ type: "text", text: "crm result" }] })),
@@ -42,6 +43,41 @@ function response(body: unknown, status = 200): Response {
 }
 
 describe("platform debrief adapter", () => {
+  it("exposes a registered MCP server through the cloud adapter", async () => {
+    const call = vi.fn(async () => ({ content: [{ type: "text" as const, text: "remote result" }] }));
+    const adapter = platformAdapter({
+      getAllTools: vi.fn(async () => []),
+      getUserKitDbs: vi.fn(async () => []),
+      invokeKitLambda: vi.fn(),
+      mcpServers: [{
+        manifest: parseMcpServerManifest({
+          apiVersion: "kitstack.dev/v1alpha1",
+          kind: "McpServer",
+          id: "salesforce",
+          name: "Salesforce MCP",
+          version: "1.0.0",
+          tools: [{
+            name: "get_customer",
+            description: "Fetch one customer.",
+            inputSchema: { type: "object" },
+            permissionClass: "read",
+          }],
+        }),
+        call,
+      }],
+    });
+
+    await expect(adapter.resolveUserKits("user-1")).resolves.toEqual(expect.arrayContaining([
+      expect.objectContaining({ id: "salesforce", tools: [expect.objectContaining({ name: "get_customer" })] }),
+    ]));
+    await expect(adapter.executeTool("salesforce", "get_customer", { name: "Acme" }, "user-1"))
+      .resolves.toEqual({ content: [{ type: "text", text: "remote result" }] });
+    expect(call).toHaveBeenCalledWith({
+      method: "tools/call",
+      params: { name: "get_customer", arguments: { name: "Acme" } },
+    }, { userId: "user-1" });
+  });
+
   it("resolves the published debrief shell from KitAssets without Lambda", async () => {
     vi.mocked(readAppResource).mockResolvedValueOnce({
       uri: "ui://kitstack/app",

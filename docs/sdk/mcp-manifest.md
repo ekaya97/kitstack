@@ -29,5 +29,8 @@ serve({
 ```
 
 The returned tool schema remains available for partial-call discovery.
-Authentication, grants, and telemetry stay in the host/router; the manifest
-adapter only defines the provider-neutral registration and mapping contract.
+Authentication, grants, and telemetry stay in the host/router. The cloud
+platform adapter accepts the same registration list, so deployments can
+resolve manifests from their registry without changing the SDK-built kit path.
+Loader requests also preserve request/session/trace correlation through the
+adapter boundary.

@@ -27,6 +27,15 @@ export interface ResolvedView {
   description: string;
 }
 
+/** Request correlation fields forwarded to loader-capable transports. */
+export interface ServerRequestContext {
+  requestId?: string;
+  sessionId?: string;
+  traceId?: string;
+  parentId?: string;
+  traceparent?: string;
+}
+
 /**
  * The adapter interface. Implementations provide data and execution
  * for a specific runtime environment:
@@ -51,7 +60,8 @@ export interface KitServerAdapter {
   executeLoader(
     kitId: string,
     viewSlug: string,
-    userId: string
+    userId: string,
+    context?: ServerRequestContext,
   ): Promise<unknown>;
 
   /** Get the HTML shell for rendering embedded views. */
@@ -81,6 +91,7 @@ export interface McpToolDefinition {
 export interface ProtocolHandler {
   handleRequest(
     request: { id?: unknown; method: string; params?: unknown },
-    userId: string
+    userId: string,
+    context?: ServerRequestContext,
   ): Promise<{ jsonrpc: "2.0"; id: unknown; result?: unknown; error?: { code: number; message: string } } | null>;
 }

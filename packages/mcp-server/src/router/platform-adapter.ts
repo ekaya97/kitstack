@@ -13,6 +13,7 @@ import type {
   ResolvedKit,
   ResolvedView,
 } from "../../../sdk/src/server/types";
+import { withMcpServers, type McpServerRegistration } from "../../../sdk/src/server/manifest";
 import type { KitRegistryItem, UserKitDbItem, KitToolResult } from "./types";
 import { dispatchToolCall } from "./tool-dispatcher";
 import { getKitApps, getKitShellS3Key, readAppResource } from "./app-resources";
@@ -111,6 +112,8 @@ export interface PlatformAdapterDeps {
   platformDataSource?: PlatformDataSource;
   /** Test/self-hosted database binding for in-process platform tools. */
   platformDb?: KitContext["db"];
+  /** Host-resolved bring-your-own MCP servers registered for this request. */
+  mcpServers?: readonly McpServerRegistration[];
 }
 
 /**
@@ -138,7 +141,7 @@ export function platformAdapter(deps: PlatformAdapterDeps): KitServerAdapter {
     views: [...(debriefViews ?? DEBRIEF_VIEW_METADATA)],
   };
 
-  return {
+  const adapter: KitServerAdapter = {
     async resolveUserKits(userId: string): Promise<ResolvedKit[]> {
       const [allTools, userDbs] = await Promise.all([
         getAllTools(),
@@ -238,12 +241,14 @@ export function platformAdapter(deps: PlatformAdapterDeps): KitServerAdapter {
     async executeLoader(
       kitId: string,
       viewSlug: string,
-      userId: string
+      userId: string,
+      loaderContext?: PlatformAdapterRequestContext,
     ): Promise<unknown> {
+      const effectiveContext = loaderContext ?? requestContext;
       if (kitId === PLATFORM_KIT_ID) {
         const view = platformKit.views?.find((candidate) => candidate.slug === viewSlug);
         if (!view) throw new Error(`Unknown platform View "${viewSlug}"`);
-        return view.loader(platformContext(platformDataSource, userId, deps.platformDb, requestContext, { orgId: demoOrgId() }));
+        return view.loader(platformContext(platformDataSource, userId, deps.platformDb, effectiveContext, { orgId: demoOrgId() }));
       }
       if (kitId === DEBRIEF_KIT_ID) {
         const result = await callDebriefVoiceService({
@@ -255,7 +260,7 @@ export function platformAdapter(deps: PlatformAdapterDeps): KitServerAdapter {
           voiceInternalSecret: resolveSecret(deps.voiceInternalSecret, demoInternalSecret),
           orgId: demoOrgId(),
           fetcher,
-          requestContext,
+          requestContext: effectiveContext,
         });
         return unwrapToolData(result);
       }
@@ -276,7 +281,7 @@ export function platformAdapter(deps: PlatformAdapterDeps): KitServerAdapter {
         kitId,
         dbUrl: userDb.dbUrl,
         dbToken: userDb.dbToken,
-        ...invocationTraceFields(requestContext),
+        ...invocationTraceFields(effectiveContext),
       }) as any;
 
       return result?.data ?? null;
@@ -313,6 +318,8 @@ export function platformAdapter(deps: PlatformAdapterDeps): KitServerAdapter {
       return kitCdnUrl();
     },
   };
+
+  return withMcpServers(adapter, deps.mcpServers ?? []);
 }
 
 function resolvedPlatformKit(): ResolvedKit {

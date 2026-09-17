@@ -1,5 +1,5 @@
 import type { KitToolResult } from "../types";
-import type { KitServerAdapter, ResolvedKit } from "./types";
+import type { KitServerAdapter, ResolvedKit, ServerRequestContext } from "./types";
 
 /**
  * Route a kit() call through the adapter.
@@ -12,7 +12,8 @@ import type { KitServerAdapter, ResolvedKit } from "./types";
 export async function handleKitCall(
   args: { id?: string; cmd?: string; params?: Record<string, unknown> },
   userId: string,
-  adapter: KitServerAdapter
+  adapter: KitServerAdapter,
+  context?: ServerRequestContext,
 ): Promise<KitToolResult> {
   const { id, cmd, params } = args;
 
@@ -36,7 +37,7 @@ export async function handleKitCall(
   // kit(id, cmd, "__load_view") — internal: reload view data
   if (cmd === "__load_view" && params?.view) {
     try {
-      const data = await adapter.executeLoader(id, params.view as string, userId);
+      const data = await adapter.executeLoader(id, params.view as string, userId, context);
       return text(JSON.stringify({ data }));
     } catch (err: any) {
       return text(JSON.stringify({ data: null, error: err.message }));

@@ -1,4 +1,4 @@
-import type { KitServerAdapter, McpToolDefinition, ProtocolHandler } from "./types";
+import type { KitServerAdapter, McpToolDefinition, ProtocolHandler, ServerRequestContext } from "./types";
 import { buildDynamicKitDescription, buildKitInstructions } from "./description";
 import { handleKitCall } from "./kit-router";
 import { handleKitViewCall } from "./view-router";
@@ -66,7 +66,7 @@ export function createProtocolHandler(options: ProtocolHandlerOptions): Protocol
   const serverInfo = options.serverInfo ?? { name: "kitstack", version: "0.1.0" };
 
   return {
-    async handleRequest(request, userId) {
+    async handleRequest(request, userId, context?: ServerRequestContext) {
       const { id, method, params } = request;
 
       try {
@@ -172,7 +172,8 @@ export function createProtocolHandler(options: ProtocolHandlerOptions): Protocol
               const result = await handleKitCall(
                 toolArgs as { id?: string; cmd?: string; params?: Record<string, unknown> },
                 userId,
-                adapter
+                adapter,
+                context,
               );
               return rpcResult(id, result);
             }
@@ -181,7 +182,8 @@ export function createProtocolHandler(options: ProtocolHandlerOptions): Protocol
               const result = await handleKitViewCall(
                 toolArgs as { id?: string; view?: string },
                 userId,
-                adapter
+                adapter,
+                context,
               );
               return rpcResult(id, result);
             }

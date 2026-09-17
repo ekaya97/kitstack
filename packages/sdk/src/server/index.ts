@@ -38,6 +38,7 @@ export type {
   ResolvedView,
   McpToolDefinition,
   ProtocolHandler,
+  ServerRequestContext,
 } from "./types";
 export {
   parseMcpServerManifest,
@@ -185,10 +186,10 @@ export async function serve(options: ServeOptions): Promise<void> {
         if (!a) return { content: [{ type: "text", text: `Kit "${kitId}" not found.` }], isError: true };
         return a.executeTool(kitId, toolName, args, userId);
       },
-      async executeLoader(kitId, viewSlug, userId) {
+      async executeLoader(kitId, viewSlug, userId, context) {
         const a = adapters.get(kitId);
         if (!a) throw new Error(`Kit "${kitId}" not found.`);
-        return a.executeLoader(kitId, viewSlug, userId);
+        return a.executeLoader(kitId, viewSlug, userId, context);
       },
       async getShellHtml(kitId) {
         const a = adapters.get(kitId);
