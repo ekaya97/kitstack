@@ -13,8 +13,21 @@ kit("salesforce", "get_customer", {"name": "Acme"})
   -> tools/call {"name":"get_customer","arguments":{"name":"Acme"}}
 ```
 
-Use `parseMcpServerManifest` and `resolveMcpPassthrough` from
-`@kitstackco/sdk/server`. The returned tool schema remains available for
-partial-call discovery. Execution, authentication, grants, and telemetry stay
-in the host/router; this module only defines and validates the provider-neutral
-mapping contract.
+Use `parseMcpServerManifest`, `resolveMcpPassthrough`, and `withMcpServers` from
+`@kitstackco/sdk/server`. A self-hosted server can register the host-owned MCP
+transport directly:
+
+```ts
+serve({
+  kit,
+  db: { url: "file:.kitstack/dev.db" },
+  mcpServers: [{
+    manifest,
+    call: (request, context) => myMcpClient.call(request, context),
+  }],
+});
+```
+
+The returned tool schema remains available for partial-call discovery.
+Authentication, grants, and telemetry stay in the host/router; the manifest
+adapter only defines the provider-neutral registration and mapping contract.

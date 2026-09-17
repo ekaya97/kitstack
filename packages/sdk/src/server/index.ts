@@ -4,6 +4,7 @@ import { createProtocolHandler } from "./protocol";
 import { localAdapter } from "./adapters/local";
 import type { KitDefinition } from "../types";
 import type { KitServerAdapter, ProtocolHandler } from "./types";
+import { withMcpServers, type McpServerRegistration } from "./manifest";
 import type { AuthAdapter } from "./auth/adapter";
 import { none } from "./auth/none";
 import type { IncomingMessage } from "node:http";
@@ -45,6 +46,9 @@ export {
   type McpServerManifest,
   type McpServerToolManifest,
   type McpPassthroughCall,
+  type McpServerCallContext,
+  type McpServerRegistration,
+  withMcpServers,
 } from "./manifest";
 export {
   dispatch,
@@ -88,6 +92,9 @@ interface ServeBaseOptions {
   /** Request/response is the default; daemon owns long-lived upgrades. */
   mode?: ServeMode;
   daemon?: DaemonOptions;
+
+  /** Optional registered MCP servers exposed through the same kit() surface. */
+  mcpServers?: readonly McpServerRegistration[];
 }
 
 /**
@@ -196,6 +203,7 @@ export async function serve(options: ServeOptions): Promise<void> {
     adapter = localAdapter({ kit: options.kit, db });
   }
 
+  adapter = withMcpServers(adapter, options.mcpServers ?? []);
   const protocol = createProtocolHandler({ adapter });
 
   if (transport === "stdio") {

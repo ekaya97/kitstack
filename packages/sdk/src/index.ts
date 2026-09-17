@@ -172,6 +172,9 @@ export {
   type McpServerManifest,
   type McpServerToolManifest,
   type McpPassthroughCall,
+  type McpServerCallContext,
+  type McpServerRegistration,
+  withMcpServers,
 } from "./server/manifest";
 export { defineJob } from "./define-job";
 export { createKitContext, type CreateKitContextOptions } from "./context";

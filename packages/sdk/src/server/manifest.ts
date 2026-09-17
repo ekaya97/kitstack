@@ -1,3 +1,6 @@
+import type { KitToolResult } from "../types";
+import type { KitServerAdapter, ResolvedKit } from "./types";
+
 /**
  * Provider-neutral manifest for a registered, bring-your-own MCP server.
  *
@@ -34,6 +37,19 @@ export interface McpPassthroughCall {
       readonly arguments: Record<string, unknown>;
     };
   };
+}
+
+export interface McpServerCallContext {
+  readonly userId: string;
+}
+
+/** Host-owned registration for a remote or local MCP server. */
+export interface McpServerRegistration {
+  readonly manifest: McpServerManifest;
+  readonly call: (
+    request: McpPassthroughCall["request"],
+    context: McpServerCallContext,
+  ) => Promise<KitToolResult>;
 }
 
 export class McpManifestError extends Error {
@@ -121,6 +137,72 @@ export function resolveMcpPassthrough(
       method: "tools/call",
       params: { name: tool.name, arguments: { ...args } },
     },
+  };
+}
+
+/**
+ * Add registered MCP servers to an existing SDK server adapter.
+ *
+ * The base adapter remains responsible for SDK-built kits. Registered servers
+ * contribute only their manifest metadata and native tools/call execution.
+ */
+export function withMcpServers(
+  adapter: KitServerAdapter,
+  registrations: readonly McpServerRegistration[],
+): KitServerAdapter {
+  const servers = new Map<string, McpServerRegistration>();
+  for (const registration of registrations) {
+    if (servers.has(registration.manifest.id)) {
+      throw new McpManifestError(
+        "MCP_MANIFEST_INVALID",
+        `MCP server "${registration.manifest.id}" is registered more than once`,
+      );
+    }
+    servers.set(registration.manifest.id, registration);
+  }
+
+  return {
+    async resolveUserKits(userId: string): Promise<ResolvedKit[]> {
+      const kits = await adapter.resolveUserKits(userId);
+      const existing = new Set(kits.map((kit) => kit.id));
+      const passthrough = [...servers.values()].map(({ manifest }) => {
+        if (existing.has(manifest.id)) {
+          throw new McpManifestError(
+            "MCP_MANIFEST_INVALID",
+            `MCP server "${manifest.id}" conflicts with an existing kit`,
+          );
+        }
+        return resolvedMcpKit(manifest);
+      });
+      return [...kits, ...passthrough];
+    },
+
+    async executeTool(kitId, toolName, args, userId): Promise<KitToolResult> {
+      const registration = servers.get(kitId);
+      if (!registration) return adapter.executeTool(kitId, toolName, args, userId);
+      const passthrough = resolveMcpPassthrough(registration.manifest, toolName, args);
+      return registration.call(passthrough.request, { userId });
+    },
+
+    executeLoader: (kitId, viewSlug, userId) => adapter.executeLoader(kitId, viewSlug, userId),
+    getShellHtml: (kitId) => adapter.getShellHtml(kitId),
+    ...(adapter.getCdnUrl ? { getCdnUrl: () => adapter.getCdnUrl!() } : {}),
+  };
+}
+
+function resolvedMcpKit(manifest: McpServerManifest): ResolvedKit {
+  return {
+    id: manifest.id,
+    name: manifest.name,
+    description: manifest.description ?? `Registered MCP server ${manifest.name}`,
+    triggers: [],
+    instructions: null,
+    tools: manifest.tools.map((tool) => ({
+      name: tool.name,
+      description: tool.description,
+      inputSchema: tool.inputSchema,
+    })),
+    views: [],
   };
 }
 

@@ -3,6 +3,7 @@ import {
   McpManifestError,
   parseMcpServerManifest,
   resolveMcpPassthrough,
+  withMcpServers,
 } from "../src/server/manifest";
 
 const manifest = parseMcpServerManifest({
@@ -49,5 +50,35 @@ describe("MCP server manifest", () => {
       type: "object",
       properties: { name: { type: "string" } },
     });
+  });
+
+  it("registers the manifest as a kit and forwards execution to the MCP host", async () => {
+    const calls: unknown[] = [];
+    const adapter = withMcpServers({
+      resolveUserKits: async () => [],
+      executeTool: async () => ({ content: [{ type: "text" as const, text: "base" }] }),
+      executeLoader: async () => null,
+      getShellHtml: async () => "",
+    }, [{
+      manifest,
+      call: async (request, context) => {
+        calls.push({ request, context });
+        return { content: [{ type: "text", text: "remote" }] };
+      },
+    }]);
+
+    await expect(adapter.resolveUserKits("user-1")).resolves.toMatchObject([{
+      id: "salesforce",
+      tools: [{ name: "get_customer" }],
+    }]);
+    await expect(adapter.executeTool("salesforce", "get_customer", { name: "Acme" }, "user-1"))
+      .resolves.toEqual({ content: [{ type: "text", text: "remote" }] });
+    expect(calls).toEqual([{
+      request: {
+        method: "tools/call",
+        params: { name: "get_customer", arguments: { name: "Acme" } },
+      },
+      context: { userId: "user-1" },
+    }]);
   });
 });
