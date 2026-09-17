@@ -6,8 +6,10 @@ export {
 
 export type {
   Plugin,
+  PluginCapability,
   PluginContext,
   PluginManifest,
+  PluginRequirement,
   PluginRegisteredEvent,
   PluginRegistrationHook,
   PluginRegistryEvent,

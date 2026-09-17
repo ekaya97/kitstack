@@ -2,7 +2,9 @@ import type { TelemetryStore } from "../../telemetry/index.js";
 import {
   PluginRegistry as SdkPluginRegistry,
   type Plugin as SdkPlugin,
+  type PluginCapability,
   type PluginContext as SdkPluginContext,
+  type PluginRequirement,
 } from "@kitstackco/sdk";
 
 export const DEMO_PLUGIN_IDS = [
@@ -35,6 +37,9 @@ export interface DemoPlugin<Input = unknown, Output = unknown> {
   readonly id: string;
   readonly kind: DemoPluginKind;
   readonly version: string;
+  readonly provides?: readonly PluginCapability[];
+  readonly requires?: readonly PluginRequirement[];
+  readonly requiredScopes?: readonly string[];
   readonly invoke: (input: Input, context: DemoPluginContext) => Output | Promise<Output>;
 }
 
@@ -211,8 +216,12 @@ function asSdkPlugin(plugin: DemoPlugin, registry: PluginRegistry): SdkPlugin {
       id: plugin.id,
       kind: plugin.kind,
       version: plugin.version,
-      capabilities: [],
-      dependencies: [],
+      apiVersion: "kitstack.dev/v1alpha1",
+      provides: plugin.provides ?? [{ contract: `kitstack.${plugin.kind}`, version: plugin.version }],
+      requires: plugin.requires ?? [],
+      requiredScopes: plugin.requiredScopes ?? [],
+      capabilities: plugin.provides?.map((capability) => capability.contract),
+      dependencies: plugin.requires?.map((requirement) => requirement.contract),
     },
     invoke: (input, context) => plugin.invoke(input, createPluginContextFromSdk(context, registry)),
   };
@@ -290,13 +299,78 @@ function createPlugin(
   kind: DemoPluginKind,
   handler?: DemoPlugin["invoke"],
 ): DemoPlugin {
+  const metadata = DEMO_PLUGIN_METADATA[id];
   return {
     id,
     kind,
     version: "0.1.0",
+    provides: metadata.provides,
+    requires: metadata.requires,
+    requiredScopes: metadata.requiredScopes,
     invoke: handler ?? ((input) => input),
   };
 }
+
+const DEMO_PLUGIN_METADATA: Record<DemoPluginId, {
+  provides: readonly PluginCapability[];
+  requires: readonly PluginRequirement[];
+  requiredScopes: readonly string[];
+}> = {
+  "persistence:libsql": {
+    provides: [{ contract: "kitstack.storage", version: "0.1.0" }],
+    requires: [],
+    requiredScopes: ["storage:read", "storage:write"],
+  },
+  "kit:debrief": {
+    provides: [{ contract: "kitstack.kit", version: "0.1.0" }],
+    requires: [
+      { contract: "kitstack.memory", version: "0.1.0" },
+      { contract: "kitstack.instructions", version: "0.1.0" },
+      { contract: "kitstack.scheduler", version: "0.1.0" },
+    ],
+    requiredScopes: ["kit:use", "kit:act"],
+  },
+  "memory:default": {
+    provides: [{ contract: "kitstack.memory", version: "0.1.0" }],
+    requires: [{ contract: "kitstack.storage", version: "0.1.0" }],
+    requiredScopes: ["memory:read", "memory:write"],
+  },
+  "instructions:debrief-baseline": {
+    provides: [{ contract: "kitstack.instructions", version: "0.1.0" }],
+    requires: [],
+    requiredScopes: ["instructions:read"],
+  },
+  "ai:demo-compatible": {
+    provides: [{ contract: "kitstack.ai", version: "0.1.0" }],
+    requires: [],
+    requiredScopes: ["ai:invoke"],
+  },
+  "http:demo-routes": {
+    provides: [{ contract: "kitstack.http", version: "0.1.0" }],
+    requires: [],
+    requiredScopes: ["http:invoke"],
+  },
+  "trigger:voice-http": {
+    provides: [{ contract: "kitstack.trigger", version: "0.1.0" }],
+    requires: [],
+    requiredScopes: ["trigger:invoke"],
+  },
+  "channel:voice": {
+    provides: [{ contract: "kitstack.channel.voice", version: "0.1.0" }],
+    requires: [{ contract: "kitstack.ai", version: "0.1.0" }],
+    requiredScopes: ["channel:voice"],
+  },
+  "proxy:demo-openai-compatible": {
+    provides: [{ contract: "kitstack.proxy", version: "0.1.0" }],
+    requires: [{ contract: "kitstack.ai", version: "0.1.0" }],
+    requiredScopes: ["proxy:invoke"],
+  },
+  "scheduler:scheduled-calls": {
+    provides: [{ contract: "kitstack.scheduler", version: "0.1.0" }],
+    requires: [{ contract: "kitstack.storage", version: "0.1.0" }],
+    requiredScopes: ["scheduler:read", "scheduler:write"],
+  },
+};
 
 function channelForPlugin(kind: DemoPluginKind): "mcp" | "proxy" | "voice" | "trigger" | "system" | "chat" {
   if (kind === "proxy" || kind === "ai") return "proxy";

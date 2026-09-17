@@ -86,6 +86,18 @@ describe("PluginRegistry", () => {
       "scheduler",
     ]);
     expect(registry.list().some((item) => item.kind === ("connector" as DemoPlugin["kind"]))).toBe(false);
+
+    expect(registry.sdk.get("memory:default")?.manifest).toMatchObject({
+      apiVersion: "kitstack.dev/v1alpha1",
+      provides: [{ contract: "kitstack.memory", version: "0.1.0" }],
+      requires: [{ contract: "kitstack.storage", version: "0.1.0" }],
+      requiredScopes: ["memory:read", "memory:write"],
+    });
+    expect(registry.sdk.get("kit:debrief")?.manifest.requires).toEqual([
+      { contract: "kitstack.memory", version: "0.1.0" },
+      { contract: "kitstack.instructions", version: "0.1.0" },
+      { contract: "kitstack.scheduler", version: "0.1.0" },
+    ]);
   });
 
   it("persists one plugin.registered event per concrete registration", async () => {

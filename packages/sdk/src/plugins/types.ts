@@ -1,23 +1,44 @@
+/** A stable capability contract provided by a plugin implementation. */
+export interface PluginCapability {
+  readonly contract: string;
+  readonly version: string;
+}
+
+/** A capability contract required by a plugin implementation or kit. */
+export interface PluginRequirement {
+  readonly contract: string;
+  readonly version: string;
+  readonly optional?: boolean;
+}
+
 /**
  * The identity and declared capabilities of a plugin.
  *
  * Manifests are intentionally data-only so hosts can inspect a plugin before
- * initializing or invoking it.
+ * initializing or invoking it. `provides` and `requires` are the canonical
+ * capability fields. The legacy arrays remain optional for compatibility with
+ * older host adapters and are not used for dependency resolution.
  */
 export interface PluginManifest {
   readonly id: string;
   readonly kind: string;
   readonly version: string;
-  readonly capabilities: readonly string[];
-  readonly dependencies: readonly string[];
+  readonly apiVersion: string;
+  readonly provides: readonly PluginCapability[];
+  readonly requires: readonly PluginRequirement[];
+  readonly requiredScopes: readonly string[];
+  /** @deprecated Use `provides`. */
+  readonly capabilities?: readonly string[];
+  /** @deprecated Use `requires`. */
+  readonly dependencies?: readonly string[];
 }
 
 /**
  * Runtime metadata available to plugin lifecycle hooks and invocations.
  *
- * The registry adds `lookupPlugin` when it dispatches a plugin, allowing a
- * plugin to resolve declared collaborators without depending on a concrete
- * registry implementation.
+ * `lookupPlugin` is retained as a compatibility field for the current debrief
+ * runtime. New plugins should receive resolved capability handles instead of
+ * discovering arbitrary peers by implementation ID.
  */
 export interface PluginContext {
   readonly requestId?: string;

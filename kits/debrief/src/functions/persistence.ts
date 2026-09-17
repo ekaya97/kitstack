@@ -1,5 +1,5 @@
-import type { Client, InValue } from "@libsql/client";
-import type { StorageAdapter, StorageSqlAdapter } from "@kitstackco/sdk";
+import type { Client } from "@libsql/client";
+import type { StorageAdapter, StorageSqlAdapter, StorageValue } from "@kitstackco/sdk";
 import { createLibsqlStorageAdapter } from "../storage/libsql.js";
 import type { DebriefSession, DebriefState } from "./index.js";
 
@@ -204,7 +204,7 @@ export class LibsqlDebriefPersistence implements DebriefPersistence {
         session.createdAt,
         session.updatedAt,
         session.error ?? null,
-      ] as InValue[],
+      ],
     });
   }
 
@@ -250,7 +250,7 @@ export class LibsqlDebriefPersistence implements DebriefPersistence {
 
   async listCustomerEvents(orgId: string, customerId: string, kitId?: string): Promise<CustomerEventRecord[]> {
     await this.initialized;
-    const args: InValue[] = [orgId, customerId];
+    const args: StorageValue[] = [orgId, customerId];
     const kitClause = kitId === undefined ? "" : " AND kit_id = ?";
     if (kitId !== undefined) args.push(kitId);
     const result = await this.sql.execute({
@@ -278,7 +278,7 @@ export class LibsqlDebriefPersistence implements DebriefPersistence {
         event.type,
         event.occurredAt,
         JSON.stringify(event.payload),
-      ] as InValue[],
+      ],
     });
   }
 

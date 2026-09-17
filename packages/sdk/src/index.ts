@@ -214,6 +214,8 @@ export {
   type Plugin,
   type PluginContext,
   type PluginManifest,
+  type PluginCapability,
+  type PluginRequirement,
   type PluginRegisteredEvent,
   type PluginRegistrationHook,
   type PluginRegistryEvent,

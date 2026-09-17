@@ -14,9 +14,9 @@ export interface PluginRegistryOptions {
 
 /** Thrown when a registry operation violates a plugin contract. */
 export class PluginRegistryError extends Error {
-  readonly code: "PLUGIN_DUPLICATE_ID" | "PLUGIN_NOT_FOUND";
+  readonly code: "PLUGIN_DUPLICATE_ID" | "PLUGIN_NOT_FOUND" | "PLUGIN_INVALID_MANIFEST";
 
-  constructor(code: "PLUGIN_DUPLICATE_ID" | "PLUGIN_NOT_FOUND", message: string) {
+  constructor(code: "PLUGIN_DUPLICATE_ID" | "PLUGIN_NOT_FOUND" | "PLUGIN_INVALID_MANIFEST", message: string) {
     super(message);
     this.name = "PluginRegistryError";
     this.code = code;
@@ -47,6 +47,7 @@ export class PluginRegistry {
   /** Register a plugin, rejecting duplicate IDs. */
   register(plugin: Plugin): void {
     const id = plugin.manifest.id;
+    validateManifest(plugin.manifest);
     if (this.plugins.has(id)) {
       throw new PluginRegistryError(
         "PLUGIN_DUPLICATE_ID",
@@ -168,7 +169,32 @@ export class PluginRegistry {
 function snapshotManifest(manifest: PluginManifest): PluginManifest {
   return {
     ...manifest,
-    capabilities: [...manifest.capabilities],
-    dependencies: [...manifest.dependencies],
+    provides: manifest.provides.map((capability) => ({ ...capability })),
+    requires: manifest.requires.map((requirement) => ({ ...requirement })),
+    requiredScopes: [...manifest.requiredScopes],
+    ...(manifest.capabilities ? { capabilities: [...manifest.capabilities] } : {}),
+    ...(manifest.dependencies ? { dependencies: [...manifest.dependencies] } : {}),
   };
+}
+
+function validateManifest(manifest: PluginManifest): void {
+  if (!manifest.apiVersion.trim()) {
+    throw new PluginRegistryError("PLUGIN_INVALID_MANIFEST", "Plugin manifest apiVersion is required");
+  }
+  if (!manifest.id.trim() || !manifest.kind.trim() || !manifest.version.trim()) {
+    throw new PluginRegistryError("PLUGIN_INVALID_MANIFEST", "Plugin manifest id, kind, and version are required");
+  }
+  if (manifest.provides.length === 0) {
+    throw new PluginRegistryError("PLUGIN_INVALID_MANIFEST", `Plugin "${manifest.id}" must provide at least one capability`);
+  }
+  for (const capability of manifest.provides) {
+    if (!capability.contract.trim() || !capability.version.trim()) {
+      throw new PluginRegistryError("PLUGIN_INVALID_MANIFEST", `Plugin "${manifest.id}" has an invalid provided capability`);
+    }
+  }
+  for (const requirement of manifest.requires) {
+    if (!requirement.contract.trim() || !requirement.version.trim()) {
+      throw new PluginRegistryError("PLUGIN_INVALID_MANIFEST", `Plugin "${manifest.id}" has an invalid capability requirement`);
+    }
+  }
 }

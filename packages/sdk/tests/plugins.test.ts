@@ -11,6 +11,10 @@ function plugin(
       id,
       kind,
       version: "1.0.0",
+      apiVersion: "kitstack.dev/v1alpha1",
+      provides: [{ contract: "kitstack.test", version: "1.0.0" }],
+      requires: [],
+      requiredScopes: [],
       capabilities: ["test.invoke"],
       dependencies: [],
     },
@@ -91,6 +95,10 @@ describe("PluginRegistry", () => {
         id: "memory",
         kind: "persistence",
         version: "2.3.4",
+        apiVersion: "kitstack.dev/v1alpha1",
+        provides: [{ contract: "kitstack.memory", version: "1.0.0" }],
+        requires: [{ contract: "kitstack.storage", version: "^1.0.0" }],
+        requiredScopes: ["memory:read", "memory:write"],
         capabilities: ["memory.read", "memory.write"],
         dependencies: ["database"],
       },
@@ -104,6 +112,10 @@ describe("PluginRegistry", () => {
         id: "memory",
         kind: "persistence",
         version: "2.3.4",
+        apiVersion: "kitstack.dev/v1alpha1",
+        provides: [{ contract: "kitstack.memory", version: "1.0.0" }],
+        requires: [{ contract: "kitstack.storage", version: "^1.0.0" }],
+        requiredScopes: ["memory:read", "memory:write"],
         capabilities: ["memory.read", "memory.write"],
         dependencies: ["database"],
       },
@@ -127,5 +139,16 @@ describe("PluginRegistry", () => {
 
     await expect(registry.dispatch("target", { value: true })).resolves.toBe("dependency");
     await expect(registry.invoke("missing", {})).rejects.toThrow('Plugin "missing" is not registered');
+  });
+
+  it("rejects manifests without a canonical capability declaration", () => {
+    const registry = new PluginRegistry();
+    expect(() => registry.register({
+      ...plugin("invalid"),
+      manifest: {
+        ...plugin("invalid").manifest,
+        provides: [],
+      },
+    })).toThrow('Plugin "invalid" must provide at least one capability');
   });
 });
