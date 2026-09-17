@@ -39,6 +39,14 @@ export type {
   ProtocolHandler,
 } from "./types";
 export {
+  parseMcpServerManifest,
+  resolveMcpPassthrough,
+  McpManifestError,
+  type McpServerManifest,
+  type McpServerToolManifest,
+  type McpPassthroughCall,
+} from "./manifest";
+export {
   dispatch,
   createDispatchEnvelope,
   type DispatchEnvelope,

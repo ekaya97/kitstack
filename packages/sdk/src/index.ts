@@ -165,6 +165,14 @@ export {
   type DispatchErrorCode,
   type DispatchTarget,
 } from "./server/dispatch";
+export {
+  parseMcpServerManifest,
+  resolveMcpPassthrough,
+  McpManifestError,
+  type McpServerManifest,
+  type McpServerToolManifest,
+  type McpPassthroughCall,
+} from "./server/manifest";
 export { defineJob } from "./define-job";
 export { createKitContext, type CreateKitContextOptions } from "./context";
 
