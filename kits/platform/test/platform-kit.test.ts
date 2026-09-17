@@ -2,9 +2,10 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 import type { KitContext } from "@kitstackco/sdk";
 import kit from "../kit.config";
 import { createPlatformDataSource, platformAdminRequirement, telemetryRequirement, type PlatformDataReaders, type PlatformSnapshot } from "../src/plugins/platform-data.js";
-import { getPlatformOverview, listPlatformGrants } from "../src/tools/platform-tools.js";
+import { getPlatformAuditStatus, getPlatformOverview, listPlatformGrants } from "../src/tools/platform-tools.js";
 import { loader as overviewLoader } from "../src/views/overview/index.js";
 import { loader as grantsLoader } from "../src/views/grants/index.js";
+import { loader as auditLoader } from "../src/views/audit/index.js";
 
 function context(source: ReturnType<typeof createPlatformDataSource>, params: Record<string, unknown> = { orgId: "org-demo" }): KitContext {
   return {
@@ -27,6 +28,7 @@ function context(source: ReturnType<typeof createPlatformDataSource>, params: Re
 const snapshot: PlatformSnapshot = {
   events: [{ id: "event-1", timestamp: "2026-09-16T10:00:00.000Z", orgId: "org-demo", appId: "app-demo", channel: "proxy", type: "inference", operation: "prebrief", outcome: "success", requestTokens: 10, responseTokens: 5, estimatedCostUsd: 0.01 }],
   aggregate: { totalEvents: 1, totalRequestTokens: 10, totalResponseTokens: 5, totalEstimatedCostUsd: 0.01, totalLatencyMs: 100, successCount: 1, errorCount: 0 },
+  auditStatus: { mode: "metadata-only", status: "available", eventCount: 1, lastEventAt: "2026-09-16T10:00:00.000Z", externalExport: "not_reported" },
   apps: [{ id: "app-demo", name: "Claude", org: "org-demo", scopes: ["mcp"], createdAt: "2026-09-16T10:00:00.000Z" }],
   kits: [{ id: "debrief", version: "0.1.0", status: "ready" }],
   plugins: [{ id: "memory:default", kind: "memory", version: "0.1.0", status: "ready" }],
@@ -47,8 +49,8 @@ describe("platform kit v0", () => {
 
   it("defines the platform Views and read tools without debrief dependencies", () => {
     expect(kit.id).toBe("platform");
-    expect(kit.tools.map((tool) => tool.name)).toEqual(["get_platform_overview", "get_usage_finops", "list_platform_grants"]);
-    expect(kit.views?.map((view) => view.slug)).toEqual(["overview", "usage-finops", "registry", "grants"]);
+    expect(kit.tools.map((tool) => tool.name)).toEqual(["get_platform_overview", "get_usage_finops", "get_platform_audit_status", "list_platform_grants"]);
+    expect(kit.views?.map((view) => view.slug)).toEqual(["overview", "usage-finops", "registry", "audit", "grants"]);
   });
 
   it("adapts telemetry and registry readers into one platform source", async () => {
@@ -61,6 +63,7 @@ describe("platform kit v0", () => {
     expect(input.telemetry.query).toHaveBeenCalledWith(query, ctx);
     expect(input.telemetry.aggregate).toHaveBeenCalledWith(query, ctx);
     expect(input.registry.apps).toHaveBeenCalledWith("org-demo", ctx);
+    expect(result.auditStatus).toEqual(snapshot.auditStatus);
   });
 
   it("enforces telemetry access in tools and direct View loaders", async () => {
@@ -76,6 +79,16 @@ describe("platform kit v0", () => {
     await expect(grantsLoader(ctx)).resolves.toEqual(expect.any(Array));
     expect(platformAdminRequirement()).toEqual({ relation: "platform:admin", objectType: "platform", objectId: "kitstack" });
     expect(telemetryRequirement("org-demo")).toEqual({ relation: "kit:telemetry", objectType: "organization", objectId: "org-demo" });
+  });
+
+  it("exposes audit status through the same telemetry grant boundary", async () => {
+    const source = createPlatformDataSource(readers());
+    const ctx = context(source);
+    await expect(getPlatformAuditStatus.load(ctx, { orgId: "org-demo" })).resolves.toEqual(snapshot.auditStatus);
+    await expect(auditLoader(ctx)).resolves.toEqual(snapshot.auditStatus);
+
+    const deniedSource = createPlatformDataSource(readers(false));
+    await expect(getPlatformAuditStatus.load(context(deniedSource), { orgId: "org-demo" })).rejects.toThrow("Forbidden");
   });
 
   it("requires an organization scope for View loads", async () => {
