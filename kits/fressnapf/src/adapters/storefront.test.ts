@@ -12,9 +12,11 @@ describe("Fressnapf REST/OpenAPI connector", () => {
     const client = await bindConnector(
       fressnapfStorefrontConnector,
       {
-        connectorId: "rest-openapi.fressnapf-storefront",
+      connectorId: "rest-openapi.fressnapf-storefront",
+        scope: { orgId: "org-demo", kitId: "fressnapf" },
         config: { baseUrl: "https://storefront.example.test", fetch: fetcher },
         secretRefs: { apiKey: "org/fressnapf/catalog" },
+        grantedScopes: ["storefront.catalog.read"],
       },
       { get: vi.fn(async (reference: string) => reference === "org/fressnapf/catalog" ? "storefront-secret" : undefined) },
     );

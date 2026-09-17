@@ -133,8 +133,20 @@ describe("Twilio and OpenAI Realtime boundary", () => {
     });
     const secretStore = { get: vi.fn(async (reference: string) => reference === "org/twilio/auth" ? "server-only-auth-token" : undefined) };
     const config = { accountSid: "AC123", apiBaseUrl: "https://api.twilio.example", fetch: fetcher };
-    const voice = await bindConnector(twilioVoiceConnector, { connectorId: "twilio.voice", config, secretRefs: { authToken: "org/twilio/auth" } }, secretStore);
-    const sms = await bindConnector(twilioSmsConnector, { connectorId: "twilio.sms", config, secretRefs: { authToken: "org/twilio/auth" } }, secretStore);
+    const voice = await bindConnector(twilioVoiceConnector, {
+      connectorId: "twilio.voice",
+      scope: { orgId: "org-demo", kitId: "debrief" },
+      config,
+      secretRefs: { authToken: "org/twilio/auth" },
+      grantedScopes: ["telephony.calls.write"],
+    }, secretStore);
+    const sms = await bindConnector(twilioSmsConnector, {
+      connectorId: "twilio.sms",
+      scope: { orgId: "org-demo", kitId: "debrief" },
+      config,
+      secretRefs: { authToken: "org/twilio/auth" },
+      grantedScopes: ["telephony.messages.write"],
+    }, secretStore);
 
     await expect(voice.createCall({ to: "+491234567890", from: "+491234567891", twiml: "<Response/>", record: false })).resolves.toMatchObject({ sid: "CA123" });
     await expect(sms.sendMessage({ to: "+491234567890", from: "+491234567891", body: "Your appointment is confirmed." })).resolves.toMatchObject({ sid: "SM123" });
