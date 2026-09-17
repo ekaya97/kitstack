@@ -13,7 +13,7 @@ export default defineView({
   component: UsageFinopsView,
   height: 760,
   placeholder: {
-    events: [], aggregate: { totalEvents: 0, totalRequestTokens: 0, totalResponseTokens: 0, totalEstimatedCostUsd: 0, totalLatencyMs: 0, successCount: 0, errorCount: 0 },
+    events: [], aggregate: { totalEvents: 0, totalRequestTokens: 0, totalResponseTokens: 0, totalEstimatedCostUsd: 0, totalLatencyMs: 0, successCount: 0, errorCount: 0 }, auditStatus: { mode: "metadata-only", status: "empty", eventCount: 0, lastEventAt: null, externalExport: "not_reported" },
     apps: [], kits: [], plugins: [], sessions: [], providerHealth: [],
   },
 });

@@ -15,6 +15,8 @@ returning data.
 - `overview` — sessions, cost, errors, and registry counts.
 - `usage-finops` — metadata-only proxy/runtime events, tokens, latency, and cost.
 - `registry` — registered apps, kits, plugins, and provider health.
+- `audit` — metadata-only audit evidence status, latest event, and honest
+  external-export status (`not_reported` when the host does not expose it).
 - `grants` — the grant view for operators; it requires `platform:admin` in
   addition to telemetry access.
 
@@ -32,8 +34,15 @@ integration is the follow-up needed to replace the current `/demo` proof
 screens with these Views in a deployed shell.
 
 The current repository does not yet expose durable connector bindings, deploy
-queue records, policy-decision records, per-tool struggle aggregates, or audit
-export status in the demo snapshot. Those are intentionally not fabricated by
-this v0 slice; they remain follow-up platform source fields and Views after the
-corresponding G2 contracts land. The existing event stream already supports
-proxy usage, runtime observability, trace metadata, and estimated cost.
+queue records, policy-decision records, or per-tool struggle aggregates in the
+demo snapshot. Those are intentionally not fabricated by this v0 slice; they
+remain follow-up platform source fields and Views after the corresponding G2
+contracts land. The audit View reports the existing metadata-only event
+coverage, but does not claim that an external export or SIEM is configured.
+The existing event stream supports proxy usage, runtime observability, trace
+metadata, estimated cost, and this bounded audit-status signal.
+
+The router host also fails closed if the upstream observability reader returns
+an event or registered app outside the requested organization. Grant checks
+still happen before the source is read, and the host response guard prevents a
+broader upstream response from becoming a cross-organization View result.

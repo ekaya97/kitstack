@@ -142,7 +142,36 @@ async function readObservability(input: {
   });
   if (!response.ok) throw new Error(`Platform telemetry reader returned HTTP ${response.status}`);
   const body = await response.json() as ObservabilityResponse;
-  return body ?? {};
+  return enforceOrganizationScope(body ?? {}, input.query.orgId);
+}
+
+/**
+ * Keep the platform boundary fail-closed even if an upstream observability
+ * reader accidentally returns a broader snapshot than requested. A grant is
+ * checked before this reader is called; this second guard prevents a bad
+ * reader response from becoming a cross-organization View result.
+ */
+function enforceOrganizationScope(
+  response: ObservabilityResponse,
+  orgId: string,
+): ObservabilityResponse {
+  const events = response.events ?? [];
+  if (events.some((event) => event.orgId !== orgId)) {
+    throw new Error("Platform telemetry source returned data outside the requested organization");
+  }
+
+  const apps = response.apps ?? [];
+  if (apps.some((app) => app.org !== orgId)) {
+    throw new Error("Platform registry source returned data outside the requested organization");
+  }
+
+  const sessionIds = new Set(events.map((event) => event.sessionId).filter((id): id is string => Boolean(id)));
+  return {
+    ...response,
+    events,
+    apps,
+    sessions: (response.sessions ?? []).filter((session) => sessionIds.has(session.sessionId)),
+  };
 }
 
 function registryKits(items: Awaited<ReturnType<typeof getAllRegistryItems>>, _orgId: string): PlatformKit[] {

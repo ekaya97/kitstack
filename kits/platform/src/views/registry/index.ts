@@ -13,7 +13,7 @@ export default defineView({
   component: RegistryView,
   height: 760,
   placeholder: {
-    events: [], aggregate: { totalEvents: 0, totalRequestTokens: 0, totalResponseTokens: 0, totalEstimatedCostUsd: 0, totalLatencyMs: 0, successCount: 0, errorCount: 0 },
+    events: [], aggregate: { totalEvents: 0, totalRequestTokens: 0, totalResponseTokens: 0, totalEstimatedCostUsd: 0, totalLatencyMs: 0, successCount: 0, errorCount: 0 }, auditStatus: { mode: "metadata-only", status: "empty", eventCount: 0, lastEventAt: null, externalExport: "not_reported" },
     apps: [{ id: "app_demo", name: "Claude", org: "org-demo", scopes: ["mcp"], createdAt: "2026-09-16T00:00:00.000Z" }], kits: [{ id: "debrief", version: "0.1.0", status: "ready" }], plugins: [{ id: "memory:default", kind: "memory", version: "0.1.0", status: "ready" }], sessions: [], providerHealth: [],
   },
 });

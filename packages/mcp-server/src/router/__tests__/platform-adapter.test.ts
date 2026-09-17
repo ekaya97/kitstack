@@ -276,7 +276,7 @@ describe("platform debrief adapter", () => {
 
     const kits = await adapter.resolveUserKits("user-1");
     expect(kits.find((kit) => kit.id === "platform")?.views.map((view) => view.slug))
-      .toEqual(["overview", "usage-finops", "registry", "grants"]);
+      .toEqual(["overview", "usage-finops", "registry", "audit", "grants"]);
 
     const result = await adapter.executeTool("platform", "get_platform_overview", { orgId: "org-demo" }, "user-1");
     expect(result.isError).toBeUndefined();
@@ -322,6 +322,22 @@ describe("platform debrief adapter", () => {
     await expect(source.snapshot({ orgId: "org-demo" }, ctx)).resolves.toMatchObject({
       kits: [{ id: "crm", version: "registry", status: "ready" }],
     });
+  });
+
+  it("fails closed when the observability reader returns another organization's data", async () => {
+    const fetcher = vi.fn(async () => response({
+      events: [{ id: "foreign-event", orgId: "org-other", timestamp: "2026-01-01T00:00:00.000Z", channel: "mcp", type: "mcp.tool_call", operation: "kit", outcome: "success" }],
+      apps: [{ id: "foreign-app", name: "Other", org: "org-other", scopes: [], createdAt: "2026-01-01T00:00:00.000Z" }],
+    }));
+    const source = createRouterPlatformDataSource({
+      fetch: fetcher,
+      voiceServiceUrl: "https://voice.example",
+      voiceInternalSecret: SECRET,
+      checkTuple: vi.fn(async () => true),
+    });
+    const ctx = { identity: { principal: "user-1", actor: "user-1" }, session: { id: "session-1", traceId: "trace-1" } } as KitContext;
+
+    await expect(source.snapshot({ orgId: "org-demo" }, ctx)).rejects.toThrow("outside the requested organization");
   });
 
 });

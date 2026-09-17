@@ -52,6 +52,16 @@ export type PlatformPlugin = { id: string; kind: string; version: string; status
 export type PlatformProvider = { provider: string; status: string; eventCount: number; errorCount: number; lastEventAt: string | null };
 export type PlatformSession = { sessionId: string; appId: string | null; kitId: string | null; state: string; lastEventAt: string | null };
 
+/** Honest status of the metadata-only audit evidence available to the source. */
+export type PlatformAuditStatus = {
+  mode: "metadata-only";
+  status: "available" | "empty";
+  eventCount: number;
+  lastEventAt: string | null;
+  /** The host has not reported an external SIEM/export result. */
+  externalExport: "not_reported";
+};
+
 export type PlatformGrant = {
   subjectType: string;
   subjectId: string;
@@ -75,6 +85,7 @@ export type PlatformQuery = {
 export type PlatformSnapshot = {
   events: PlatformEvent[];
   aggregate: PlatformAggregate;
+  auditStatus: PlatformAuditStatus;
   apps: PlatformApp[];
   kits: PlatformKit[];
   plugins: PlatformPlugin[];
@@ -129,9 +140,31 @@ export function createPlatformDataSource(readers: PlatformDataReaders): Platform
         readers.registry.providerHealth?.(query, ctx) ?? [],
       ]);
       void ctx;
-      return { events, aggregate, apps, kits, plugins, sessions, providerHealth };
+      return {
+        events,
+        aggregate,
+        auditStatus: auditStatusFromAggregate(events, aggregate),
+        apps,
+        kits,
+        plugins,
+        sessions,
+        providerHealth,
+      };
     },
     listGrants: (query, ctx) => readers.grants.list(query.orgId, ctx),
+  };
+}
+
+export function auditStatusFromAggregate(
+  events: readonly PlatformEvent[],
+  aggregate: Pick<PlatformAggregate, "totalEvents">,
+): PlatformAuditStatus {
+  return {
+    mode: "metadata-only",
+    status: aggregate.totalEvents > 0 ? "available" : "empty",
+    eventCount: aggregate.totalEvents,
+    lastEventAt: events.at(-1)?.timestamp ?? null,
+    externalExport: "not_reported",
   };
 }
 

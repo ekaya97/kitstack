@@ -3,7 +3,8 @@ import overview from "./src/views/overview/index.js";
 import usageFinops from "./src/views/usage-finops/index.js";
 import registry from "./src/views/registry/index.js";
 import grants from "./src/views/grants/index.js";
-import { getPlatformOverview, getUsageFinops, listPlatformGrants } from "./src/tools/platform-tools.js";
+import audit from "./src/views/audit/index.js";
+import { getPlatformOverview, getUsageFinops, getPlatformAuditStatus, listPlatformGrants } from "./src/tools/platform-tools.js";
 
 export default defineKit({
   id: "platform",
@@ -13,6 +14,6 @@ export default defineKit({
   schema: {},
   instructions: "Use metadata-only platform data. Do not expose prompts, completions, transcripts, audio, or tool payloads.",
   triggers: ["platform", "registry", "usage", "observability", "finops", "grants"],
-  tools: [getPlatformOverview, getUsageFinops, listPlatformGrants],
-  views: [overview, usageFinops, registry, grants],
+  tools: [getPlatformOverview, getUsageFinops, getPlatformAuditStatus, listPlatformGrants],
+  views: [overview, usageFinops, registry, audit, grants],
 });

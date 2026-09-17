@@ -49,6 +49,17 @@ export const getUsageFinops = defineTool({
   },
 });
 
+export const getPlatformAuditStatus = defineTool({
+  name: "get_platform_audit_status",
+  description: "Read grant-scoped metadata-only audit evidence without exposing payloads.",
+  args: z.object({ orgId: z.string().min(1).describe("Organization whose audit status may be viewed") }),
+  authorize: (args) => [telemetryRequirement(args.orgId)],
+  load: async (ctx, args) => {
+    const source = await requireTelemetry(ctx, args.orgId);
+    return (await source.snapshot({ orgId: args.orgId }, ctx)).auditStatus;
+  },
+});
+
 export const listPlatformGrants = defineTool({
   name: "list_platform_grants",
   description: "List organization grants for an operator with platform administration access.",
