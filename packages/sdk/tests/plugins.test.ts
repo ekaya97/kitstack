@@ -1,5 +1,11 @@
 import { describe, expect, it, vi } from "vitest";
-import { PluginRegistry, type Plugin, type PluginContext, type PluginRegisteredEvent } from "../src";
+import {
+  PluginRegistry,
+  PluginRegistryError,
+  type Plugin,
+  type PluginContext,
+  type PluginRegisteredEvent,
+} from "../src";
 
 function plugin(
   id: string,
@@ -150,5 +156,97 @@ describe("PluginRegistry", () => {
         provides: [],
       },
     })).toThrow('Plugin "invalid" must provide at least one capability');
+  });
+
+  it("resolves an exact capability provider and invokes it through a handle", async () => {
+    const provider = plugin("memory-default", "memory", {
+      manifest: {
+        ...plugin("memory-default", "memory").manifest,
+        provides: [{ contract: "kitstack.memory", version: "1.2.3" }],
+        requiredScopes: ["memory:read"],
+      },
+      invoke: vi.fn(async (input, context) => ({ input, requestId: context.requestId })),
+    });
+    const registry = new PluginRegistry();
+    registry.register(provider);
+
+    const resolved = registry.resolveCapability({ contract: "kitstack.memory", version: "1.2.3" });
+
+    expect(resolved.metadata).toEqual({
+      pluginId: "memory-default",
+      pluginKind: "memory",
+      pluginVersion: "1.0.0",
+      capabilityContract: "kitstack.memory",
+      capabilityVersion: "1.2.3",
+      requiredScopes: ["memory:read"],
+    });
+    await expect(resolved.invoke({ value: true }, { requestId: "request-1" })).resolves.toEqual({
+      input: { value: true },
+      requestId: "request-1",
+    });
+    expect(provider.invoke).toHaveBeenCalledTimes(1);
+  });
+
+  it("resolves a compatible caret range", () => {
+    const provider = plugin("memory-v2", "memory", {
+      manifest: {
+        ...plugin("memory-v2").manifest,
+        provides: [{ contract: "kitstack.memory", version: "1.4.0" }],
+      },
+    });
+    const registry = new PluginRegistry();
+    registry.register(provider);
+
+    expect(registry.resolve({ contract: "kitstack.memory", version: "^1.2.0" }).version).toBe("1.4.0");
+  });
+
+  it.each([
+    ["missing provider", "PLUGIN_CAPABILITY_NOT_FOUND", "kitstack.missing", "1.0.0"],
+    ["ambiguous providers", "PLUGIN_CAPABILITY_AMBIGUOUS", "kitstack.memory", "^1.0.0"],
+    ["incompatible provider", "PLUGIN_CAPABILITY_INCOMPATIBLE", "kitstack.memory", "^2.0.0"],
+  ] as const)("rejects a %s with a stable error", (label, code, contract, version) => {
+    const registry = new PluginRegistry();
+    registry.register(plugin("memory-a", "memory", {
+      manifest: {
+        ...plugin("memory-a").manifest,
+        provides: [{ contract: "kitstack.memory", version: "1.2.0" }],
+      },
+    }));
+    if (label === "ambiguous providers") {
+      registry.register(plugin("memory-b", "memory", {
+        manifest: {
+          ...plugin("memory-b").manifest,
+          provides: [{ contract: "kitstack.memory", version: "1.3.0" }],
+        },
+      }));
+    }
+
+    try {
+      registry.resolveCapability({ contract, version });
+      throw new Error("expected capability resolution to fail");
+    } catch (error) {
+      expect(error).toBeInstanceOf(PluginRegistryError);
+      expect((error as PluginRegistryError).code).toBe(code);
+    }
+  });
+
+  it("returns detached manifest snapshots with resolved metadata", () => {
+    const registry = new PluginRegistry();
+    registry.register(plugin("memory", "memory", {
+      manifest: {
+        ...plugin("memory").manifest,
+        provides: [{ contract: "kitstack.memory", version: "1.0.0" }],
+        requires: [{ contract: "kitstack.storage", version: "^1.0.0" }],
+        requiredScopes: ["memory:read", "memory:write"],
+      },
+    }));
+
+    const resolved = registry.resolveCapability({ contract: "kitstack.memory", version: "1.0.0" });
+    (resolved.manifest.requiredScopes as string[]).push("memory:admin");
+    (resolved.requirement as { contract: string }).contract = "mutated";
+
+    expect(resolved.metadata.requiredScopes).toEqual(["memory:read", "memory:write"]);
+    expect(registry.resolveCapability({ contract: "kitstack.memory", version: "1.0.0" }).requirement.contract)
+      .toBe("kitstack.memory");
   });
 });

@@ -13,4 +13,6 @@ export type {
   PluginRegisteredEvent,
   PluginRegistrationHook,
   PluginRegistryEvent,
+  ResolvedPluginCapability,
+  ResolvedPluginCapabilityMetadata,
 } from "./types";

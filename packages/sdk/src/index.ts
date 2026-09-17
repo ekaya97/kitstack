@@ -52,12 +52,21 @@ export type {
   AgentDefinition,
 } from "./types";
 
+export {
+  assertBindingScope,
+  assertBindingScopeMatches,
+  type BindingScope,
+} from "./binding-scope";
+
 // Provider-neutral storage boundary. Driver implementations live in kits or hosts.
 export {
   assertStorageScope,
+  assertStorageAdapter,
+  bindStorageAdapter,
   requireStorageObjects,
   requireStorageSql,
   type StorageAdapter,
+  type StorageCapability,
   type StorageObject,
   type StorageObjectAdapter,
   type StorageObjectInput,
@@ -197,11 +206,16 @@ export {
 export {
   bindConnector,
   createRestOpenApiConnector,
+  redactConnectorBinding,
+  validateConnectorBinding,
   type Connector,
   type ConnectorBinding,
+  ConnectorBindingError,
   type ConnectorManifest,
+  type ConnectorScope,
   type ConnectorSecretResolver,
   type ConnectorSecretStore,
+  type RedactedConnectorBinding,
   type RestOpenApiClient,
   type RestOpenApiConfig,
   type RestOpenApiRequest,
@@ -220,6 +234,8 @@ export {
   type PluginRegistrationHook,
   type PluginRegistryEvent,
   type PluginRegistryOptions,
+  type ResolvedPluginCapability,
+  type ResolvedPluginCapabilityMetadata,
 } from "./plugins";
 
 // Result helpers

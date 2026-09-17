@@ -11,6 +11,30 @@ export interface PluginRequirement {
   readonly optional?: boolean;
 }
 
+/** Stable metadata returned with a resolved capability handle. */
+export interface ResolvedPluginCapabilityMetadata {
+  readonly pluginId: string;
+  readonly pluginKind: string;
+  readonly pluginVersion: string;
+  readonly capabilityContract: string;
+  readonly capabilityVersion: string;
+  readonly requiredScopes: readonly string[];
+}
+
+/** A capability selected from the registry for one contract requirement. */
+export interface ResolvedPluginCapability {
+  readonly contract: string;
+  readonly version: string;
+  readonly requirement: PluginRequirement;
+  readonly capability: PluginCapability;
+  readonly manifest: PluginManifest;
+  readonly metadata: ResolvedPluginCapabilityMetadata;
+  readonly invoke: <TInput = unknown, TOutput = unknown>(
+    input: TInput,
+    context?: PluginContext,
+  ) => Promise<TOutput>;
+}
+
 /**
  * The identity and declared capabilities of a plugin.
  *
