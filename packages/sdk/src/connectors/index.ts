@@ -1,3 +1,5 @@
+import { assertBindingScope, type BindingScope } from "../binding-scope";
+
 /**
  * Deploy-time connector contract.
  *
@@ -12,6 +14,8 @@ export interface ConnectorManifest {
   readonly version: string;
   readonly capabilities: readonly string[];
   readonly requiredScopes: readonly string[];
+  /** Logical names that must be supplied through ConnectorBinding.secretRefs. */
+  readonly secretNames?: readonly string[];
 }
 
 /** Host-owned secret store. Implementations may use SST, AWS Secrets Manager, or a test map. */
@@ -29,11 +33,40 @@ export interface Connector<Config, Client> {
   bind(config: Config, secrets: ConnectorSecretResolver): Promise<Client>;
 }
 
-/** Org-level binding persisted by the host; it contains references, never values. */
+export type ConnectorScope = BindingScope;
+
+/**
+ * Binding persisted by the host; it contains references, never secret values.
+ * `grantedScopes` is the host authorization decision. `requiredCapabilities`
+ * lets a kit assert that the selected implementation provides the operations
+ * it needs without introducing a registry or provider-specific dependency.
+ */
 export interface ConnectorBinding<Config> {
   readonly connectorId: string;
+  readonly scope: ConnectorScope;
   readonly config: Config;
   readonly secretRefs?: Readonly<Record<string, string>>;
+  readonly grantedScopes?: readonly string[];
+  readonly requiredCapabilities?: readonly string[];
+}
+
+export interface RedactedConnectorBinding<Config> {
+  readonly connectorId: string;
+  readonly scope: ConnectorScope;
+  readonly config: Config;
+  readonly secretRefs: Readonly<Record<string, "[redacted]">>;
+  readonly grantedScopes?: readonly string[];
+  readonly requiredCapabilities?: readonly string[];
+}
+
+export class ConnectorBindingError extends Error {
+  readonly code: "invalid" | "scope" | "capability" | "scope_grant" | "secret" | "bind";
+
+  constructor(code: ConnectorBindingError["code"], message: string) {
+    super(message);
+    this.name = "ConnectorBindingError";
+    this.code = code;
+  }
 }
 
 /**
@@ -45,21 +78,104 @@ export async function bindConnector<Config, Client>(
   binding: ConnectorBinding<Config>,
   secretStore: ConnectorSecretStore,
 ): Promise<Client> {
-  if (binding.connectorId !== connector.manifest.id) {
-    throw new Error(`Connector binding "${binding.connectorId}" does not match "${connector.manifest.id}"`);
-  }
+  validateConnectorBinding(connector.manifest, binding);
 
   const secretRefs = binding.secretRefs ?? {};
   const resolver: ConnectorSecretResolver = {
     async resolve(name) {
-      const reference = secretRefs[name] ?? name;
-      const value = await secretStore.get(reference);
-      if (!value) throw new Error(`Connector secret "${name}" is not configured`);
-      return value;
+      const reference = secretRefs[name];
+      if (!reference) throw new ConnectorBindingError("secret", `Connector secret "${name}" is not configured`);
+      try {
+        const value = await secretStore.get(reference);
+        if (!value) throw new Error("missing");
+        return value;
+      } catch {
+        throw new ConnectorBindingError("secret", `Connector secret "${name}" is not configured`);
+      }
     },
   };
 
-  return connector.bind(binding.config, resolver);
+  try {
+    return await connector.bind(binding.config, resolver);
+  } catch (error) {
+    if (error instanceof ConnectorBindingError) throw error;
+    throw new ConnectorBindingError("bind", `Connector "${connector.manifest.id}" failed to bind`);
+  }
+}
+
+export function validateConnectorBinding<Config>(
+  manifest: ConnectorManifest,
+  binding: ConnectorBinding<Config>,
+): void {
+  if (binding.connectorId !== manifest.id) {
+    throw new ConnectorBindingError("invalid", `Connector binding "${binding.connectorId}" does not match "${manifest.id}"`);
+  }
+  try {
+    assertBindingScope(binding.scope, "Connector scope");
+  } catch {
+    throw new ConnectorBindingError("scope", "Connector scope is invalid");
+  }
+  assertUniqueNonEmpty(manifest.capabilities, "Connector capabilities", "capability");
+  assertUniqueNonEmpty(manifest.requiredScopes, "Connector required scopes", "scope");
+  assertUniqueNonEmpty(manifest.secretNames ?? [], "Connector secret names", "secret");
+  assertUniqueNonEmpty(binding.grantedScopes ?? [], "Granted connector scopes", "scope");
+  assertUniqueNonEmpty(binding.requiredCapabilities ?? [], "Required connector capabilities", "capability");
+
+  const provided = new Set(manifest.capabilities);
+  for (const capability of binding.requiredCapabilities ?? []) {
+    if (!provided.has(capability)) {
+      throw new ConnectorBindingError("capability", `Connector does not provide required capability "${capability}"`);
+    }
+  }
+
+  const granted = new Set(binding.grantedScopes ?? []);
+  for (const scope of manifest.requiredScopes) {
+    if (!granted.has(scope)) {
+      throw new ConnectorBindingError("scope_grant", `Connector scope "${scope}" is not granted`);
+    }
+  }
+
+  assertSecretSafeConfig(binding.config);
+  const secretRefs = binding.secretRefs ?? {};
+  for (const name of manifest.secretNames ?? []) {
+    if (!secretRefs[name]) throw new ConnectorBindingError("secret", `Connector secret "${name}" is not configured`);
+  }
+  for (const [name, reference] of Object.entries(secretRefs)) {
+    if (!name.trim() || !reference.trim()) throw new ConnectorBindingError("secret", "Connector secret references must be non-empty");
+  }
+}
+
+/** Safe metadata representation for logs, telemetry, and registry views. */
+export function redactConnectorBinding<Config>(binding: ConnectorBinding<Config>): RedactedConnectorBinding<Config> {
+  return {
+    connectorId: binding.connectorId,
+    scope: binding.scope,
+    config: binding.config,
+    secretRefs: Object.fromEntries(Object.keys(binding.secretRefs ?? {}).map((name) => [name, "[redacted]"])) as Readonly<Record<string, "[redacted]">>,
+    ...(binding.grantedScopes ? { grantedScopes: binding.grantedScopes } : {}),
+    ...(binding.requiredCapabilities ? { requiredCapabilities: binding.requiredCapabilities } : {}),
+  };
+}
+
+function assertUniqueNonEmpty(values: readonly string[], label: string, kind: string): void {
+  if (new Set(values).size !== values.length || values.some((value) => !value.trim())) {
+    throw new ConnectorBindingError("invalid", `${label} must contain unique, non-empty ${kind} names`);
+  }
+}
+
+function assertSecretSafeConfig(value: unknown, path = "config"): void {
+  if (!value || typeof value !== "object") return;
+  if (Array.isArray(value)) {
+    value.forEach((item, index) => assertSecretSafeConfig(item, `${path}[${index}]`));
+    return;
+  }
+  const suspicious = /(api[-_]?key|token|secret|password|private[-_]?key|credential)$/i;
+  for (const [key, child] of Object.entries(value)) {
+    if (suspicious.test(key) && typeof child === "string" && child.trim()) {
+      throw new ConnectorBindingError("secret", `Connector config contains a secret-shaped value at "${path}.${key}"`);
+    }
+    assertSecretSafeConfig(child, `${path}.${key}`);
+  }
 }
 
 export interface RestOpenApiRequest {
@@ -88,6 +204,7 @@ export function createRestOpenApiConnector(
     version: "0.1.0",
     capabilities: ["rest.request", "openapi.operation"],
     requiredScopes: ["rest.read"],
+    secretNames: ["apiKey"],
   },
 ): Connector<RestOpenApiConfig, RestOpenApiClient> {
   return {

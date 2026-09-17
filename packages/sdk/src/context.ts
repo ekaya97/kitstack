@@ -9,7 +9,7 @@ import type {
   StorageBinding,
   TelemetrySink,
 } from "./types";
-import type { StorageAdapter } from "./storage";
+import { assertStorageAdapter, type StorageAdapter } from "./storage";
 
 /**
  * Options used to create a request-scoped kit context.
@@ -62,6 +62,7 @@ const noopLogger: Logger = {
  * session, and observability implementations at the boundary.
  */
 export function createKitContext(options: CreateKitContextOptions): KitContext {
+  if (options.storage) assertStorageAdapter(options.storage);
   const identity = options.identity ?? {
     principal: "dev-user",
     actor: "dev-user",

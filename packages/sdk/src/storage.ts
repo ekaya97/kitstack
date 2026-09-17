@@ -1,3 +1,5 @@
+import { assertBindingScope, assertBindingScopeMatches, type BindingScope } from "./binding-scope";
+
 /**
  * Provider-neutral storage contracts.
  *
@@ -9,13 +11,8 @@
 
 export type StorageProvider = "libsql" | "shared-sql" | "dynamodb" | "object-store";
 
-export interface StorageScope {
-  /** Organization/tenant boundary supplied by the authenticated host. */
-  readonly orgId: string;
-  /** Kit boundary; prevents one kit from reading another kit's objects. */
-  readonly kitId: string;
-  readonly tenantId?: string;
-}
+/** Organization/kit boundary supplied by the authenticated host. */
+export type StorageScope = BindingScope;
 
 export type StorageValue = string | number | bigint | boolean | Uint8Array | ArrayBuffer | null;
 
@@ -67,28 +64,53 @@ export interface StorageObjectAdapter {
  * optional for relational-only providers. Implementations must enforce the
  * supplied scope and must not expose credentials through this object.
  */
+export type StorageCapability = "sql" | "objects";
+
 export interface StorageAdapter {
   readonly provider: StorageProvider;
   readonly scope: StorageScope;
-  readonly capabilities: readonly ("sql" | "objects")[];
+  readonly capabilities: readonly StorageCapability[];
   readonly sql?: StorageSqlAdapter;
   readonly objects?: StorageObjectAdapter;
 }
 
 export function assertStorageScope(scope: StorageScope): void {
-  if (!scope.orgId.trim()) throw new Error("Storage scope orgId must not be empty");
-  if (!scope.kitId.trim()) throw new Error("Storage scope kitId must not be empty");
-  if (scope.tenantId !== undefined && !scope.tenantId.trim()) {
-    throw new Error("Storage scope tenantId must not be empty when supplied");
+  assertBindingScope(scope, "Storage scope");
+}
+
+/** Validate the host boundary before exposing a storage capability to a kit. */
+export function assertStorageAdapter(storage: StorageAdapter): void {
+  assertStorageScope(storage.scope);
+  const capabilities = new Set(storage.capabilities);
+  if (capabilities.size !== storage.capabilities.length) {
+    throw new Error("Storage adapter capabilities must not contain duplicates");
+  }
+
+  const hasSql = storage.sql !== undefined;
+  const hasObjects = storage.objects !== undefined;
+  if (hasSql !== capabilities.has("sql")) {
+    throw new Error("Storage adapter SQL implementation must match its capabilities");
+  }
+  if (hasObjects !== capabilities.has("objects")) {
+    throw new Error("Storage adapter object implementation must match its capabilities");
   }
 }
 
+/** Bind an adapter to the exact org/kit scope requested by the host. */
+export function bindStorageAdapter<T extends StorageAdapter>(storage: T, scope: StorageScope): T {
+  assertStorageAdapter(storage);
+  assertBindingScopeMatches(storage.scope, scope, "Storage scope");
+  return storage;
+}
+
 export function requireStorageSql(storage: StorageAdapter): StorageSqlAdapter {
+  assertStorageAdapter(storage);
   if (!storage.sql) throw new Error(`Storage provider "${storage.provider}" does not provide SQL capability`);
   return storage.sql;
 }
 
 export function requireStorageObjects(storage: StorageAdapter): StorageObjectAdapter {
+  assertStorageAdapter(storage);
   if (!storage.objects) throw new Error(`Storage provider "${storage.provider}" does not provide object capability`);
   return storage.objects;
 }
