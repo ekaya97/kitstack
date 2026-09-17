@@ -127,6 +127,22 @@ export interface DemoLiveVoiceRoute {
   bridge?: (socket: VoiceWebSocket, request: DemoAppRouteRequest) => TwilioOpenAIBridge;
 }
 
+export interface DemoLocalVoiceRoute {
+  capability: { enabled: true; provider: string; model: string; startPath: string; mediaPath: string };
+  page: string;
+  bridge: (socket: VoiceWebSocket) => TwilioOpenAIBridge;
+  start: (sessionId: string) => Promise<{
+    sessionId: string;
+    callId: string;
+    status: "connecting";
+    provider: string;
+    sessionToken: string;
+    mediaPath: string;
+    recording: false;
+    retention: false;
+  }>;
+}
+
 export interface DemoObservabilityCustomer {
   id: string;
   company: string;
@@ -167,6 +183,7 @@ export interface DemoObservabilityResponse {
   providerHealth: DemoProviderHealth[];
   mcpAuthMode: McpAuthMode;
   liveCall?: DemoLiveVoiceRoute["capability"];
+  localCall?: DemoLocalVoiceRoute["capability"];
 }
 
 /** Mounts the real app composition behind framework-neutral demo routes. */
@@ -174,6 +191,7 @@ export async function handleDemoAppRequest(
   app: DemoApp,
   request: DemoAppRouteRequest,
   liveVoice?: DemoLiveVoiceRoute,
+  localVoice?: DemoLocalVoiceRoute,
 ): Promise<DemoHttpResponse> {
   const path = request.path.split("?", 1)[0];
   try {
@@ -211,6 +229,16 @@ export async function handleDemoAppRequest(
         return json(403, { error: "admin_token_required" });
       }
       return responseFromVoice(await handleLiveVoiceStart(request, liveVoice.http));
+    }
+    if (request.method === "GET" && path === "/t/voice/local") {
+      if (!localVoice) return json(404, { error: "local_voice_disabled" });
+      return { status: 200, headers: { "content-type": "text/html; charset=utf-8" }, body: localVoice.page };
+    }
+    if (request.method === "POST" && path === "/t/voice/local/start") {
+      if (!localVoice) return json(404, { error: "local_voice_disabled" });
+      const body = request.body ?? {};
+      if (body.confirmation !== true) return json(400, { error: "confirmation_required" });
+      return json(202, await localVoice.start(stringField(body, "session_id")));
     }
     if (request.method === "POST" && path === "/v1/apps/register") {
       if (!adminAuthorized(app, request)) return json(403, { error: "admin_token_required" });
@@ -255,7 +283,7 @@ export async function handleDemoAppRequest(
       return responseFromWeb(result.response);
     }
     if (request.method === "GET" && path === "/api/demo/observability") {
-      return json(200, await observabilitySnapshot(app, query(request.query), liveVoice));
+      return json(200, await observabilitySnapshot(app, query(request.query), liveVoice, localVoice));
     }
     const sessionMatch = path.match(/^\/api\/demo\/sessions\/([^/]+)$/);
     if (request.method === "GET" && sessionMatch) {
@@ -538,6 +566,7 @@ async function observabilitySnapshot(
   app: DemoApp,
   filters: ReturnType<typeof query>,
   liveVoice?: DemoLiveVoiceRoute,
+  localVoice?: DemoLocalVoiceRoute,
 ): Promise<DemoObservabilityResponse> {
   const [events, aggregate, schedulerJobs] = await Promise.all([
     app.telemetry.query({ orgId: app.orgId, ...filters }),
@@ -555,6 +584,8 @@ async function observabilitySnapshot(
   const sessionRows = sessions.map((sessionId) => {
     const sessionEvents = events.filter((event) => event.sessionId === sessionId);
     const latest = sessionEvents.at(-1);
+    let persistedSession: ReturnType<DemoApp["debrief"]["getSession"]> | undefined;
+    try { persistedSession = app.debrief.getSession(sessionId); } catch { /* Boot/HTTP trace sessions have no debrief row. */ }
     const customerId = [...sessionEvents].reverse().find((event) => event.customerId)?.customerId ?? null;
     const customer = customerId ? customers.find((item) => item.id === customerId) : undefined;
     const job = schedulerJobs.find((item) => item.sessionId === sessionId);
@@ -565,9 +596,9 @@ async function observabilitySnapshot(
       customerName: customer?.company ?? null,
       appId: [...sessionEvents].reverse().find((event) => event.appId)?.appId ?? null,
       kitId: [...sessionEvents].reverse().find((event) => event.kitId)?.kitId ?? null,
-      state: sessionState(sessionEvents, job?.status),
+      state: persistedSession?.state ?? sessionState(sessionEvents, job?.status),
       scheduledCallAt: job?.scheduledAt ?? null,
-      callId: [...sessionEvents].reverse().find((event) => event.callId)?.callId ?? job?.providerCallId ?? null,
+      callId: persistedSession?.callId ?? [...sessionEvents].reverse().find((event) => event.callId)?.callId ?? job?.providerCallId ?? null,
       lastEventAt: latest?.timestamp ?? null,
       error: failure?.operation ?? job?.error ?? null,
     };
@@ -584,6 +615,7 @@ async function observabilitySnapshot(
     providerHealth: providerHealth(events),
     mcpAuthMode: app.mcpAuthMode,
     ...(liveVoice ? { liveCall: liveVoice.capability } : {}),
+    ...(localVoice ? { localCall: localVoice.capability } : {}),
   };
 }
 

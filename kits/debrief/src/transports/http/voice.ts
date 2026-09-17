@@ -2,7 +2,7 @@ import {
   bridgeTwilioToOpenAI,
   generateBidirectionalStreamTwiml,
   startRealtimeCall,
-  type OpenAIRealtimeSocketFactory,
+  type RealtimeSessionOptions,
   type RealtimeCallStartOptions,
   type SignedSessionTokenVerifier,
   type TwilioCallsClient,
@@ -70,6 +70,7 @@ export interface CompletedCallMetadata {
   orgId: string;
   reason: string;
   occurredAt: string;
+  provider: string;
 }
 
 /** Framework-neutral action used by a protected dashboard/MCP layer. */
@@ -161,12 +162,14 @@ export function handleVoiceTwimlRequest(request: VoiceHttpRequest, options: Twim
 
 export interface VoiceMediaBridgeOptions {
   socket: VoiceWebSocket;
+  provider?: string;
   signature?: { validator: TwilioSignatureValidator; url: string; params: Readonly<Record<string, string | string[] | undefined>>; value: string | undefined };
   verifier: SignedSessionTokenVerifier;
-  openai: { socketFactory: OpenAIRealtimeSocketFactory; url: string; apiKey: string; model: string; instructions?: string; voice?: string };
+  openai: RealtimeSessionOptions;
   routingReason?: string | null;
   instructionsFor?: (binding: SessionBinding) => Promise<string>;
-  onCallCompleted?: (call: { sessionId: string; orgId: string; appId: string | null; callId: string | null; reason: string; occurredAt: string }) => Promise<void>;
+  onCallCompleted?: (call: { sessionId: string; orgId: string; appId: string | null; callId: string | null; reason: string; occurredAt: string; provider: string }) => Promise<void>;
+  stopReason?: string;
   telemetry: Pick<TelemetryStore, "append">;
   agent?: Parameters<typeof bridgeTwilioToOpenAI>[0]["agent"];
 }
@@ -175,7 +178,7 @@ export interface VoiceMediaBridgeOptions {
 export function attachVoiceMediaBridge(options: VoiceMediaBridgeOptions): TwilioOpenAIBridge {
   return bridgeTwilioToOpenAI({
     twilioSocket: options.socket, signature: options.signature, verifier: options.verifier,
-    openai: options.openai, routingReason: options.routingReason, telemetry: options.telemetry, agent: options.agent, instructionsFor: options.instructionsFor,
+    openai: options.openai, provider: options.provider, routingReason: options.routingReason, telemetry: options.telemetry, agent: options.agent, instructionsFor: options.instructionsFor, stopReason: options.stopReason,
     onCallCompleted: options.onCallCompleted,
   });
 }

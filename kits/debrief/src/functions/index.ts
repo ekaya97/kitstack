@@ -339,7 +339,7 @@ export class DebriefService {
 
   async updateDebriefDraft(sessionId: string, update: DebriefDraftUpdate): Promise<DebriefConfirmationResult> {
     const session = this.require(sessionId);
-    if (session.state !== "awaiting_confirmation" && session.state !== "partial") {
+    if (session.state !== "calling" && session.state !== "awaiting_confirmation" && session.state !== "partial") {
       throw new Error(`Debrief session "${sessionId}" is not editable`);
     }
     const fields = Object.fromEntries(
@@ -433,6 +433,7 @@ export class DebriefService {
     callId: string | null;
     reason: string;
     occurredAt: string;
+    provider?: string;
   }): Promise<void> {
     const session = this.require(input.sessionId);
     await this.saveDraft(input.sessionId, {
@@ -443,7 +444,7 @@ export class DebriefService {
       retention: false,
     });
     await this.appendCustomerEvent(session, "call_completed", {
-      provider: "twilio-openai-realtime",
+      provider: input.provider ?? "twilio-openai-realtime",
       call_id: input.callId,
       reason: input.reason,
       recording: false,

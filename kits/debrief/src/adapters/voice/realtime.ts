@@ -1,8 +1,9 @@
 import { createHmac, timingSafeEqual } from "node:crypto";
 import WebSocket from "ws";
-import { defineAgent, type AgentInput, type AgentLifecycleEvent, type AgentRunResult, type AgentTurnMetadata, type Connector } from "@kitstackco/sdk";
+import { defineAgent, type AgentInput, type AgentLifecycleEvent, type AgentModelResponse, type AgentRunResult, type AgentTurnMetadata, type Connector } from "@kitstackco/sdk";
 import { jwtVerify, SignJWT } from "jose";
 import type { TelemetryEventInput, TelemetryStore } from "../../telemetry/index.js";
+import type { RealtimeFunctionTool } from "./tools.js";
 
 export const REALTIME_AUDIO_FORMAT = "g711_ulaw" as const;
 export const REALTIME_SAMPLE_RATE_HZ = 8_000 as const;
@@ -278,7 +279,6 @@ export function createOpenAIRealtimeSocketFactory(): OpenAIRealtimeSocketFactory
       const socket = new WebSocket(`${url}${url.includes("?") ? "&" : "?"}model=${encodeURIComponent(model)}`, {
         headers: {
           authorization: `Bearer ${apiKey}`,
-          "openai-beta": "realtime=v1",
         },
       });
       return new Promise((resolve, reject) => {
@@ -298,12 +298,17 @@ export interface RealtimeSessionOptions {
   model: string;
   instructions?: string;
   voice?: string;
+  tools?: readonly RealtimeFunctionTool[];
+  /** Let the bridge attach event handlers before the initial greeting starts. */
+  deferInitialResponse?: boolean;
 }
 
 export interface OpenAIRealtimeSession {
   socket: OpenAIRealtimeSocket;
   sendAudio(payload: string): void;
   cancelResponse(): void;
+  sendToolResult(callId: string, output: unknown): void;
+  startResponse(): void;
   close(): void;
 }
 
@@ -313,21 +318,37 @@ export async function createOpenAIRealtimeSession(options: RealtimeSessionOption
   socket.send(JSON.stringify({
     type: "session.update",
     session: {
-      modalities: ["audio", "text"],
+      type: "realtime",
       ...(options.instructions ? { instructions: options.instructions } : {}),
-      ...(options.voice ? { voice: options.voice } : {}),
-      input_audio_format: REALTIME_AUDIO_FORMAT,
-      output_audio_format: REALTIME_AUDIO_FORMAT,
-      turn_detection: { type: "server_vad", create_response: true, interrupt_response: true },
+      output_modalities: ["audio"],
+      audio: {
+        input: {
+          format: { type: "audio/pcmu" },
+          turn_detection: { type: "server_vad", create_response: true, interrupt_response: true },
+        },
+        output: { format: { type: "audio/pcmu" }, ...(options.voice ? { voice: options.voice } : {}) },
+      },
+      ...(options.tools?.length ? { tools: options.tools } : {}),
     },
   }));
-  // Outbound calls need an explicit first response; otherwise server VAD
-  // waits for the callee to speak before the agent ever greets them.
-  socket.send(JSON.stringify({ type: "response.create", response: { modalities: ["audio"] } }));
+  const startResponse = () => {
+    // Outbound calls need an explicit first response; otherwise server VAD
+    // waits for the callee to speak before the agent ever greets them.
+    socket.send(JSON.stringify({ type: "response.create", response: { output_modalities: ["audio"] } }));
+  };
+  if (!options.deferInitialResponse) startResponse();
   return {
     socket,
     sendAudio(payload) { socket.send(JSON.stringify({ type: "input_audio_buffer.append", audio: payload })); },
     cancelResponse() { socket.send(JSON.stringify({ type: "response.cancel" })); },
+    sendToolResult(callId, output) {
+      socket.send(JSON.stringify({
+        type: "conversation.item.create",
+        item: { type: "function_call_output", call_id: callId, output: JSON.stringify(output) },
+      }));
+      startResponse();
+    },
+    startResponse,
     close() { socket.close(1000, "kitstack call complete"); },
   };
 }
@@ -391,8 +412,9 @@ export async function startRealtimeCall(options: RealtimeCallStartOptions): Prom
 }
 
 export interface VoiceAgentLoopAdapter {
-  /** Receives only provider metadata; audio and transcript content stay in memory/provider buffers. */
+  /** Receives provider metadata; audio and transcript content stay in memory/provider buffers. */
   onProviderTurn?(event: RealtimeTurnEvent): Promise<void>;
+  onProviderToolCall?(event: RealtimeToolCallEvent): Promise<void>;
   onInterruption?(): Promise<void>;
   onStop?(reason: string): Promise<void>;
   onError?(error: Error): Promise<void>;
@@ -412,6 +434,8 @@ export interface DefineAgentVoiceLoopOptions {
   routingReason?: string | null;
   callId?: string | null;
   memoryIds?: readonly string[];
+  /** Sends a completed defineAgent tool result back into the provider session. */
+  sendToolResult?: (callId: string, output: unknown) => void | Promise<void>;
   estimateCostUsd?: (usage: { requestTokens?: number | null; responseTokens?: number | null }) => number | null;
   onStop?: (reason: string) => Promise<void>;
   onError?: (error: Error) => Promise<void>;
@@ -419,6 +443,11 @@ export interface DefineAgentVoiceLoopOptions {
 
 export interface DefineAgentVoiceLoop extends VoiceAgentLoopAdapter {
   readonly done: Promise<AgentRunResult>;
+}
+
+interface ProviderResponseWaiter {
+  resolve: (response: AgentModelResponse) => void;
+  reject: (error: unknown) => void;
 }
 
 function lifecycleOutcome(event: AgentLifecycleEvent): "success" | "error" {
@@ -479,6 +508,8 @@ function toVoiceLifecycleTelemetry(
 export function createDefineAgentVoiceLoop(options: DefineAgentVoiceLoopOptions): DefineAgentVoiceLoop {
   const queue: Array<AgentInput> = [];
   const waiters: Array<(input: AgentInput | null) => void> = [];
+  const providerResponses: AgentModelResponse[] = [];
+  const providerResponseWaiters: ProviderResponseWaiter[] = [];
   let closed = false;
   let resolveDone!: (value: AgentRunResult) => void;
   const done = new Promise<AgentRunResult>((resolve) => { resolveDone = resolve; });
@@ -499,6 +530,27 @@ export function createDefineAgentVoiceLoop(options: DefineAgentVoiceLoopOptions)
     closed = true;
     while (waiters.length) waiters.shift()!(null);
   };
+  const nextProviderResponse = (signal: AbortSignal): Promise<AgentModelResponse> => {
+    if (providerResponses.length) return Promise.resolve(providerResponses.shift()!);
+    if (signal.aborted) return Promise.reject(signal.reason ?? new Error("Agent provider response wait was aborted"));
+    return new Promise((resolve, reject) => {
+      const onAbort = () => {
+        const index = providerResponseWaiters.findIndex((waiter) => waiter.resolve === resolve);
+        if (index >= 0) providerResponseWaiters.splice(index, 1);
+        reject(signal.reason ?? new Error("Agent provider response wait was aborted"));
+      };
+      signal.addEventListener("abort", onAbort, { once: true });
+      providerResponseWaiters.push({
+        resolve: (response) => { signal.removeEventListener("abort", onAbort); resolve(response); },
+        reject: (error) => { signal.removeEventListener("abort", onAbort); reject(error); },
+      });
+    });
+  };
+  const pushProviderResponse = (response: AgentModelResponse) => {
+    const waiter = providerResponseWaiters.shift();
+    if (waiter) waiter.resolve(response);
+    else providerResponses.push(response);
+  };
   const agent = defineAgent({
     id: "debrief-voice-interviewer",
     kitId: "kit:debrief",
@@ -510,11 +562,20 @@ export function createDefineAgentVoiceLoop(options: DefineAgentVoiceLoopOptions)
       provider: options.provider ?? undefined,
       model: options.model ?? undefined,
       estimateCostUsd: options.estimateCostUsd,
-      turn: async ({ input }) => ({
-        type: "message" as const,
-        content: "provider_turn_completed",
-        metadata: input?.metadata as AgentTurnMetadata | undefined,
-      }),
+      turn: async ({ input, history, signal }) => {
+        const latest = history.at(-1);
+        if (latest?.role === "tool") {
+          await options.sendToolResult?.(latest.toolCallId, latest.isError ? { error: latest.result } : latest.result);
+        }
+        if (!options.sendToolResult) {
+          return {
+            type: "message" as const,
+            content: "provider_turn_completed",
+            metadata: input?.metadata as AgentTurnMetadata | undefined,
+          };
+        }
+        return nextProviderResponse(signal);
+      },
     },
     output: { emit: async () => undefined },
     maxTurns: 30,
@@ -547,6 +608,17 @@ export function createDefineAgentVoiceLoop(options: DefineAgentVoiceLoopOptions)
     done,
     async onProviderTurn(event) {
       if (event.kind === "turn_completed") {
+        if (options.sendToolResult) {
+          pushProviderResponse({
+            type: "message",
+            content: "provider_turn_completed",
+            metadata: {
+              requestTokens: event.usage?.inputTokens ?? null,
+              responseTokens: event.usage?.outputTokens ?? null,
+              latencyMs: event.latencyMs ?? null,
+            },
+          });
+        }
         push({
           content: "provider_turn_completed",
           metadata: {
@@ -557,11 +629,31 @@ export function createDefineAgentVoiceLoop(options: DefineAgentVoiceLoopOptions)
         });
       }
     },
+    async onProviderToolCall(event) {
+      pushProviderResponse({
+        type: "tool_call",
+        toolCallId: event.callId,
+        name: event.name,
+        args: event.args,
+      });
+    },
     async onInterruption() {
       push({ content: "provider_interruption", metadata: { interruption: true } });
     },
     async onStop() {
       close();
+      if (options.sendToolResult) {
+        // A provider stop can arrive while the model connector is waiting for
+        // the response that follows a tool result. Resolve that wait as a
+        // terminal provider response so the defineAgent run can finish
+        // cleanly; abort only if the provider-aware loop does not drain.
+        pushProviderResponse({ type: "message", content: "provider_stop", terminal: true });
+        const drained = await Promise.race([
+          done.then(() => true),
+          new Promise<false>((resolve) => setTimeout(() => resolve(false), 250)),
+        ]);
+        if (!drained) controller.abort();
+      }
       await done.catch(() => undefined);
       try { await options.onStop?.("provider_stop"); } catch { /* Session cleanup must not tear down the bridge. */ }
     },
@@ -586,12 +678,19 @@ export interface RealtimeTurnEvent {
   latencyMs?: number;
 }
 
+export interface RealtimeToolCallEvent {
+  callId: string;
+  name: string;
+  args: unknown;
+}
+
 export type TranslatedRealtimeEvent =
   | { kind: "audio_delta"; payload: string }
   | { kind: "interruption" }
   | { kind: "turn_started" }
   | { kind: "turn_completed"; usage: { inputTokens?: number; outputTokens?: number } }
-  | { kind: "error" }
+  | { kind: "tool_call"; callId: string; name: string; args: unknown }
+  | { kind: "error"; message?: string; code?: string }
   | { kind: "ignored" };
 
 /** Maps OpenAI event names to content-free transport events. */
@@ -606,8 +705,30 @@ export function translateOpenAIRealtimeEvent(raw: unknown): TranslatedRealtimeEv
     if (typeof event.delta !== "string") throw new Error("OpenAI audio delta is missing");
     return { kind: "audio_delta", payload: event.delta };
   }
+  if (type === "response.function_call_arguments.done") {
+    const callId = typeof event.call_id === "string" ? event.call_id : "";
+    const name = typeof event.name === "string" ? event.name : "";
+    if (!callId || !name || typeof event.arguments !== "string") throw new Error("OpenAI function call is incomplete");
+    return { kind: "tool_call", callId, name, args: parseToolArguments(event.arguments) };
+  }
+  if (type === "response.output_item.done") {
+    const item = event.item as Record<string, unknown> | undefined;
+    if (item?.type === "function_call") {
+      const callId = typeof item.call_id === "string" ? item.call_id : "";
+      const name = typeof item.name === "string" ? item.name : "";
+      if (!callId || !name || typeof item.arguments !== "string") throw new Error("OpenAI function call item is incomplete");
+      return { kind: "tool_call", callId, name, args: parseToolArguments(item.arguments) };
+    }
+  }
   if (type === "response.done") return { kind: "turn_completed", usage: readUsage(event) };
-  if (type === "error") return { kind: "error" };
+  if (type === "error") {
+    const providerError = event.error as Record<string, unknown> | undefined;
+    return {
+      kind: "error",
+      message: typeof providerError?.message === "string" ? providerError.message : undefined,
+      code: typeof providerError?.code === "string" ? providerError.code : undefined,
+    };
+  }
   // Transcript events are intentionally reduced to an ignored metadata event.
   return { kind: "ignored" };
 }
@@ -650,16 +771,18 @@ export interface VoiceWebSocket {
 export interface TwilioOpenAIBridgeOptions {
   twilioSocket: VoiceWebSocket;
   openai: RealtimeSessionOptions;
+  provider?: string;
   routingReason?: string | null;
   verifier: SignedSessionTokenVerifier;
   bindings?: SessionBindingStore;
   signature?: { validator: TwilioSignatureValidator; url: string; params: Readonly<Record<string, string | string[] | undefined>>; value: string | undefined };
   telemetry: Pick<TelemetryStore, "append">;
-  agent?: VoiceAgentLoopAdapter | ((binding: SessionBinding) => VoiceAgentLoopAdapter | Promise<VoiceAgentLoopAdapter>);
+  agent?: VoiceAgentLoopAdapter | ((binding: SessionBinding, provider: OpenAIRealtimeSession) => VoiceAgentLoopAdapter | Promise<VoiceAgentLoopAdapter>);
   /** Resolve prepared-session context before opening the provider model session. */
   instructionsFor?: (binding: SessionBinding) => Promise<string>;
   /** Finalize metadata-only call state once, after the provider stream stops. */
-  onCallCompleted?: (call: { sessionId: string; orgId: string; appId: string | null; callId: string | null; reason: string; occurredAt: string }) => Promise<void>;
+  onCallCompleted?: (call: { sessionId: string; orgId: string; appId: string | null; callId: string | null; reason: string; occurredAt: string; provider: string }) => Promise<void>;
+  stopReason?: string;
   now?: () => string;
   createId?: () => string;
   estimateCostUsd?: (usage: { inputTokens?: number; outputTokens?: number }) => number | null;
@@ -680,6 +803,7 @@ export function bridgeTwilioToOpenAI(options: TwilioOpenAIBridgeOptions): Twilio
   const bindings = options.bindings ?? createSessionBindingStore();
   const now = options.now ?? (() => new Date().toISOString());
   const id = options.createId ?? (() => crypto.randomUUID());
+  const provider = options.provider ?? REALTIME_PROVIDER;
   let realtime: OpenAIRealtimeSession | undefined;
   let streamSid: string | undefined;
   let turnStartedAt: number | undefined;
@@ -690,6 +814,8 @@ export function bridgeTwilioToOpenAI(options: TwilioOpenAIBridgeOptions): Twilio
   const done = new Promise<void>((resolve) => { resolveDone = resolve; });
   let finished = false;
   let twilioQueue = Promise.resolve();
+  let openaiQueue = Promise.resolve();
+  const handledProviderToolCalls = new Set<string>();
   let agent: VoiceAgentLoopAdapter | undefined;
 
   const finish = async (reason: string, error?: Error) => {
@@ -709,6 +835,7 @@ export function bridgeTwilioToOpenAI(options: TwilioOpenAIBridgeOptions): Twilio
           callId: current.callSid ?? null,
           reason,
           occurredAt: now(),
+          provider,
         });
       } catch {
         // Provider shutdown must remain successful even if metadata finalization is unavailable.
@@ -717,7 +844,7 @@ export function bridgeTwilioToOpenAI(options: TwilioOpenAIBridgeOptions): Twilio
     await appendVoiceTelemetry(options.telemetry, {
       id: id(), timestamp: now(), orgId: current?.orgId ?? "unknown", appId: current?.appId ?? null, sessionId: current?.sessionId ?? null,
       traceId: current?.sessionId ?? streamSid ?? null, channel: "voice", kitId: "kit:debrief", type: "voice.call",
-      operation: error ? "media_stream_error" : "media_stream_stopped", provider: REALTIME_PROVIDER, callId: current?.callSid ?? null, outcome: error ? "error" : "success",
+      operation: error ? "media_stream_error" : "media_stream_stopped", provider, callId: current?.callSid ?? null, outcome: error ? "error" : "success",
     });
     resolveDone();
   };
@@ -735,17 +862,20 @@ export function bridgeTwilioToOpenAI(options: TwilioOpenAIBridgeOptions): Twilio
       const sessionBinding: SessionBinding = { ...claims, streamSid: start.streamSid, callSid: start.callSid };
       streamSid = start.streamSid;
       bindings.bind(sessionBinding);
-      resolveBinding(sessionBinding);
-      agent = typeof options.agent === "function" ? await options.agent(sessionBinding) : options.agent;
       const instructions = await options.instructionsFor?.(sessionBinding);
-      realtime = await createOpenAIRealtimeSession({ ...options.openai, ...(instructions ? { instructions } : {}) });
-      realtime.socket.on("message", (data: unknown) => { void handleOpenAI(data).catch((error) => { void finish("openai_error", asError(error)); }); });
+      realtime = await createOpenAIRealtimeSession({ ...options.openai, deferInitialResponse: true, ...(instructions ? { instructions } : {}) });
+      agent = typeof options.agent === "function" ? await options.agent(sessionBinding, realtime) : options.agent;
+      realtime.socket.on("message", (data: unknown) => {
+        openaiQueue = openaiQueue.then(() => handleOpenAI(data)).catch((error) => finish("openai_error", asError(error)));
+      });
       realtime.socket.on("error", (error: Error) => { void finish("openai_error", error); });
       await appendVoiceTelemetry(options.telemetry, {
         id: id(), timestamp: now(), orgId: claims.orgId, appId: claims.appId, sessionId: claims.sessionId,
         traceId: claims.sessionId, channel: "voice", kitId: "kit:debrief", type: "voice.call",
-        operation: "media_stream_bound:recording-off:retention-off", provider: REALTIME_PROVIDER, callId: start.callSid ?? null, outcome: "started",
+        operation: "media_stream_bound:recording-off:retention-off", provider, callId: start.callSid ?? null, outcome: "started",
       });
+      realtime.startResponse();
+      resolveBinding(sessionBinding);
       return;
     }
     if (event.event === "media") {
@@ -757,7 +887,7 @@ export function bridgeTwilioToOpenAI(options: TwilioOpenAIBridgeOptions): Twilio
       return;
     }
     if (event.event === "stop") {
-      await finish("twilio_stop");
+      await finish(options.stopReason ?? "twilio_stop");
       return;
     }
     if (event.event === "mark") return;
@@ -783,6 +913,12 @@ export function bridgeTwilioToOpenAI(options: TwilioOpenAIBridgeOptions): Twilio
       options.twilioSocket.send(JSON.stringify({ event: "media", streamSid, media: { payload: translated.payload } }));
       return;
     }
+    if (translated.kind === "tool_call") {
+      if (handledProviderToolCalls.has(translated.callId)) return;
+      handledProviderToolCalls.add(translated.callId);
+      await agent?.onProviderToolCall?.(translated);
+      return;
+    }
     if (translated.kind === "turn_completed") {
       const usage = translated.usage;
       const latencyMs = turnStartedAt === undefined ? undefined : Date.now() - turnStartedAt;
@@ -791,7 +927,7 @@ export function bridgeTwilioToOpenAI(options: TwilioOpenAIBridgeOptions): Twilio
         id: id(), timestamp: now(), orgId: current?.orgId ?? "unknown", appId: current?.appId ?? null,
         sessionId: current?.sessionId ?? null, traceId: current?.sessionId ?? null, channel: "voice", kitId: "kit:debrief",
         type: "inference", operation: "realtime_turn", model: options.openai.model,
-        provider: REALTIME_PROVIDER, callId: current?.callSid ?? null,
+        provider, callId: current?.callSid ?? null,
         requestTokens: usage.inputTokens ?? null, responseTokens: usage.outputTokens ?? null,
         routingReason: options.routingReason ?? null,
         latencyMs: latencyMs ?? null, estimatedCostUsd: options.estimateCostUsd?.(usage) ?? null, outcome: "success",
@@ -799,7 +935,14 @@ export function bridgeTwilioToOpenAI(options: TwilioOpenAIBridgeOptions): Twilio
       turnStartedAt = undefined;
       return;
     }
-    if (translated.kind === "error") throw new Error("OpenAI Realtime returned an error");
+    if (translated.kind === "error") {
+      // GA Realtime can report this when VAD detects speech just after a
+      // response has already completed. It is a harmless interruption race,
+      // not a failed call.
+      if (translated.code === "response_cancel_not_active") return;
+      const detail = [translated.code, translated.message].filter(Boolean).join(": ");
+      throw new Error(`OpenAI Realtime returned an error${detail ? ` (${detail})` : ""}`);
+    }
     // Transcription and other provider events are intentionally not retained or forwarded as content.
   };
 
@@ -843,6 +986,14 @@ function readUsage(event: Record<string, unknown>): { inputTokens?: number; outp
     inputTokens: numberValue(usage?.input_tokens),
     outputTokens: numberValue(usage?.output_tokens),
   };
+}
+
+function parseToolArguments(value: string): unknown {
+  try {
+    return JSON.parse(value);
+  } catch {
+    throw new Error("OpenAI function call arguments are not valid JSON");
+  }
 }
 
 function numberValue(value: unknown): number | undefined { return typeof value === "number" && Number.isFinite(value) ? value : undefined; }

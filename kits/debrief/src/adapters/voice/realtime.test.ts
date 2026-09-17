@@ -12,6 +12,7 @@ import {
   startRealtimeCall,
   twilioSmsConnector,
   twilioVoiceConnector,
+  translateOpenAIRealtimeEvent,
   type OpenAIRealtimeSocket,
   type VoiceWebSocket,
 } from "./realtime.js";
@@ -48,6 +49,45 @@ describe("Twilio and OpenAI Realtime boundary", () => {
     await expect(loop.done).resolves.toMatchObject({ status: "completed", sessionId: "session-agent", turns: 1 });
     expect(store.append).toHaveBeenCalledWith(expect.objectContaining({ operation: "agent.run_started", instructionVersions: ["debrief-v1"] }));
     expect(store.append).toHaveBeenCalledWith(expect.objectContaining({ operation: "agent.run_finished" }));
+  });
+
+  it("routes a provider function call through defineAgent and returns its result", async () => {
+    const store = telemetry();
+    const execute = vi.fn(async (args: unknown) => ({ saved: args }));
+    const sendToolResult = vi.fn();
+    const loop = createDefineAgentVoiceLoop({
+      sessionId: "session-tool-call",
+      orgId: "org-demo",
+      appId: null,
+      instructions: { version: "debrief-v1", content: "Save explicit facts." },
+      telemetry: store,
+      tools: [{ name: "update_debrief_draft", description: "Save draft facts", execute }],
+      sendToolResult,
+    });
+
+    await loop.onProviderToolCall?.({ callId: "call-1", name: "update_debrief_draft", args: { outcome: "Signed" } });
+    await loop.onProviderTurn?.({ kind: "turn_completed", sessionId: "session-tool-call", usage: { inputTokens: 10, outputTokens: 3 } });
+    await vi.waitFor(() => expect(execute).toHaveBeenCalledWith({ outcome: "Signed" }, expect.objectContaining({ id: "session-tool-call" }), expect.any(AbortSignal)));
+    expect(sendToolResult).toHaveBeenCalledWith("call-1", { saved: { outcome: "Signed" } });
+
+    await loop.onProviderTurn?.({ kind: "turn_completed", sessionId: "session-tool-call", usage: { inputTokens: 12, outputTokens: 4 } });
+    await loop.onStop?.("twilio_stop");
+    await expect(loop.done).resolves.toMatchObject({ status: "completed", toolCalls: 1 });
+    expect(store.append).toHaveBeenCalledWith(expect.objectContaining({ operation: "agent.tool_called", outcome: "success" }));
+  });
+
+  it("translates Realtime function-call arguments without retaining provider content", () => {
+    expect(translateOpenAIRealtimeEvent(JSON.stringify({
+      type: "response.function_call_arguments.done",
+      call_id: "call-1",
+      name: "update_debrief_draft",
+      arguments: JSON.stringify({ next_step: "Send proposal" }),
+    }))).toEqual({
+      kind: "tool_call",
+      callId: "call-1",
+      name: "update_debrief_draft",
+      args: { next_step: "Send proposal" },
+    });
   });
 
   it("signs and verifies short-lived media session claims", async () => {
@@ -132,9 +172,16 @@ describe("Twilio and OpenAI Realtime boundary", () => {
       socketFactory: { connect: vi.fn(async () => socket) }, url: "wss://api.openai.example/realtime",
       apiKey: "server-only-key", model: "gpt-4o-realtime-preview", instructions: "German sales", voice: "alloy",
     });
-    expect(JSON.parse(socket.sent[0])).toMatchObject({ type: "session.update", session: { input_audio_format: "g711_ulaw", output_audio_format: "g711_ulaw" } });
+    expect(JSON.parse(socket.sent[0])).toMatchObject({
+      type: "session.update",
+      session: {
+        type: "realtime",
+        output_modalities: ["audio"],
+        audio: { input: { format: { type: "audio/pcmu" } }, output: { format: { type: "audio/pcmu" } } },
+      },
+    });
     session.sendAudio("AQID");
-    expect(JSON.parse(socket.sent[1])).toEqual({ type: "response.create", response: { modalities: ["audio"] } });
+    expect(JSON.parse(socket.sent[1])).toEqual({ type: "response.create", response: { output_modalities: ["audio"] } });
     expect(JSON.parse(socket.sent[2])).toEqual({ type: "input_audio_buffer.append", audio: "AQID" });
   });
 

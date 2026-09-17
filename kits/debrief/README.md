@@ -146,6 +146,32 @@ npm run build          # kitstack build: tools, Views, shell
 npm run publish:assets # upload shell, View modules, manifest, and bundle to the assets bucket
 ```
 
+### Local microphone voice
+
+To exercise the real `defineAgent` voice loop without Twilio, start the local
+host with a server-side OpenAI key:
+
+```bash
+OPENAI_API_KEY=... OPENAI_REALTIME_MODEL=gpt-realtime \
+  npm start --workspace @kitstackco/debrief-kit
+```
+
+Open `http://127.0.0.1:3001/t/voice/local`, prepare a debrief through MCP,
+paste its `session_id` into the page, and select **Start local call**. The page
+captures microphone audio, sends G.711 μ-law frames through the loopback media
+adapter, and plays the Realtime audio response. The adapter uses the same
+signed session binding, instruction/memory context, `defineAgent` supervisor,
+debrief persistence, and telemetry path as the Twilio bridge; only the audio
+transport is different. During the call, the agent can call
+`get_debrief_draft` and `update_debrief_draft` to write explicitly stated facts
+to the provisional draft. Stop the call before using the confirmation View;
+confirmation remains an operator action and is what creates immutable customer
+events.
+
+The API key remains server-side. Recording, retention, audio bodies, and
+transcripts are not persisted. This is a local voice rehearsal, not evidence
+that a phone call can be placed through Twilio.
+
 The router resolves the debrief shell from the fixed key
 `apps/kits/debrief/shell.html`; the generated shell loads View assets from the
 CDN origin the router supplies in MCP App CSP metadata.

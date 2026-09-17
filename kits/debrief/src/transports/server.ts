@@ -11,8 +11,9 @@ import { pathToFileURL, URL } from "node:url";
 import { WebSocketServer } from "ws";
 import { createDemoApp, type DemoApp } from "../composition/app/index.js";
 import type { McpAuthMode } from "../adapters/auth/mcp.js";
-import { handleDemoAppRequest, type DemoLiveVoiceRoute, type DemoAppRouteRequest } from "./http/app.js";
+import { handleDemoAppRequest, type DemoLiveVoiceRoute, type DemoLocalVoiceRoute, type DemoAppRouteRequest } from "./http/app.js";
 import { attachVoiceMediaBridge, handleVoiceProviderStatus, startScheduledLiveVoiceCall } from "./http/voice.js";
+import { composeLocalVoiceRoute } from "./local-voice.js";
 import { createScheduledCallJob, ScheduledCallPoller, type ScheduledCallPoller as ScheduledCallPollerType } from "../scheduler/index.js";
 import {
   createDefineAgentVoiceLoop,
@@ -23,6 +24,7 @@ import {
   type SessionBinding,
   type VoiceWebSocket,
 } from "../adapters/voice/realtime.js";
+import { createDebriefVoiceTools, DEBRIEF_VOICE_REALTIME_TOOLS } from "../adapters/voice/tools.js";
 import { dispatchTrigger } from "@kitstackco/sdk";
 import { createScheduledTrigger } from "../triggers/index.js";
 
@@ -98,16 +100,17 @@ export async function createDemoServer(options: DemoServerOptions = {}): Promise
 
   const mode = options.mode ?? "daemon";
   const liveVoice = options.liveVoice ?? await composeLiveVoiceRoute(app);
+  const localVoice = await composeLocalVoiceRoute(app);
   const scheduledCallPoller = options.scheduledCallPoller ?? (liveVoice ? createLiveVoiceScheduler(app, liveVoice) : undefined);
   const webSocketServer = new WebSocketServer({ noServer: true });
 
   let listening = false;
   let closed = false;
   const server = createServer((request, response) => {
-    void handleIncomingRequest(request, response, app, maxBodyBytes, liveVoice);
+    void handleIncomingRequest(request, response, app, maxBodyBytes, liveVoice, localVoice);
   });
   server.on("upgrade", (request, socket, head) => {
-    void handleUpgrade(request, socket, head, webSocketServer, mode, liveVoice);
+    void handleUpgrade(request, socket, head, webSocketServer, mode, liveVoice, localVoice);
   });
 
   return {
@@ -156,6 +159,7 @@ async function handleIncomingRequest(
   app: DemoApp,
   maxBodyBytes: number,
   liveVoice?: DemoLiveVoiceRoute,
+  localVoice?: DemoLocalVoiceRoute,
 ): Promise<void> {
   response.setHeader("content-type", "application/json");
   for (const [name, value] of Object.entries(CORS_HEADERS)) response.setHeader(name, value);
@@ -183,10 +187,16 @@ async function handleIncomingRequest(
     } satisfies DemoAppRouteRequest;
     const result = await (request.method?.toUpperCase() === "POST" && url.pathname === "/t/voice/provider-status" && liveVoice
       ? handleVoiceProviderStatus(routeRequest, liveVoice.http)
-      : handleDemoAppRequest(app, routeRequest, liveVoice));
+      : handleDemoAppRequest(app, routeRequest, liveVoice, localVoice));
     response.statusCode = result.status;
     for (const [name, value] of Object.entries(result.headers)) response.setHeader(name, value);
-    response.end(result.status === 204 ? undefined : JSON.stringify(result.body));
+    const contentType = result.headers["content-type"] ?? result.headers["Content-Type"] ?? "";
+    const responseBody = result.status === 204
+      ? undefined
+      : contentType.includes("text/html") && typeof result.body === "string"
+        ? result.body
+        : JSON.stringify(result.body);
+    response.end(responseBody);
   } catch (error) {
     const status = error instanceof BodyTooLargeError ? 413 : 400;
     response.statusCode = status;
@@ -244,7 +254,8 @@ async function composeLiveVoiceRoute(app: DemoApp): Promise<DemoLiveVoiceRoute |
     "KITSTACK_DEMO_ALLOWED_DESTINATION",
   ] as const;
   const configured = names.map((name) => [name, process.env[name]?.trim() ?? ""] as const);
-  if (configured.every(([, value]) => !value)) return undefined;
+  const twilioConfiguration = configured.filter(([name]) => name !== "OPENAI_API_KEY");
+  if (twilioConfiguration.every(([, value]) => !value)) return undefined;
   const missing = configured.filter(([, value]) => !value).map(([name]) => name);
   if (missing.length) throw new Error(`Live voice configuration is incomplete; missing ${missing.join(", ")}`);
 
@@ -256,8 +267,9 @@ async function composeLiveVoiceRoute(app: DemoApp): Promise<DemoLiveVoiceRoute |
   if (!/^\+[1-9]\d{7,14}$/.test(destination)) throw new Error("KITSTACK_DEMO_ALLOWED_DESTINATION must be E.164");
 
   const tokenCodec = createSignedSessionTokenCodec(app.apps.secret);
-  const instructionsContent = readFileSync(new URL("./instructions/debrief-baseline.md", import.meta.url), "utf8");
+  const instructionsContent = readFileSync(new URL("../instructions/debrief-baseline.md", import.meta.url), "utf8");
   const baseInstructionsVersion = `sha256:${createHash("sha256").update(instructionsContent, "utf8").digest("hex")}`;
+  const voiceTools = createDebriefVoiceTools(app.debrief);
   const voiceContextFor = async (binding: SessionBinding) => {
       const session = app.debrief.getSession(binding.sessionId);
       const customer = session.customerId ? await app.debrief.getCustomer(session.customerId) : null;
@@ -278,6 +290,7 @@ async function composeLiveVoiceRoute(app: DemoApp): Promise<DemoLiveVoiceRoute |
         customer ? `Customer: ${customer.company}; contact ${customer.contactName}; location ${customer.location}` : "Customer: unavailable.",
         selected.length ? `Approved workflow feedback:\n${selected.map((record) => `- ${record.correction}`).join("\n")}` : "Approved workflow feedback: none.",
         "Use this context during the call. Ask one useful question at a time and do not invent customer details.",
+        "When the caller explicitly states or agrees an outcome, next step, customer update, address, or follow-up date, call update_debrief_draft with those facts. Never call a confirmation or publish action; the operator confirms the draft after the call.",
       ].join("\n");
       return {
         content,
@@ -292,6 +305,7 @@ async function composeLiveVoiceRoute(app: DemoApp): Promise<DemoLiveVoiceRoute |
     model: process.env.OPENAI_REALTIME_MODEL?.trim() || "gpt-realtime",
     instructions: instructionsContent,
     voice: process.env.OPENAI_REALTIME_VOICE?.trim() || "marin",
+    tools: DEBRIEF_VOICE_REALTIME_TOOLS,
   };
   const conversationRoute = await app.modelRouter.resolve("conversation", {
     orgId: app.orgId,
@@ -299,7 +313,6 @@ async function composeLiveVoiceRoute(app: DemoApp): Promise<DemoLiveVoiceRoute |
     kitId: "kit:debrief",
     pluginId: "channel:voice",
   });
-  openai.model = conversationRoute.model;
   const signatureValidator = createTwilioSignatureValidator(values.TWILIO_AUTH_TOKEN);
 
   return {
@@ -353,7 +366,7 @@ async function composeLiveVoiceRoute(app: DemoApp): Promise<DemoLiveVoiceRoute |
         params: {},
         value: headerValue(request.headers ?? {}, "x-twilio-signature"),
       },
-      agent: async (binding) => {
+      agent: async (binding, provider) => {
         const context = await voiceContextFor(binding);
         return createDefineAgentVoiceLoop({
         sessionId: binding.sessionId,
@@ -366,6 +379,8 @@ async function composeLiveVoiceRoute(app: DemoApp): Promise<DemoLiveVoiceRoute |
         routingReason: conversationRoute.reason,
         callId: binding.callSid ?? null,
         memoryIds: context.memoryIds,
+        tools: voiceTools.agent,
+        sendToolResult: provider.sendToolResult,
         onStop: async () => { await app.debrief.awaitConfirmation(binding.sessionId); },
         onError: async (error) => { await app.debrief.markFailed(binding.sessionId, error); },
         });
@@ -422,7 +437,7 @@ function createLiveVoiceScheduler(app: DemoApp, liveVoice: DemoLiveVoiceRoute): 
 
 async function finalizeLiveCall(
   app: DemoApp,
-  call: { sessionId: string; orgId: string; callId: string | null; reason: string; occurredAt: string },
+  call: { sessionId: string; orgId: string; callId: string | null; reason: string; occurredAt: string; provider: string },
 ): Promise<void> {
   const session = app.debrief.getSession(call.sessionId);
   await app.debrief.recordCallCompleted(call);
@@ -430,7 +445,7 @@ async function finalizeLiveCall(
     id: crypto.randomUUID(), timestamp: call.occurredAt, orgId: call.orgId, appId: app.appId,
     customerId: session.customerId, sessionId: call.sessionId, traceId: call.sessionId,
     channel: "voice", pluginId: "kit:debrief", kitId: session.kitId, type: "voice.call",
-    operation: "call_completed", provider: "twilio-openai-realtime", callId: call.callId,
+    operation: "call_completed", provider: call.provider, callId: call.callId,
     outcome: "success",
   });
 }
@@ -456,9 +471,12 @@ async function handleUpgrade(
   webSocketServer: WebSocketServer,
   mode: "http" | "daemon",
   liveVoice?: DemoLiveVoiceRoute,
+  localVoice?: DemoLocalVoiceRoute,
 ): Promise<void> {
   const path = new URL(request.url ?? "/", "http://demo.local").pathname;
-  if (mode !== "daemon" || !liveVoice?.bridge || path !== "/t/voice/media") {
+  const isTwilioVoice = path === "/t/voice/media" && liveVoice?.bridge;
+  const isLocalVoice = path === "/t/voice/local/media" && localVoice?.bridge;
+  if (mode !== "daemon" || (!isTwilioVoice && !isLocalVoice)) {
     socket.write("HTTP/1.1 404 Not Found\r\nConnection: close\r\n\r\n");
     socket.destroy();
     return;
@@ -470,9 +488,13 @@ async function handleUpgrade(
       headers: requestHeaders(request.headers),
     };
     try {
-      const bridge = liveVoice.bridge!(ws as unknown as VoiceWebSocket, routeRequest);
+      const bridge = isLocalVoice
+        ? localVoice!.bridge(ws as unknown as VoiceWebSocket)
+        : liveVoice!.bridge!(ws as unknown as VoiceWebSocket, routeRequest);
       void bridge.binding.catch(() => undefined);
-      void bridge.done.catch(() => undefined);
+      void bridge.done.then(() => {
+        if (isLocalVoice) ws.close(1000, "local voice call complete");
+      }).catch(() => undefined);
     } catch (error) {
       ws.close(1011, error instanceof Error ? error.message : "bridge setup failed");
     }
