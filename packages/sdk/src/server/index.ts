@@ -57,6 +57,8 @@ export {
   type DispatchEnvelope,
   type DispatchRequestContext,
   type DispatchDependencies,
+  type DispatchAuditEvent,
+  type DispatchAuditSink,
   type DispatchResult,
   type DispatchErrorCode,
 } from "./dispatch";

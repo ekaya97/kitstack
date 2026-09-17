@@ -2,6 +2,7 @@ import { describe, it, expect, vi, beforeEach } from "vitest";
 import { dispatchToolCall } from "../tool-dispatcher";
 import type { KitRegistryItem } from "../types";
 import { textOf } from "../../test/helpers";
+import { HashChainedAuditStore, createDispatchAuditSink } from "../../../../sdk/src/audit";
 
 const mockTools: KitRegistryItem[] = [
   {
@@ -180,14 +181,43 @@ describe("dispatchToolCall", () => {
     expect(mcpCheckTuple).not.toHaveBeenCalled();
     expect(getUserKitDb).not.toHaveBeenCalled();
     expect(invokeKitLambda).not.toHaveBeenCalled();
-    expect(audit).toHaveBeenCalledWith({
+    expect(audit).toHaveBeenCalledWith(expect.objectContaining({
       action: "tool.call.error",
       userId: "user-1",
       toolName: "process_meeting",
       kitId: "meeting-action-tracker",
-      detail: "kit not authorized",
-    });
+      detail: "missing_grant",
+    }));
     expect(audit).not.toHaveBeenCalledWith(expect.objectContaining({ args: expect.anything() }));
+  });
+
+  it("forwards router denials to an injected hash-chained audit sink without arguments", async () => {
+    const store = new HashChainedAuditStore({ createId: () => "router-audit-1" });
+    const actTool = { ...mockTools[0], mode: "act" as const };
+    getAllTools.mockResolvedValueOnce([actTool]);
+    vi.mocked(mcpCheckTuple).mockResolvedValueOnce(false);
+
+    const result = await dispatchToolCall(
+      "process_meeting",
+      { secret_customer_notes: "do not persist" },
+      "user-1",
+      getAllTools,
+      invokeKitLambda,
+      undefined,
+      createDispatchAuditSink(store, { orgId: "org-demo", appId: "router" }),
+    );
+
+    expect(result.isError).toBe(true);
+    const records = await store.query({ outcome: "denied" });
+    expect(records).toHaveLength(1);
+    expect(records[0]).toMatchObject({
+      action: "dispatch.process_meeting",
+      errorCode: "missing_grant",
+      outcome: "denied",
+    });
+    const exported = await store.export("json");
+    expect(exported).not.toContain("secret_customer_notes");
+    expect((await store.verify()).valid).toBe(true);
   });
 
   it("includes request session trace fields in the Lambda wire payload", async () => {

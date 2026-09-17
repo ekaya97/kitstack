@@ -69,6 +69,32 @@ export interface DispatchDecision {
   reason?: string;
 }
 
+/**
+ * Content-free audit metadata emitted after every dispatch attempt.
+ *
+ * Deliberately does not expose the request arguments or result content. A
+ * host can forward this event to the SDK audit store or another metadata-only
+ * sink without having to remember to redact a dispatch envelope.
+ */
+export interface DispatchAuditEvent {
+  readonly kitId: string;
+  readonly command: string;
+  readonly principal: string;
+  readonly actor: string;
+  readonly delegation: string | null;
+  readonly channel: string;
+  readonly channelId: string | null;
+  readonly sessionId: string;
+  readonly traceId: string;
+  readonly parentId: string | null;
+  readonly outcome: "success" | "failure" | "denied";
+  readonly errorCode?: DispatchErrorCode;
+  readonly durationMs: number;
+}
+
+/** Host-provided sink for the metadata-only dispatch audit event. */
+export type DispatchAuditSink = (event: DispatchAuditEvent) => void | Promise<void>;
+
 export interface DispatchDependencies {
   /** Resolve the command before any policy or provider work is performed. */
   resolve: (envelope: DispatchEnvelope) => Promise<DispatchResolution>;
@@ -97,6 +123,8 @@ export interface DispatchDependencies {
     args: Record<string, unknown>,
     ctx?: KitContext,
   ) => Promise<KitToolResult>;
+  /** Record every completed attempt, including resolution and policy denials. */
+  audit?: DispatchAuditSink;
   onComplete?: (
     envelope: DispatchEnvelope,
     result: DispatchResult,
@@ -184,12 +212,42 @@ export async function dispatch(
     result = dispatchError("provider_failure", message);
   }
 
+  const durationMs = Date.now() - startedAt;
   try {
-    await dependencies.onComplete?.(envelope, result, Date.now() - startedAt);
+    await dependencies.audit?.(toDispatchAuditEvent(envelope, result, durationMs));
+  } catch {
+    // Audit delivery must not alter the capability outcome.
+  }
+
+  try {
+    await dependencies.onComplete?.(envelope, result, durationMs);
   } catch {
     // Observability must not alter the outcome of the capability call.
   }
   return result;
+}
+
+function toDispatchAuditEvent(
+  envelope: DispatchEnvelope,
+  result: DispatchResult,
+  durationMs: number,
+): DispatchAuditEvent {
+  const denied = result.errorCode === "missing_grant" || result.errorCode === "policy_denied";
+  return {
+    kitId: envelope.kitId,
+    command: envelope.command,
+    principal: envelope.identity.principal,
+    actor: envelope.actor,
+    delegation: typeof envelope.delegation === "string" ? envelope.delegation : null,
+    channel: envelope.channel.kind,
+    channelId: envelope.channel.id ?? null,
+    sessionId: envelope.session.id,
+    traceId: envelope.session.traceId,
+    parentId: envelope.session.parentId ?? null,
+    outcome: result.isError ? (denied ? "denied" : "failure") : "success",
+    ...(result.errorCode ? { errorCode: result.errorCode } : {}),
+    durationMs,
+  };
 }
 
 export function createDispatchEnvelope(input: {

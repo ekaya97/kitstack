@@ -1,5 +1,6 @@
 import { createHash } from "node:crypto";
 import type { AuditSink } from "./types";
+import type { DispatchAuditEvent, DispatchAuditSink } from "./server/dispatch";
 
 /** Values that are safe to carry as audit metadata. Bodies are never accepted. */
 export type AuditAttributeValue = string | number | boolean | null;
@@ -77,6 +78,13 @@ export interface AuditStore extends AuditSink {
   query(query?: AuditQuery): Promise<AuditRecord[]>;
   verify(): Promise<AuditVerification>;
   export(format?: AuditExportFormat, query?: AuditQuery): Promise<string>;
+}
+
+export interface DispatchAuditSinkOptions {
+  /** Organization scope supplied by the host; dispatch envelopes are org-neutral. */
+  readonly orgId: string;
+  readonly appId?: string | null;
+  readonly pluginId?: string | null;
 }
 
 const SENSITIVE_KEYS = new Set([
@@ -318,6 +326,45 @@ export class HashChainedAuditStore implements AuditStore {
   }
 
 }
+
+/**
+ * Adapt the shared dispatch callback to the hash-chained audit contract.
+ *
+ * Only fields in DispatchAuditEvent are copied. In particular, request
+ * arguments, tool results, and channel metadata are not available here.
+ */
+export function createDispatchAuditSink(
+  store: Pick<AuditStore, "append">,
+  options: DispatchAuditSinkOptions,
+): DispatchAuditSink {
+  if (!options.orgId.trim()) throw new Error("Dispatch audit orgId must be non-empty");
+
+  return async (event: DispatchAuditEvent) => {
+    const attributes: AuditAttributes = {
+      command: event.command,
+      durationMs: event.durationMs,
+      ...(event.channelId ? { channelId: event.channelId } : {}),
+    };
+    await store.append({
+      orgId: options.orgId,
+      appId: options.appId ?? null,
+      principal: event.principal,
+      actor: event.actor,
+      delegation: event.delegation,
+      sessionId: event.sessionId,
+      traceId: event.traceId,
+      parentId: event.parentId,
+      channel: event.channel,
+      kitId: event.kitId,
+      pluginId: options.pluginId ?? null,
+      action: `dispatch.${event.command}`,
+      outcome: event.outcome,
+      errorCode: event.errorCode ?? null,
+      attributes,
+    });
+  };
+}
+
 function invalid(records: number, sequence: number, reason: AuditVerification["reason"]): AuditVerification {
   return { valid: false, records, firstInvalidSequence: sequence, reason };
 }

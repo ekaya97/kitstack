@@ -1,6 +1,6 @@
 import type { KitRegistryItem, KitToolInvocation, KitToolResult } from "./types";
 import { createDispatchEnvelope, dispatch } from "../../../sdk/src/server/dispatch";
-import type { DispatchTarget } from "../../../sdk/src/server/dispatch";
+import type { DispatchAuditEvent, DispatchAuditSink, DispatchTarget } from "../../../sdk/src/server/dispatch";
 import { getUserKitDb } from "../db/dynamo";
 import {
   authorizeToolInvocation,
@@ -97,6 +97,7 @@ export async function dispatchToolCall(
   getAllTools: () => Promise<KitRegistryItem[]>,
   invokeKitLambda: (arn: string, payload: unknown) => Promise<unknown>,
   requestContext?: PlatformAdapterRequestContext,
+  auditSink?: DispatchAuditSink,
 ): Promise<KitToolResult> {
   // Resolve the registry once; all later stages run through the SDK dispatch
   // core so local and deployed runtimes share the same ordering and errors.
@@ -127,7 +128,6 @@ export async function dispatchToolCall(
     resolve: async () => {
       if (!target) {
         log.warn("Unknown tool requested", { userId, toolName });
-        audit({ action: "tool.call.error", userId, toolName, detail: "unknown tool" });
         return { error: { code: "unknown_tool", message: `Unknown tool: ${toolName}` } };
       }
       return { target };
@@ -140,7 +140,6 @@ export async function dispatchToolCall(
       );
       if (authorization.allowed) return { allowed: true };
       log.warn("Kit not authorized for user", { userId, toolName, kitId: tool.kitId, reason: authorization.reason });
-      audit({ action: "tool.call.error", userId, toolName, kitId: tool.kitId, detail: "kit not authorized" });
       return { allowed: false, reason: `Kit "${tool.kitName}" is not authorized for this operation (not activated).` };
     },
     checkPolicy: async () => {
@@ -160,7 +159,6 @@ export async function dispatchToolCall(
       const userDb = await getUserKitDb(identity.principal, tool.kitId);
       if (!userDb) {
         log.warn("Kit DB not found for user", { userId, toolName, kitId: tool.kitId });
-        audit({ action: "tool.call.error", userId, toolName, kitId: tool.kitId, detail: "kit db not provisioned" });
         return { isError: true, content: [{ type: "text" as const, text: `Kit "${tool.kitName}" database is not provisioned. Please re-activate it at kitstack.co/dashboard.` }] };
       }
       const functionId = getKitFunctionId(tool.kitId, allTools);
@@ -184,23 +182,30 @@ export async function dispatchToolCall(
         result = (await invokeKitLambda(functionId, invocation)) as KitToolResult;
       } catch (err: any) {
         log.error("Kit Lambda invocation failed", { kitId: tool.kitId, toolName, userId, functionId, error: err.message });
-        audit({ action: "tool.call.error", userId, toolName, kitId: tool.kitId, detail: err.message });
         return { isError: true, content: [{ type: "text" as const, text: `Kit invocation failed: ${err.message}` }], errorCode: "provider_failure" as const };
       }
       recordCircuitBreakerResult(tool.kitId, !!result.isError).catch(() => {});
       incrementDailyCap(identity.principal, tool.kitId).catch(() => {});
       return result;
     },
-    onComplete: async (_request, result, durationMs) => {
-      if (!tool || result.errorCode === "unknown_tool" || result.errorCode === "missing_grant") return;
-      audit({
-        action: result.isError ? "tool.call.error" : "tool.call",
-        userId,
-        toolName,
-        kitId: tool.kitId,
-        durationMs,
-        ...(result.isError && result.content[0]?.type === "text" ? { detail: result.content[0].text } : {}),
-      });
+    audit: async (event) => {
+      emitRouterAudit(event);
+      await auditSink?.(event);
     },
+  });
+}
+
+/**
+ * Keep the router's existing CloudWatch audit stream while exposing the same
+ * content-free event to a durable SDK/SIEM sink when the host supplies one.
+ */
+function emitRouterAudit(event: DispatchAuditEvent): void {
+  audit({
+    action: event.outcome === "success" ? "tool.call" : "tool.call.error",
+    userId: event.principal,
+    ...(event.kitId !== "unknown" ? { kitId: event.kitId } : {}),
+    toolName: event.command,
+    durationMs: event.durationMs,
+    ...(event.errorCode ? { detail: event.errorCode } : {}),
   });
 }
