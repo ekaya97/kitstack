@@ -13,7 +13,7 @@ export default defineKit({
   description: "Grant-controlled platform registry, usage, observability, and FinOps views.",
   schema: {},
   instructions: "Use metadata-only platform data. Do not expose prompts, completions, transcripts, audio, or tool payloads.",
-  triggers: ["platform", "registry", "usage", "observability", "finops", "grants"],
+  triggers: ["platform", "registry", "usage", "observability", "finops", "audit", "grants"],
   tools: [getPlatformOverview, getUsageFinops, getPlatformAuditStatus, listPlatformGrants],
   views: [overview, usageFinops, registry, audit, grants],
 });
