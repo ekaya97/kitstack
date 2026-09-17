@@ -27,6 +27,10 @@ declare module "sst" {
       "type": "sst.sst.Secret"
       "value": string
     }
+    "DemoInternalSecret": {
+      "type": "sst.sst.Secret"
+      "value": string
+    }
     "DemoVoice": {
       "service": string
       "type": "sst.aws.Service"
