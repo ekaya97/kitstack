@@ -172,7 +172,7 @@ export async function activateKit(
     log.warn("Kit SQLite write failed (non-critical)", { userId, kitSlug, error: err.message });
   }
 
-  await grantRelation(db, userId, "activator", "kit", kitSlug);
+  await grantRelation(db, userId, "kit:use", "kit", kitSlug);
 
   trackKitActivated(userId, kitSlug, !!existing);
 
@@ -224,7 +224,7 @@ export async function deactivateKit(
     log.warn("Kit SQLite deactivation failed (non-critical)", { userId, kitSlug, error: err.message });
   }
 
-  await revokeRelation(db, userId, "activator", "kit", kitSlug);
+  await revokeRelation(db, userId, "kit:use", "kit", kitSlug);
 
   trackKitDeactivated(userId, kitSlug);
 
@@ -285,7 +285,7 @@ export async function deleteKit(
     log.warn("Kit SQLite deletion failed (non-critical)", { userId, kitSlug, error: err.message });
   }
 
-  await revokeRelation(db, userId, "activator", "kit", kitSlug);
+  await revokeRelation(db, userId, "kit:use", "kit", kitSlug);
 
   trackKitDeleted(userId, kitSlug);
 

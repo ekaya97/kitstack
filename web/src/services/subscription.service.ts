@@ -2,7 +2,6 @@ import { eq, and } from "drizzle-orm";
 import { nanoid } from "nanoid";
 import { db } from "@/lib/db";
 import { subscriptions, type Subscription } from "@/db/schema";
-import { grantRelation, revokeRelation } from "@kitstackco/authz/lifecycle";
 import { log } from "@/lib/logger";
 
 
@@ -35,8 +34,6 @@ export async function createSubscription(
     currentPeriodEnd: periodEnd,
   });
 
-  await grantRelation(db, userId, "subscriber", "subscription", id);
-
   log.info("Subscription created", { userId, plan, subscriptionId: id });
 
   const result = await db
@@ -55,10 +52,6 @@ export async function cancelSubscription(userId: string): Promise<void> {
     .where(
       and(eq(subscriptions.userId, userId), eq(subscriptions.status, "active"))
     );
-
-  if (existing) {
-    await revokeRelation(db, userId, "subscriber", "subscription", existing.id);
-  }
 
   log.info("Subscription cancelled", { userId, subscriptionId: existing?.id });
 }

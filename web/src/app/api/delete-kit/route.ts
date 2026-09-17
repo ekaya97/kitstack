@@ -12,7 +12,7 @@ export async function POST(request: NextRequest) {
   }
 
   const auth = await requireAuthorized([
-    { relation: "activator", objectType: "kit", objectId: kitSlug },
+    { relation: "kit:use", objectType: "kit", objectId: kitSlug },
   ]);
   if (!auth.ok) return auth.response;
 

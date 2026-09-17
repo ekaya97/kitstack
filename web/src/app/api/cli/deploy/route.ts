@@ -244,8 +244,8 @@ export async function POST(request: NextRequest) {
 
     // ── 4. Grant access ─────────────────────────────────────
     const { grantRelation } = await import("@kitstackco/authz/lifecycle");
-    await grantRelation(db, auth.userId, "activator", "kit", kitSlug);
-    await grantRelation(db, auth.userId, "author", "kit", kitSlug);
+    await grantRelation(db, auth.userId, "kit:act", "kit", kitSlug);
+    await grantRelation(db, auth.userId, "kit:deploy", "kit", kitSlug);
 
     log.info("CLI deploy succeeded", { userId: auth.userId, kitId, lambda: lambdaResult?.functionName });
 
