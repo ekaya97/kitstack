@@ -251,4 +251,36 @@ describe("dispatchToolCall", () => {
       }),
     );
   });
+
+  it("includes request session trace fields in the Lambda wire payload", async () => {
+    vi.mocked(getUserKitDb).mockResolvedValueOnce({
+      userId: "user-1",
+      kitId: "meeting-action-tracker",
+      dbUrl: "libsql://test.turso.io",
+      dbToken: "tok",
+      provisionedAt: "2026-01-01",
+    });
+
+    await dispatchToolCall(
+      "process_meeting",
+      { title: "Sprint" },
+      "user-1",
+      getAllTools,
+      invokeKitLambda,
+      {
+        sessionId: "session-1",
+        traceId: "4bf92f3577b34da6a3ce929d0e0e4736",
+        parentId: "00f067aa0ba902b7",
+      },
+    );
+
+    expect(invokeKitLambda).toHaveBeenCalledWith(
+      expect.any(String),
+      expect.objectContaining({
+        sessionId: "session-1",
+        traceId: "4bf92f3577b34da6a3ce929d0e0e4736",
+        parentId: "00f067aa0ba902b7",
+      }),
+    );
+  });
 });
