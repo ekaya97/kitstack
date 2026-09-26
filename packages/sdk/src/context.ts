@@ -7,6 +7,7 @@ import type {
   RequestIdentity,
   SessionContext,
   StorageBinding,
+  StorageAdapter,
   TelemetrySink,
 } from "./types";
 import { assertStorageAdapter, type StorageAdapter } from "./storage";
