@@ -222,6 +222,7 @@ export {
 export {
   bindConnector,
   createRestOpenApiConnector,
+  createConnectorRegistry,
   redactConnectorBinding,
   validateConnectorBinding,
   type Connector,

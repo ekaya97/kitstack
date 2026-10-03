@@ -2,7 +2,7 @@ import { createClient } from "@libsql/client";
 import { drizzle } from "drizzle-orm/libsql";
 import { createProtocolHandler } from "./protocol";
 import { localAdapter, type LocalAdapterOptions } from "./adapters/local";
-import type { KitDefinition, KitToolResult } from "../types";
+import type { ConnectorRegistry, KitDefinition, KitToolResult } from "../types";
 import type { KitServerAdapter, ProtocolHandler, ServerRequestContext } from "./types";
 import type { LibSQLDatabase } from "drizzle-orm/libsql";
 import { withMcpServers, type McpServerRegistration } from "./manifest";
@@ -177,6 +177,9 @@ interface ServeBaseOptions {
   /** HTML shell used to render Views (for example `.kitstack/build/shell.html`). */
   shellHtml?: string;
 
+  /** Bound connector clients, available to tools and loaders as `ctx.connectors`. */
+  connectors?: ConnectorRegistry;
+
   /** Runs on `close()` before the HTTP server stops, e.g. to end live calls. */
   onShutdown?: () => Promise<void> | void;
 
@@ -256,6 +259,7 @@ export function createKitServer(options: ServeOptions): KitServer {
     checkAuthz: options.checkAuthz,
     authorization: options.authorization,
     shellHtml: options.shellHtml,
+    ...(options.connectors ? { context: { connectors: options.connectors } } : {}),
   };
 
   let adapter: KitServerAdapter;

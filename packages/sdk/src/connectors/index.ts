@@ -1,4 +1,5 @@
 import { assertBindingScope, type BindingScope } from "../binding-scope";
+import type { ConnectorRegistry } from "../types";
 
 /**
  * Deploy-time connector contract.
@@ -246,4 +247,20 @@ function requireHttpUrl(value: string): string {
   const url = new URL(value);
   if (url.protocol !== "https:" && url.protocol !== "http:") throw new Error("REST connector base URL must use http:// or https://");
   return url.toString().replace(/\/$/, "");
+}
+
+/**
+ * Registry of bound connector clients handed to kits through `ctx.connectors`.
+ * Keys are the capability names kits ask for (e.g. "crm"), not provider ids.
+ */
+export function createConnectorRegistry(clients: Readonly<Record<string, unknown>>): ConnectorRegistry {
+  const entries = new Map(Object.entries(clients).filter(([, client]) => client !== undefined));
+  return {
+    get: <T = unknown>(id: string) => entries.get(id) as T | undefined,
+    require<T = unknown>(id: string): T {
+      if (!entries.has(id)) throw new Error(`Connector "${id}" is not bound for this kit`);
+      return entries.get(id) as T;
+    },
+    has: (id) => entries.has(id),
+  };
 }

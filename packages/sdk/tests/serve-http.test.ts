@@ -3,6 +3,7 @@ import { z } from "zod";
 import { defineKit } from "../src/define-kit";
 import { defineTool } from "../src/define-tool";
 import { kit } from "../src/result";
+import { createConnectorRegistry } from "../src/connectors/index";
 import { createKitServer, serve, type ServeHandle } from "../src/server/index";
 
 const echo = defineTool({
@@ -68,6 +69,22 @@ describe("serve() HTTP host", () => {
     expect((await rpc(base, list)).status).toBe(401);
     expect((await rpc(base, list, { authorization: "Bearer good" })).status).toBe(200);
     expect((await rpc(base, { padding: "x".repeat(1024) }, { authorization: "Bearer good" })).status).toBe(413);
+  });
+
+  it("hands bound connectors to tools as ctx.connectors", async () => {
+    const lookup = defineTool({
+      name: "lookup",
+      description: "Look up a company in the CRM",
+      args: z.object({ company: z.string() }),
+      handler: async (ctx, args) => kit.text(ctx.connectors.require<{ find(name: string): string }>("crm").find(args.company)),
+    });
+    const crmKit = defineKit({ ...testKit, id: "crm-test", tools: [lookup] });
+    const server = createKitServer({
+      kit: crmKit, db: { url: ":memory:" }, transport: "http",
+      connectors: createConnectorRegistry({ crm: { find: (name: string) => `found:${name}` } }),
+    });
+    await expect(server.executeTool("crm-test", "lookup", { company: "Acme" }, "user-1"))
+      .resolves.toMatchObject({ content: [{ type: "text", text: "found:Acme" }] });
   });
 
   it("mounts plugins ahead of kit routes and shuts them down first", async () => {
