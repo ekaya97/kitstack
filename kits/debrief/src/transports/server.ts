@@ -1,16 +1,12 @@
-import {
-  createServer,
-  type IncomingHttpHeaders,
-  type IncomingMessage,
-  type Server,
-  type ServerResponse,
-} from "node:http";
+import type { IncomingHttpHeaders, IncomingMessage } from "node:http";
 import { createHash } from "node:crypto";
 import { readFileSync } from "node:fs";
 import { pathToFileURL, URL } from "node:url";
 import { WebSocketServer } from "ws";
 import { createDemoApp, type DemoApp } from "../composition/app/index.js";
 import type { McpAuthMode } from "../adapters/auth/mcp.js";
+import { createBoundDebriefKit } from "../composition/kit.js";
+import { createDebriefKitServer } from "../composition/host.js";
 import { handleDemoAppRequest, type DemoLiveVoiceRoute, type DemoLocalVoiceRoute, type DemoAppRouteRequest } from "./http/app.js";
 import { attachVoiceMediaBridge, handleVoiceProviderStatus, startScheduledLiveVoiceCall } from "./http/voice.js";
 import { composeLocalVoiceRoute } from "./local-voice.js";
@@ -21,20 +17,19 @@ import {
   createSignedSessionTokenCodec,
   createTwilioCallsClient,
   createTwilioSignatureValidator,
+  type OpenAIRealtimeSocketFactory,
   type SessionBinding,
   type VoiceWebSocket,
 } from "../adapters/voice/realtime.js";
-import { createDebriefVoiceTools, DEBRIEF_VOICE_REALTIME_TOOLS } from "../adapters/voice/tools.js";
-import { dispatchTrigger } from "@kitstackco/sdk";
+import { createDebriefVoiceTools } from "../adapters/voice/tools.js";
+import { dispatchTrigger, type KitDefinition, type KitToolExecutor } from "@kitstackco/sdk";
+import type { HttpRouteRequest, KitServer, ServeHandle } from "@kitstackco/sdk/server";
 import { createScheduledTrigger } from "../triggers/index.js";
 
 const DEFAULT_PORT = 3001;
 const DEFAULT_MAX_BODY_BYTES = 1024 * 1024;
-const CORS_HEADERS = {
-  "access-control-allow-headers": "authorization, content-type, x-demo-admin-token, x-demo-reset-token, x-request-id, x-session-id, x-trace-id, x-parent-id",
-  "access-control-allow-methods": "GET,POST,OPTIONS",
-  "access-control-allow-origin": "*",
-};
+const CALL_FINALIZE_GRACE_MS = 5_000;
+const CORS_ALLOWED_HEADERS = ["authorization", "content-type", "x-demo-admin-token", "x-demo-reset-token", "x-request-id", "x-session-id", "x-trace-id", "x-parent-id"];
 
 export interface DemoServerOptions {
   /** Use an ephemeral port (0) in tests. Defaults to PORT or 3001. */
@@ -48,16 +43,24 @@ export interface DemoServerOptions {
   appOptions?: Parameters<typeof createDemoApp>[0];
   /** Inject a live route in tests; otherwise it is composed from env vars. */
   liveVoice?: DemoLiveVoiceRoute;
+  /** Replace only the provider network seams of the env-composed live route (tests). */
+  liveVoiceProviders?: LiveVoiceProviderOverrides;
   /** Optional provider-neutral scheduler seam. T-0189 supplies the live-call adapter. */
   scheduledCallPoller?: ScheduledCallPoller;
   /** Request mode rejects upgrades; daemon mode owns long-lived channel upgrades. */
   mode?: "http" | "daemon";
 }
 
+export interface LiveVoiceProviderOverrides {
+  openaiSocketFactory?: OpenAIRealtimeSocketFactory;
+  twilioFetch?: typeof fetch;
+}
+
 export interface DemoServer {
-  readonly server: Server;
   readonly app: DemoApp;
+  /** The requested port; `listen()` returns the bound one. */
   readonly port: number;
+  readonly listening: boolean;
   listen(): Promise<DemoServerAddress>;
   close(): Promise<void>;
 }
@@ -68,9 +71,12 @@ export interface DemoServerAddress {
 }
 
 /**
- * Local-only adapter for the unreleased demo. Auth is intentionally absent so
- * a public tunnel is unsafe: use it only for a controlled demo. The simulator
- * is the default voice provider and provider recording/retention stay off.
+ * The debrief host on the KitStack runtime. MCP (and View) traffic goes
+ * through the SDK server and dispatch; the voice webhooks, media streams and
+ * demo control-plane routes are mounted as kit-owned routes.
+ *
+ * Local-only by default: auth is off unless KITSTACK_DEMO_MCP_AUTH is set, so
+ * a public tunnel exposes MCP. Recording and retention stay off.
  */
 export async function createDemoServer(options: DemoServerOptions = {}): Promise<DemoServer> {
   const app = options.app ?? await createDemoApp({
@@ -99,131 +105,77 @@ export async function createDemoServer(options: DemoServerOptions = {}): Promise
   }
 
   const mode = options.mode ?? "daemon";
-  const liveVoice = options.liveVoice ?? await composeLiveVoiceRoute(app);
-  const localVoice = await composeLocalVoiceRoute(app);
+  const kit = createBoundDebriefKit(app);
+  // Voice agents call kit tools through the same dispatch path as MCP; the
+  // server is created below, so resolve it lazily.
+  let kitServer: KitServer | undefined;
+  const executor: KitToolExecutor = {
+    executeTool: (kitId, toolName, args, principal) => {
+      if (!kitServer) throw new Error("Debrief kit server is not ready");
+      return kitServer.executeTool(kitId, toolName, args, principal);
+    },
+  };
+  const liveVoice = options.liveVoice ?? await composeLiveVoiceRoute(app, kit, executor, options.liveVoiceProviders);
+  const localVoice = await composeLocalVoiceRoute(app, kit, executor);
   const scheduledCallPoller = options.scheduledCallPoller ?? (liveVoice ? createLiveVoiceScheduler(app, liveVoice) : undefined);
   const webSocketServer = new WebSocketServer({ noServer: true });
+  const activeCalls = new Set<Promise<void>>();
 
-  let listening = false;
+  kitServer = createDebriefKitServer(app, {
+    transport: "http",
+    port: requestedPort,
+    host: requestedHost,
+    mode: mode === "daemon" ? "daemon" : "request",
+    cors: { origin: "*", headers: CORS_ALLOWED_HEADERS },
+    maxBodyBytes,
+    routes: [
+      ...(liveVoice ? [{
+        method: "POST",
+        path: "/t/voice/provider-status",
+        handler: (request: HttpRouteRequest) => handleVoiceProviderStatus(routeRequest(request), liveVoice.http),
+      }] : []),
+      { path: /^\//, handler: (request: HttpRouteRequest) => handleDemoAppRequest(app, routeRequest(request), liveVoice, localVoice) },
+    ],
+    daemon: {
+      onUpgrade: async ({ request, socket, head }) => {
+        await handleUpgrade(request, socket as never, head, webSocketServer, mode, liveVoice, localVoice, activeCalls);
+        return true;
+      },
+    },
+    onShutdown: async () => {
+      // End live media streams, then let ended calls finish persisting.
+      for (const client of webSocketServer.clients) client.close(1001, "demo server shutting down");
+      webSocketServer.close();
+      await Promise.allSettled([...activeCalls]);
+    },
+  }, kit);
+
+  let handle: ServeHandle | undefined;
   let closed = false;
-  const server = createServer((request, response) => {
-    void handleIncomingRequest(request, response, app, maxBodyBytes, liveVoice, localVoice);
-  });
-  server.on("upgrade", (request, socket, head) => {
-    void handleUpgrade(request, socket, head, webSocketServer, mode, liveVoice, localVoice);
-  });
-
   return {
-    server,
     app,
     port: requestedPort,
+    get listening() { return handle !== undefined; },
     async listen() {
-      if (listening) return address(server);
-      await new Promise<void>((resolve, reject) => {
-        const onError = (error: Error) => {
-          server.off("listening", onListening);
-          reject(error);
-        };
-        const onListening = () => {
-          server.off("error", onError);
-          listening = true;
-          resolve();
-        };
-        server.once("error", onError);
-        server.once("listening", onListening);
-        server.listen(requestedPort, requestedHost);
-      });
-      scheduledCallPoller?.start();
-      return address(server);
+      if (!handle) {
+        handle = await kitServer!.listen();
+        scheduledCallPoller?.start();
+      }
+      return { host: handle.host, port: handle.port };
     },
     async close() {
       if (closed) return;
       closed = true;
       scheduledCallPoller?.stop();
-      if (listening) {
-        await new Promise<void>((resolve, reject) => {
-          server.close((error) => error ? reject(error) : resolve());
-        });
-        listening = false;
-      }
-      for (const client of webSocketServer.clients) client.close(1001, "demo server shutting down");
-      webSocketServer.close();
+      if (handle) await handle.close();
+      handle = undefined;
       if (ownsApp) await app.close();
     },
   };
 }
 
-async function handleIncomingRequest(
-  request: IncomingMessage,
-  response: ServerResponse,
-  app: DemoApp,
-  maxBodyBytes: number,
-  liveVoice?: DemoLiveVoiceRoute,
-  localVoice?: DemoLocalVoiceRoute,
-): Promise<void> {
-  response.setHeader("content-type", "application/json");
-  for (const [name, value] of Object.entries(CORS_HEADERS)) response.setHeader(name, value);
-
-  if (request.method?.toUpperCase() === "OPTIONS") {
-    response.statusCode = 204;
-    response.end();
-    return;
-  }
-
-  try {
-    const url = new URL(request.url ?? "/", "http://demo.local");
-    if (request.method?.toUpperCase() === "GET" && url.pathname === "/healthz") {
-      response.statusCode = 200;
-      response.end(JSON.stringify({ status: "ok" }));
-      return;
-    }
-    const body = await readJsonBody(request, maxBodyBytes);
-    const routeRequest = {
-      method: request.method ?? "GET",
-      path: url.pathname,
-      query: queryParams(url),
-      headers: requestHeaders(request.headers),
-      body,
-    } satisfies DemoAppRouteRequest;
-    const result = await (request.method?.toUpperCase() === "POST" && url.pathname === "/t/voice/provider-status" && liveVoice
-      ? handleVoiceProviderStatus(routeRequest, liveVoice.http)
-      : handleDemoAppRequest(app, routeRequest, liveVoice, localVoice));
-    response.statusCode = result.status;
-    for (const [name, value] of Object.entries(result.headers)) response.setHeader(name, value);
-    const contentType = result.headers["content-type"] ?? result.headers["Content-Type"] ?? "";
-    const responseBody = result.status === 204
-      ? undefined
-      : contentType.includes("text/html") && typeof result.body === "string"
-        ? result.body
-        : JSON.stringify(result.body);
-    response.end(responseBody);
-  } catch (error) {
-    const status = error instanceof BodyTooLargeError ? 413 : 400;
-    response.statusCode = status;
-    response.end(JSON.stringify({ error: status === 413 ? "body_too_large" : "invalid_request", message: error instanceof Error ? error.message : String(error) }));
-  }
-}
-
-async function readJsonBody(request: IncomingMessage, maxBodyBytes: number): Promise<Record<string, unknown> | undefined> {
-  if (request.method === "GET" || request.method === "HEAD") return undefined;
-  const declaredLength = Number(request.headers["content-length"]);
-  if (Number.isFinite(declaredLength) && declaredLength > maxBodyBytes) throw new BodyTooLargeError("request body exceeds limit");
-  const chunks: Buffer[] = [];
-  let total = 0;
-  for await (const chunk of request) {
-    const buffer = Buffer.isBuffer(chunk) ? chunk : Buffer.from(chunk);
-    total += buffer.length;
-    if (total > maxBodyBytes) throw new BodyTooLargeError("request body exceeds limit");
-    chunks.push(buffer);
-  }
-  if (total === 0) return undefined;
-  const raw = Buffer.concat(chunks).toString("utf8");
-  const contentType = String(request.headers["content-type"] ?? "").toLowerCase();
-  const parsed: unknown = contentType.includes("application/x-www-form-urlencoded")
-    ? Object.fromEntries(new URLSearchParams(raw).entries())
-    : JSON.parse(raw);
-  if (parsed === null || typeof parsed !== "object" || Array.isArray(parsed)) throw new Error("request body must be a JSON object");
-  return parsed as Record<string, unknown>;
+function routeRequest(request: HttpRouteRequest): DemoAppRouteRequest {
+  return { method: request.method, path: request.path, query: request.query, headers: request.headers, body: request.body };
 }
 
 function requestHeaders(headers: IncomingHttpHeaders): Record<string, string | undefined> {
@@ -232,18 +184,17 @@ function requestHeaders(headers: IncomingHttpHeaders): Record<string, string | u
   return result;
 }
 
-function queryParams(url: URL): Record<string, string | undefined> {
-  const result: Record<string, string | undefined> = {};
-  for (const [key, value] of url.searchParams) result[key] = value;
-  return result;
-}
-
 function headerValue(headers: IncomingHttpHeaders, name: string): string | undefined {
   const value = headers[name.toLowerCase()];
   return Array.isArray(value) ? value[0] : value;
 }
 
-async function composeLiveVoiceRoute(app: DemoApp): Promise<DemoLiveVoiceRoute | undefined> {
+async function composeLiveVoiceRoute(
+  app: DemoApp,
+  kit: KitDefinition,
+  executor: KitToolExecutor,
+  providers: LiveVoiceProviderOverrides = {},
+): Promise<DemoLiveVoiceRoute | undefined> {
   const names = [
     "TWILIO_ACCOUNT_SID",
     "TWILIO_AUTH_TOKEN",
@@ -269,10 +220,11 @@ async function composeLiveVoiceRoute(app: DemoApp): Promise<DemoLiveVoiceRoute |
   const tokenCodec = createSignedSessionTokenCodec(app.apps.secret);
   const instructionsContent = readFileSync(new URL("../instructions/debrief-baseline.md", import.meta.url), "utf8");
   const baseInstructionsVersion = `sha256:${createHash("sha256").update(instructionsContent, "utf8").digest("hex")}`;
-  const voiceTools = createDebriefVoiceTools(app.debrief);
+  const voiceTools = createDebriefVoiceTools(kit, executor);
   const voiceContextFor = async (binding: SessionBinding) => {
       const session = app.debrief.getSession(binding.sessionId);
       const customer = session.customerId ? await app.debrief.getCustomer(session.customerId) : null;
+      const history = session.customerId ? await app.debrief.recentDebriefSummaries(session.customerId) : [];
       const records = await app.memory.readRelevant({ orgId: session.orgId, kitId: session.kitId, ...(session.customerId ? { customerId: session.customerId } : {}), limit: 20 }, {
         orgId: session.orgId,
         appId: binding.appId,
@@ -288,9 +240,11 @@ async function composeLiveVoiceRoute(app: DemoApp): Promise<DemoLiveVoiceRoute |
         "\nPrepared debrief context:",
         `Goal: ${session.goal}`,
         customer ? `Customer: ${customer.company}; contact ${customer.contactName}; location ${customer.location}` : "Customer: unavailable.",
+        history.length ? `Previous confirmed debriefs with this customer (newest first). Refer to them and ask how the agreed next steps went:\n${history.map((entry) => `- ${entry}`).join("\n")}` : "Previous confirmed debriefs with this customer: none.",
         selected.length ? `Approved workflow feedback:\n${selected.map((record) => `- ${record.correction}`).join("\n")}` : "Approved workflow feedback: none.",
         "Use this context during the call. Ask one useful question at a time and do not invent customer details.",
         "When the caller explicitly states or agrees an outcome, next step, customer update, address, or follow-up date, call update_debrief_draft with those facts. Never call a confirmation or publish action; the operator confirms the draft after the call.",
+        "When the debrief goals are covered, briefly summarise the saved facts, say goodbye, then call end_call. Also call end_call if the caller asks to end the call.",
       ].join("\n");
       return {
         content,
@@ -299,13 +253,14 @@ async function composeLiveVoiceRoute(app: DemoApp): Promise<DemoLiveVoiceRoute |
       };
   };
   const openai = {
-    socketFactory: createOpenAIRealtimeSocketFactory(),
+    socketFactory: providers.openaiSocketFactory ?? createOpenAIRealtimeSocketFactory(),
     url: process.env.OPENAI_REALTIME_URL?.trim() || "wss://api.openai.com/v1/realtime",
     apiKey: values.OPENAI_API_KEY,
     model: process.env.OPENAI_REALTIME_MODEL?.trim() || "gpt-realtime",
     instructions: instructionsContent,
     voice: process.env.OPENAI_REALTIME_VOICE?.trim() || "marin",
-    tools: DEBRIEF_VOICE_REALTIME_TOOLS,
+    ...(optionalNumber(process.env.OPENAI_REALTIME_VAD_THRESHOLD) !== undefined ? { vadThreshold: optionalNumber(process.env.OPENAI_REALTIME_VAD_THRESHOLD) } : {}),
+    tools: voiceTools.realtime,
   };
   const conversationRoute = await app.modelRouter.resolve("conversation", {
     orgId: app.orgId,
@@ -317,7 +272,7 @@ async function composeLiveVoiceRoute(app: DemoApp): Promise<DemoLiveVoiceRoute |
 
   return {
     http: {
-      twilio: createTwilioCallsClient({ accountSid: values.TWILIO_ACCOUNT_SID, authToken: values.TWILIO_AUTH_TOKEN }),
+      twilio: createTwilioCallsClient({ accountSid: values.TWILIO_ACCOUNT_SID, authToken: values.TWILIO_AUTH_TOKEN, ...(providers.twilioFetch ? { fetch: providers.twilioFetch } : {}) }),
       telemetry: app.telemetry,
       orgId: app.orgId,
       appId: app.appId,
@@ -338,7 +293,17 @@ async function composeLiveVoiceRoute(app: DemoApp): Promise<DemoLiveVoiceRoute |
           type: "voice.call", operation: `provider_status.${status.status}`, provider: "twilio-openai-realtime",
           callId: status.callId, outcome: status.status === "failed" ? "error" : "success",
         });
-        if (status.status === "failed" && status.sessionId) await app.debrief.markFailed(status.sessionId, `Twilio call status: ${status.rawStatus}`);
+        if (status.status === "failed" && status.sessionId) await app.debrief.endCallAfterInterruption(status.sessionId, `Twilio call status: ${status.rawStatus}`);
+        // Safety net: the media stream normally finalizes the session when the
+        // call ends. If it has not shortly after Twilio reports completion, do
+        // it here so a call can never stay stuck in `calling`.
+        if (status.status === "completed" && status.sessionId) {
+          const sessionId = status.sessionId;
+          setTimeout(() => {
+            void app.debrief.endCallAfterInterruption(sessionId, "Media stream did not report the end of the call")
+              .catch((error) => console.error(`[voice] could not finalize session ${sessionId}: ${error instanceof Error ? error.message : String(error)}`));
+          }, CALL_FINALIZE_GRACE_MS).unref();
+        }
       },
       onCallCompleted: async (call) => finalizeLiveCall(app, call),
       beforeStart: async (sessionId) => { await app.debrief.markCalling(sessionId); },
@@ -353,6 +318,7 @@ async function composeLiveVoiceRoute(app: DemoApp): Promise<DemoLiveVoiceRoute |
     capability: { enabled: true, provider: "twilio-openai-realtime", model: openai.model, startPath: "/t/voice/live/start" },
     requireAdminToken: true,
     bridge: (socket, request) => attachVoiceMediaBridge({
+      bargeInMs: optionalNumber(process.env.KITSTACK_VOICE_BARGE_IN_MS),
       socket,
       verifier: tokenCodec,
       openai,
@@ -362,11 +328,12 @@ async function composeLiveVoiceRoute(app: DemoApp): Promise<DemoLiveVoiceRoute |
       onCallCompleted: async (call) => finalizeLiveCall(app, call),
       signature: {
         validator: signatureValidator,
-        url: `${publicHttpsUrl}/t/voice/media`,
+        // Twilio signs the WebSocket handshake with the exact <Stream> URL (wss:).
+        url: mediaStreamUrl,
         params: {},
         value: headerValue(request.headers ?? {}, "x-twilio-signature"),
       },
-      agent: async (binding, provider) => {
+      agent: async (binding, provider, call) => {
         const context = await voiceContextFor(binding);
         return createDefineAgentVoiceLoop({
         sessionId: binding.sessionId,
@@ -379,10 +346,10 @@ async function composeLiveVoiceRoute(app: DemoApp): Promise<DemoLiveVoiceRoute |
         routingReason: conversationRoute.reason,
         callId: binding.callSid ?? null,
         memoryIds: context.memoryIds,
-        tools: voiceTools.agent,
+        tools: voiceTools.agent(() => call.hangup()),
         sendToolResult: provider.sendToolResult,
         onStop: async () => { await app.debrief.awaitConfirmation(binding.sessionId); },
-        onError: async (error) => { await app.debrief.markFailed(binding.sessionId, error); },
+        onError: async (error) => { await app.debrief.endCallAfterInterruption(binding.sessionId, error); },
         });
       },
     }),
@@ -472,6 +439,7 @@ async function handleUpgrade(
   mode: "http" | "daemon",
   liveVoice?: DemoLiveVoiceRoute,
   localVoice?: DemoLocalVoiceRoute,
+  activeCalls?: Set<Promise<void>>,
 ): Promise<void> {
   const path = new URL(request.url ?? "/", "http://demo.local").pathname;
   const isTwilioVoice = path === "/t/voice/media" && liveVoice?.bridge;
@@ -492,6 +460,9 @@ async function handleUpgrade(
         ? localVoice!.bridge(ws as unknown as VoiceWebSocket)
         : liveVoice!.bridge!(ws as unknown as VoiceWebSocket, routeRequest);
       void bridge.binding.catch(() => undefined);
+      const done = bridge.done.catch(() => undefined);
+      activeCalls?.add(done);
+      void done.finally(() => activeCalls?.delete(done));
       void bridge.done.then(() => {
         if (isLocalVoice) ws.close(1000, "local voice call complete");
       }).catch(() => undefined);
@@ -522,13 +493,7 @@ function readMcpAuthMode(value: string | undefined): McpAuthMode {
   throw new Error("KITSTACK_DEMO_MCP_AUTH must be none, app-token, or internal-signed");
 }
 
-function address(server: Server): DemoServerAddress {
-  const value = server.address();
-  if (value === null || typeof value === "string") throw new Error("demo server is not listening on a TCP port");
-  return { host: value.address, port: value.port };
-}
 
-class BodyTooLargeError extends Error {}
 
 if (process.argv[1] && pathToFileURL(process.argv[1]).href === import.meta.url) {
   const demoServer = await createDemoServer();
@@ -537,4 +502,10 @@ if (process.argv[1] && pathToFileURL(process.argv[1]).href === import.meta.url) 
   const shutdown = () => { void demoServer.close().finally(() => process.exit(0)); };
   process.once("SIGINT", shutdown);
   process.once("SIGTERM", shutdown);
+}
+
+function optionalNumber(value: string | undefined): number | undefined {
+  if (!value?.trim()) return undefined;
+  const parsed = Number(value);
+  return Number.isFinite(parsed) ? parsed : undefined;
 }

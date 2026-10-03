@@ -1,6 +1,4 @@
-import type { AgentToolDefinition } from "@kitstackco/sdk";
-import type { DebriefService } from "../../functions/index.js";
-import type { DebriefDraftUpdate } from "../../confirmation-contracts.js";
+import { kitAgentTools, type AgentToolDefinition, type KitDefinition, type KitToolExecutor } from "@kitstackco/sdk";
 
 export interface RealtimeFunctionTool {
   readonly type: "function";
@@ -10,93 +8,56 @@ export interface RealtimeFunctionTool {
 }
 
 export interface DebriefVoiceTools {
-  readonly agent: readonly AgentToolDefinition[];
+  /** Function schemas sent to the realtime model. */
   readonly realtime: readonly RealtimeFunctionTool[];
+  /** defineAgent tools; `hangup` ends the call after the agent's goodbye. */
+  agent(hangup: () => void): AgentToolDefinition[];
 }
 
-const DRAFT_FIELDS = [
-  "outcome",
-  "next_step",
-  "customer_update",
-  "discovered_address",
-  "follow_up_date",
-] as const;
+/** Kit tools the voice agent may call; the session id is bound from the call. */
+const VOICE_KIT_TOOLS = ["get_debrief_draft", "update_debrief_draft"] as const;
 
-const DRAFT_FIELD_DESCRIPTIONS: Record<typeof DRAFT_FIELDS[number], string> = {
-  outcome: "The outcome explicitly stated or agreed during the call.",
-  next_step: "The next action explicitly agreed during the call.",
-  customer_update: "A material update about the customer explicitly learned during the call.",
-  discovered_address: "A new customer address explicitly provided during the call.",
-  follow_up_date: "The follow-up date explicitly agreed during the call.",
+const VOICE_DESCRIPTIONS: Readonly<Record<string, string>> = {
+  get_debrief_draft: "Read the current provisional debrief fields before continuing the call. Never treat an unconfirmed field as a confirmed customer event.",
+  update_debrief_draft: "Save one or more facts explicitly stated or agreed during the call into the provisional debrief draft. This does not confirm the debrief or publish memory.",
 };
 
-const DRAFT_PARAMETERS = {
-  type: "object",
-  properties: Object.fromEntries(DRAFT_FIELDS.map((field) => [field, {
-    type: "string",
-    description: DRAFT_FIELD_DESCRIPTIONS[field],
-  }])),
-  additionalProperties: false,
-  minProperties: 1,
-} as const;
+const END_CALL: RealtimeFunctionTool = {
+  type: "function",
+  name: "end_call",
+  description: "End the phone call. Use it only after the debrief is complete: you have saved the agreed facts, briefly summarised them, and said goodbye. The line drops after your next sentence finishes playing.",
+  parameters: { type: "object", properties: {}, additionalProperties: false },
+};
 
-export const DEBRIEF_VOICE_REALTIME_TOOLS: readonly RealtimeFunctionTool[] = [
-  {
-    type: "function",
-    name: "get_debrief_draft",
-    description: "Read the current provisional debrief fields before continuing the call. Never treat an unconfirmed field as a confirmed customer event.",
-    parameters: { type: "object", properties: {}, additionalProperties: false },
-  },
-  {
-    type: "function",
-    name: "update_debrief_draft",
-    description: "Save one or more facts explicitly stated or agreed during the call into the provisional debrief draft. This does not confirm the debrief or publish memory.",
-    parameters: DRAFT_PARAMETERS,
-  },
-];
-
-/** Bind debrief persistence to the provider-neutral defineAgent tool contract. */
-export function createDebriefVoiceTools(debrief: Pick<DebriefService, "getDraft" | "updateDebriefDraft">): DebriefVoiceTools {
+/**
+ * Voice tools derived from the debrief kit's own tool definitions. Calls run
+ * through KitStack dispatch, so validation, authorization and telemetry are
+ * the same as for MCP; only `end_call` is a channel (call-control) tool.
+ */
+export function createDebriefVoiceTools(kit: KitDefinition, executor: KitToolExecutor): DebriefVoiceTools {
+  const tools = kitAgentTools({
+    kit,
+    executor,
+    tools: VOICE_KIT_TOOLS,
+    boundArgs: (session) => ({ session_id: session.id }),
+    boundArgNames: ["session_id"],
+    principal: () => "voice-agent",
+    descriptions: VOICE_DESCRIPTIONS,
+  });
   return {
-    realtime: DEBRIEF_VOICE_REALTIME_TOOLS,
-    agent: [
-      {
-        name: "get_debrief_draft",
-        description: "Read the current provisional debrief fields before continuing the call.",
-        execute: async (_args, session) => {
-          const draft = await debrief.getDraft(session.id);
-          return {
-            fields: draft?.fields ?? {},
-          };
-        },
-      },
-      {
-        name: "update_debrief_draft",
-        description: "Save explicitly stated or agreed call facts into the provisional debrief draft without confirming it.",
-        execute: async (args, session) => {
-          const update = parseDraftUpdate(args);
-          const confirmation = await debrief.updateDebriefDraft(session.id, update);
-          return {
-            state: confirmation.state,
-            fields: confirmation.draft.fields,
-            confirmation_required: true,
-          };
-        },
-      },
-    ],
+    realtime: [...tools.schemas.map((schema) => ({ type: "function" as const, ...schema })), END_CALL],
+    agent: (hangup) => [...tools.definitions, createEndCallTool(hangup)],
   };
 }
 
-function parseDraftUpdate(args: unknown): DebriefDraftUpdate {
-  if (!args || typeof args !== "object" || Array.isArray(args)) {
-    throw new Error("update_debrief_draft arguments must be an object");
-  }
-  const update = Object.fromEntries(
-    DRAFT_FIELDS.flatMap((field) => {
-      const value = (args as Record<string, unknown>)[field];
-      return typeof value === "string" && value.trim() ? [[field, value.trim()]] : [];
-    }),
-  ) as DebriefDraftUpdate;
-  if (Object.keys(update).length === 0) throw new Error("update_debrief_draft requires at least one non-empty field");
-  return update;
+/** Lets the agent end the call; the transport decides when the line actually drops. */
+export function createEndCallTool(hangup: () => void): AgentToolDefinition {
+  return {
+    name: "end_call",
+    description: "End the phone call after the debrief is complete and the caller has been told goodbye.",
+    execute: async () => {
+      hangup();
+      return { status: "ending", instruction: "Say one short goodbye sentence if you have not already. Do not ask further questions." };
+    },
+  };
 }

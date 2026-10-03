@@ -7,13 +7,19 @@ describe("debrief kit boundary", () => {
     expect(kit.id).toBe("debrief");
     expect(kit.tools.map((tool) => tool.name)).toEqual([
       "prepare_debrief",
+      "prepare_rehearsal",
       "get_session",
       "get_debrief",
+      "get_debrief_draft",
       "get_debrief_for_confirmation",
       "update_debrief_draft",
       "confirm_debrief_draft",
       "confirm_debrief",
       "teach_from_correction",
+      "approve_memory",
+      "publish_memory",
+      "start_voice_call",
+      "get_voice_status",
     ]);
   });
 

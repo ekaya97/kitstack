@@ -6,7 +6,6 @@ import type {
   KitContext,
   KitToolResult,
 } from "@kitstackco/sdk";
-import type { DebriefConfirmationResult, DebriefDraftUpdate } from "./confirmation-contracts.js";
 import type { CustomerEventType } from "./event-contracts.js";
 
 export type { CustomerEventType } from "./event-contracts.js";
@@ -173,16 +172,6 @@ export interface DebriefCapabilities {
 }
 
 /** Host adapter boundary for the existing MCP/tool surface. */
-export interface DebriefOperations {
-  prepareDebrief(input: PrepareDebriefInput, context: KitContext): Promise<PreparedDebrief | unknown>;
-  getSession(sessionId: string, context: KitContext): Promise<unknown>;
-  getDebrief(sessionId: string, context: KitContext): Promise<unknown>;
-  getDebriefForConfirmation(sessionId: string, context: KitContext): Promise<DebriefConfirmationResult | unknown>;
-  updateDebriefDraft(sessionId: string, update: DebriefDraftUpdate, context: KitContext): Promise<DebriefConfirmationResult | unknown>;
-  confirmDebriefDraft(sessionId: string, context: KitContext): Promise<DebriefConfirmationResult | unknown>;
-  confirmDebrief(sessionId: string, outcome: "confirmed" | "partial", context: KitContext): Promise<unknown>;
-  teachFromCorrection(sessionId: string, correction: string, context: KitContext): Promise<unknown>;
-}
 
 export type DebriefToolHandler = (
   ctx: KitContext,

@@ -31,7 +31,7 @@ describe("local demo HTTP server", () => {
       body: JSON.stringify({ id: 1, method: "tools/list" }),
     });
     expect(tools.status).toBe(200);
-    expect((await tools.json()).result.tools).toHaveLength(13);
+    expect((await tools.json()).result.tools.map((tool: { name: string }) => tool.name)).toEqual(["kit", "kit_view"]);
 
     const observability = await request(base, "/api/demo/observability?appId=null&limit=5");
     expect(observability.status).toBe(200);
@@ -61,7 +61,7 @@ describe("local demo HTTP server", () => {
     await demoServer.listen();
     await demoServer.close();
     await demoServer.close();
-    expect(demoServer.server.listening).toBe(false);
+    expect(demoServer.listening).toBe(false);
   });
 
   it("serves the protected live start route and capability over real HTTP", async () => {

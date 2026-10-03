@@ -1,22 +1,27 @@
 import { defineTool, kit, type KitContext, type KitToolResult } from "@kitstackco/sdk";
-import { withToolMetadata } from "../tool-metadata";
+import { withToolMetadata } from "@kitstackco/sdk";
 import { z } from "zod";
-import type {
-  DebriefDraftUpdate,
-  DebriefOperations,
-  DebriefToolHandler,
-  PrepareDebriefInput,
-} from "../contracts";
+import type { DebriefToolHandler } from "../contracts";
 
 export type DebriefToolName =
   | "prepare_debrief"
+  | "prepare_rehearsal"
   | "get_session"
   | "get_debrief"
+  | "get_debrief_draft"
   | "get_debrief_for_confirmation"
   | "update_debrief_draft"
   | "confirm_debrief_draft"
   | "confirm_debrief"
-  | "teach_from_correction";
+  | "teach_from_correction"
+  | "approve_memory"
+  | "publish_memory"
+  | "start_voice_call"
+  | "get_voice_status";
+
+const ASSIST_TOOLS: ReadonlySet<DebriefToolName> = new Set([
+  "get_session", "get_debrief", "get_debrief_draft", "get_debrief_for_confirmation", "get_voice_status",
+]);
 
 export type { DebriefToolHandler } from "../contracts";
 
@@ -41,7 +46,7 @@ function tool(
     args: args as any,
     handler: (ctx, parsedArgs) =>
       (handlers[name] ?? fallback)(ctx, parsedArgs as Record<string, unknown>),
-  }), name.startsWith("get_") ? "assist" : "act", "sensitive");
+  }), ASSIST_TOOLS.has(name) ? "assist" : "act", "sensitive");
 }
 
 /** Create the stable MCP-facing tool definitions for the debrief kit. */
@@ -64,6 +69,12 @@ export function createDebriefTools(
       handlers,
     ),
     tool(
+      "prepare_rehearsal",
+      "Prepare a goal-only rehearsal debrief for the voice simulator (no customer, no phone call).",
+      z.object({ goal: z.string().min(1).describe("The outcome to rehearse") }),
+      handlers,
+    ),
+    tool(
       "get_session",
       "Read the current state and identity of one sales debrief session.",
       z.object({ session_id: z.string().min(1).describe("The shared debrief session ID") }),
@@ -72,6 +83,12 @@ export function createDebriefTools(
     tool(
       "get_debrief",
       "Read the structured result of a completed or partial sales debrief.",
+      z.object({ session_id: z.string().min(1).describe("The shared debrief session ID") }),
+      handlers,
+    ),
+    tool(
+      "get_debrief_draft",
+      "Read the provisional debrief fields saved so far, including during a call. Unconfirmed fields are not customer events.",
       z.object({ session_id: z.string().min(1).describe("The shared debrief session ID") }),
       handlers,
     ),
@@ -118,67 +135,35 @@ export function createDebriefTools(
       }),
       handlers,
     ),
+    tool(
+      "approve_memory",
+      "Approve a candidate memory taught during this debrief.",
+      z.object({
+        session_id: z.string().min(1).describe("The shared debrief session ID"),
+        memory_id: z.string().min(1).describe("The candidate memory to approve"),
+      }),
+      handlers,
+    ),
+    tool(
+      "publish_memory",
+      "Publish an approved memory so a later debrief can retrieve it.",
+      z.object({
+        session_id: z.string().min(1).describe("The shared debrief session ID"),
+        memory_id: z.string().min(1).describe("The approved memory to publish"),
+      }),
+      handlers,
+    ),
+    tool(
+      "start_voice_call",
+      "Start the deterministic simulator voice call for a prepared debrief (rehearsal; no phone call).",
+      z.object({ session_id: z.string().min(1).describe("The shared debrief session ID") }),
+      handlers,
+    ),
+    tool(
+      "get_voice_status",
+      "Poll the simulator voice call until it reaches confirmation.",
+      z.object({ session_id: z.string().min(1).describe("The shared debrief session ID") }),
+      handlers,
+    ),
   ];
-}
-
-/**
- * Adapt a host service backed by plugins to the SDK tool handler contract.
- * The host owns the service implementation; this adapter stays kit-facing.
- */
-export function createDebriefToolHandlers(
-  operations: DebriefOperations,
-): Record<DebriefToolName, DebriefToolHandler> {
-  return {
-    prepare_debrief: async (ctx, args) => kit.json(
-      await operations.prepareDebrief({
-        goal: String(args.goal),
-        company: String(args.company),
-        contact_name: String(args.contact_name),
-        location: String(args.location),
-        callback_at: String(args.callback_at),
-        callback_timezone: String(args.callback_timezone),
-        buffer_minutes: typeof args.buffer_minutes === "number" ? args.buffer_minutes : 0,
-      } satisfies PrepareDebriefInput, ctx),
-    ),
-    get_session: async (ctx, args) => kit.json(
-      await operations.getSession(String(args.session_id), ctx),
-    ),
-    get_debrief: async (ctx, args) => kit.json(
-      await operations.getDebrief(String(args.session_id), ctx),
-    ),
-    get_debrief_for_confirmation: async (ctx, args) => kit.json(
-      await operations.getDebriefForConfirmation(String(args.session_id), ctx),
-    ),
-    update_debrief_draft: async (ctx, args) => kit.json(
-      await operations.updateDebriefDraft(
-        String(args.session_id),
-        pickDraftUpdate(args),
-        ctx,
-      ),
-    ),
-    confirm_debrief_draft: async (ctx, args) => kit.json(
-      await operations.confirmDebriefDraft(String(args.session_id), ctx),
-    ),
-    confirm_debrief: async (ctx, args) => kit.json(
-      await operations.confirmDebrief(
-        String(args.session_id),
-        args.outcome === "partial" ? "partial" : "confirmed",
-        ctx,
-      ),
-    ),
-    teach_from_correction: async (ctx, args) => kit.json(
-      await operations.teachFromCorrection(
-        String(args.session_id),
-        String(args.correction),
-        ctx,
-      ),
-    ),
-  };
-}
-
-function pickDraftUpdate(args: Record<string, unknown>): DebriefDraftUpdate {
-  const fields = ["outcome", "next_step", "customer_update", "discovered_address", "follow_up_date"] as const;
-  return Object.fromEntries(
-    fields.flatMap((field) => typeof args[field] === "string" ? [[field, args[field]]] : []),
-  ) as DebriefDraftUpdate;
 }

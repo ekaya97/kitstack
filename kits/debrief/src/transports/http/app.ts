@@ -1,5 +1,5 @@
 import type { DemoApp } from "../../composition/app/index.js";
-import { authenticateMcpRequest, McpAuthError, type McpAuthMode } from "../../adapters/auth/mcp.js";
+import type { McpAuthMode } from "../../adapters/auth/mcp.js";
 import type { DemoHttpRequest, DemoHttpResponse } from "./index.js";
 import { handleLiveVoiceStart, type LiveVoiceHttpOptions } from "./voice.js";
 import type { TwilioOpenAIBridge, VoiceWebSocket } from "../../adapters/voice/realtime.js";
@@ -7,113 +7,8 @@ import type { ProxyResult } from "../../adapters/proxy/index.js";
 import type { ScheduledCallRecord } from "../../scheduler/index.js";
 import type { TelemetryAggregate, TelemetryEvent } from "../../telemetry/index.js";
 import type { VoiceStatusResult } from "../../adapters/voice/index.js";
-import {
-  toCustomerTimelineViewData,
-  type CustomerTimelineLoaderSnapshot,
-} from "../../views/customer-timeline/loader.js";
 
 const JSON_HEADERS = { "content-type": "application/json" };
-const MCP_SERVER_INFO = { name: "kitstack-demo", version: "0.1.0" };
-const MCP_PROTOCOL_VERSION = "2025-11-25";
-const MCP_TOOLS = [
-  {
-    name: "prepare_debrief",
-    description: "Prepare a sales debrief using current instructions and approved memories.",
-    inputSchema: {
-      type: "object",
-      properties: {
-        goal: { type: "string", description: "The outcome to achieve in the sales debrief." },
-        company: { type: "string", description: "The customer company." },
-        contact_name: { type: "string", description: "The customer contact." },
-        location: { type: "string", description: "The meeting or customer location." },
-        callback_at: { type: "string", description: "When the phone should ring: ISO timestamp or HH:mm." },
-        callback_timezone: { type: "string", description: "IANA timezone for callback_at, for example Europe/Berlin." },
-        buffer_minutes: { type: "number", description: "Optional delay after callback_at before starting the call." },
-      },
-      required: ["goal", "company", "contact_name", "location", "callback_at", "callback_timezone"],
-    },
-  },
-  {
-    name: "get_session",
-    description: "Read the complete state of a prepared debrief session.",
-    inputSchema: { type: "object", properties: { session_id: { type: "string" } }, required: ["session_id"] },
-  },
-  {
-    name: "get_debrief",
-    description: "Read the compact status summary for a debrief session.",
-    inputSchema: { type: "object", properties: { session_id: { type: "string" } }, required: ["session_id"] },
-  },
-  {
-    name: "get_debrief_for_confirmation",
-    description: "Load the editable structured debrief draft and the confirmation View.",
-    inputSchema: { type: "object", properties: { session_id: { type: "string" } }, required: ["session_id"] },
-  },
-  {
-    name: "update_debrief_draft",
-    description: "Edit structured debrief fields before confirmation.",
-    inputSchema: {
-      type: "object",
-      properties: {
-        session_id: { type: "string" },
-        outcome: { type: "string" },
-        next_step: { type: "string" },
-        customer_update: { type: "string" },
-        discovered_address: { type: "string" },
-        follow_up_date: { type: "string" },
-      },
-      required: ["session_id"],
-    },
-  },
-  {
-    name: "confirm_debrief_draft",
-    description: "Confirm the editable debrief draft and persist its customer events.",
-    inputSchema: { type: "object", properties: { session_id: { type: "string" } }, required: ["session_id"] },
-  },
-  {
-    name: "confirm_debrief",
-    description: "Confirm a completed debrief, or record a partial outcome.",
-    inputSchema: { type: "object", properties: { session_id: { type: "string" }, outcome: { type: "string", enum: ["confirmed", "partial"] } }, required: ["session_id", "outcome"] },
-  },
-  {
-    name: "teach_from_correction",
-    description: "Store operator feedback as a candidate memory for a later run.",
-    inputSchema: { type: "object", properties: { session_id: { type: "string" }, correction: { type: "string" } }, required: ["session_id", "correction"] },
-  },
-  {
-    name: "approve_memory",
-    description: "Approve a candidate memory taught during this debrief.",
-    inputSchema: { type: "object", properties: { session_id: { type: "string" }, memory_id: { type: "string" } }, required: ["session_id", "memory_id"] },
-  },
-  {
-    name: "publish_memory",
-    description: "Publish an approved memory so a later debrief can retrieve it.",
-    inputSchema: { type: "object", properties: { session_id: { type: "string" }, memory_id: { type: "string" } }, required: ["session_id", "memory_id"] },
-  },
-  {
-    name: "start_voice_call",
-    description: "Start the deterministic German sales voice call for a prepared debrief.",
-    inputSchema: { type: "object", properties: { session_id: { type: "string" } }, required: ["session_id"] },
-  },
-  {
-    name: "get_voice_status",
-    description: "Poll the sales voice call until it reaches confirmation.",
-    inputSchema: { type: "object", properties: { session_id: { type: "string" } }, required: ["session_id"] },
-  },
-  {
-    name: "kit_view",
-    description: "Load an interactive debrief View for the current prepared session.",
-    inputSchema: {
-      type: "object",
-      properties: {
-        id: { type: "string" },
-        view: { type: "string" },
-        session_id: { type: "string", description: "Active debrief session for customer-timeline" },
-        customer_id: { type: "string", description: "Active customer for customer-timeline" },
-      },
-      required: ["id", "view"],
-    },
-  },
-] as const;
 
 export interface DemoAppRouteRequest extends DemoHttpRequest {
   body?: Record<string, unknown>;
@@ -199,17 +94,6 @@ export async function handleDemoAppRequest(
       method: request.method,
       path,
     }, pluginContext(app, request, bodySessionId(request.body)));
-    if (request.method === "POST" && path === "/mcp") {
-      try {
-        await authenticateMcpRequest(new Request("http://demo.local/mcp", {
-          method: "POST",
-          headers: toHeaders(request.headers),
-        }), { mode: app.mcpAuthMode, registry: app.apps });
-      } catch (error) {
-        return mcpAuthResponse(error);
-      }
-      return mcp(app, request.body ?? {});
-    }
     if (request.method === "POST" && path === "/t/voice/start") {
       const sessionId = stringField(request.body, "session_id");
       return json(200, await app.plugins.dispatch("trigger:voice-http", { operation: "start", sessionId }, pluginContext(app, request, sessionId)));
@@ -304,186 +188,6 @@ export async function handleDemoAppRequest(
   }
 }
 
-async function mcp(app: DemoApp, body: Record<string, unknown>): Promise<DemoHttpResponse> {
-  const method = typeof body.method === "string" ? body.method : "tools/list";
-  if (method === "initialize") {
-    return json(200, { jsonrpc: "2.0", id: body.id ?? null, result: {
-      protocolVersion: MCP_PROTOCOL_VERSION,
-      capabilities: { tools: {} },
-      serverInfo: MCP_SERVER_INFO,
-    } });
-  }
-  if (method === "notifications/initialized") return { status: 204, headers: {}, body: null };
-  if (method === "ping") return json(200, { jsonrpc: "2.0", id: body.id ?? null, result: {} });
-  if (method === "tools/list") {
-    return json(200, { jsonrpc: "2.0", id: body.id ?? null, result: {
-      tools: MCP_TOOLS,
-    } });
-  }
-  if (method !== "tools/call") return json(400, { jsonrpc: "2.0", id: body.id ?? null, error: { code: -32601, message: "Method not found" } });
-  const params = (body.params && typeof body.params === "object" ? body.params : {}) as Record<string, unknown>;
-  const name = stringField(params, "name");
-  const args = params.arguments && typeof params.arguments === "object" ? params.arguments as Record<string, unknown> : {};
-  let value: unknown;
-  if (name === "prepare_debrief") {
-    // Keep the local simulator's goal-only shortcut while advertising the
-    // presenter contract above. Claude and the router use the rich branch.
-    const hasPresenterFields = ["company", "contact_name", "location", "callback_at", "callback_timezone", "buffer_minutes"]
-      .some((field) => args[field] !== undefined);
-    value = hasPresenterFields
-      ? await kitDispatch(app, {
-        operation: "prepare",
-        goal: stringField(args, "goal"),
-        company: stringField(args, "company"),
-        contactName: stringField(args, "contact_name"),
-        location: stringField(args, "location"),
-        callbackAt: stringField(args, "callback_at"),
-        callbackTimezone: stringField(args, "callback_timezone"),
-        bufferMinutes: numberField(args, "buffer_minutes", 0),
-      }, args)
-      : await kitDispatch(app, { operation: "prepare", goal: stringField(args, "goal") }, args);
-  }
-  else if (name === "get_session") value = await kitDispatch(app, { operation: "get_session", sessionId: stringField(args, "session_id") }, args);
-  else if (name === "get_debrief") value = await kitDispatch(app, { operation: "get_debrief", sessionId: stringField(args, "session_id") }, args);
-  else if (name === "get_debrief_for_confirmation") value = await app.debrief.getDebriefForConfirmation(stringField(args, "session_id"));
-  else if (name === "update_debrief_draft") value = await app.debrief.updateDebriefDraft(stringField(args, "session_id"), draftUpdate(args));
-  else if (name === "confirm_debrief_draft") value = await app.debrief.confirmDebriefDraft(stringField(args, "session_id"));
-  else if (name === "teach_from_correction") value = await kitDispatch(app, { operation: "teach", sessionId: stringField(args, "session_id"), correction: stringField(args, "correction") }, args);
-  else if (name === "approve_memory") value = await kitDispatch(app, { operation: "approve", sessionId: stringField(args, "session_id"), memoryId: stringField(args, "memory_id") }, args);
-  else if (name === "publish_memory") value = await kitDispatch(app, { operation: "publish", sessionId: stringField(args, "session_id"), memoryId: stringField(args, "memory_id") }, args);
-  else if (name === "start_voice_call") value = await app.plugins.dispatch("trigger:voice-http", { operation: "start", sessionId: stringField(args, "session_id") }, pluginContext(app, undefined, stringField(args, "session_id")));
-  else if (name === "get_voice_status") {
-    const sessionId = stringField(args, "session_id");
-    const current = await app.plugins.dispatch<{ operation: string; sessionId: string }, VoiceStatusResult>("channel:voice", { operation: "status", sessionId }, pluginContext(app, undefined, sessionId));
-    value = current.status === "calling" ? await app.plugins.dispatch<{ operation: string; sessionId: string }, VoiceStatusResult>("channel:voice", { operation: "advance", sessionId }, pluginContext(app, undefined, sessionId)) : current;
-  }
-  else if (name === "kit_view") {
-    const view = stringField(args, "view");
-    if (stringField(args, "id") !== "debrief" || !["prebrief", "confirmation", "customer-timeline"].includes(view)) {
-      return json(400, { jsonrpc: "2.0", id: body.id ?? null, error: { code: -32602, message: "Unknown debrief View" } });
-    }
-    value = {
-      data: view === "confirmation"
-        ? await loadConfirmationView(app)
-        : view === "prebrief"
-          ? await loadPrebriefView(app)
-          : await loadCustomerTimelineView(app, args),
-    };
-  }
-  else if (name === "confirm_debrief") {
-    const sessionId = stringField(args, "session_id");
-    value = await app.plugins.dispatch("trigger:voice-http", {
-      operation: "complete",
-      sessionId,
-      outcome: args.outcome === "partial" ? "partial" : "confirmed",
-    }, pluginContext(app, undefined, sessionId));
-  }
-  else return json(400, { jsonrpc: "2.0", id: body.id ?? null, error: { code: -32602, message: `Unknown tool ${name}` } });
-  return json(200, { jsonrpc: "2.0", id: body.id ?? null, result: { content: [{ type: "text", text: JSON.stringify(value) }] } });
-}
-
-function draftUpdate(args: Record<string, unknown>) {
-  const fields = ["outcome", "next_step", "customer_update", "discovered_address", "follow_up_date"] as const;
-  return Object.fromEntries(fields.flatMap((field) => typeof args[field] === "string" ? [[field, args[field]]] : []));
-}
-
-async function loadConfirmationView(app: DemoApp): Promise<Record<string, unknown>> {
-  const session = app.debrief.getLatestSession();
-  if (!session) throw new Error("No debrief session is available for confirmation");
-  return app.debrief.getDebriefForConfirmation(session.sessionId) as unknown as Record<string, unknown>;
-}
-
-async function loadPrebriefView(app: DemoApp): Promise<Record<string, unknown>> {
-  const session = app.debrief.getLatestSession();
-  if (!session?.customerId || !session.callbackAt || !session.scheduledCallAt) throw new Error("No prepared customer prebrief is available");
-  const customer = await app.debrief.getCustomer(session.customerId);
-  if (!customer) throw new Error(`Customer "${session.customerId}" was not found`);
-  const events = await app.debrief.listCustomerEvents(session.customerId);
-  const last = [...events].reverse().find((event) => event.type !== "prebrief");
-  const lastInteraction = last
-    ? last.type === "debrief_confirmed" ? "Previous debrief was confirmed."
-      : last.type === "address_discovered" ? "Previous call captured a new address."
-        : last.type === "call_completed" ? "Previous voice call completed."
-          : "Previous customer interaction recorded."
-    : "No prior interaction recorded.";
-  const providerStatus = session.state === "failed" ? "unavailable" : session.state === "confirmed" ? "completed" : session.state === "calling" ? "calling" : "scheduled";
-  return {
-    session_id: session.sessionId,
-    customer_id: customer.customerId,
-    company: customer.company,
-    contact_name: customer.contactName,
-    location: customer.location,
-    prebrief_sections: {
-      known: [`Company: ${customer.company}`, `Contact: ${customer.contactName}`, `Location: ${customer.location}`],
-      last_interaction: lastInteraction,
-      relevant_history: [],
-      open_items: ["No open items recorded."],
-      call_objective: session.goal,
-    },
-    prebrief_ends_at: session.callbackAt,
-    scheduled_call_at: session.scheduledCallAt,
-    destination_masked: "configured demo destination",
-    provider_status: providerStatus,
-    provider_name: "Twilio + OpenAI Realtime",
-  };
-}
-
-async function loadCustomerTimelineView(
-  app: DemoApp,
-  args: Record<string, unknown>,
-): Promise<Record<string, unknown>> {
-  const requestedSessionId = typeof args.session_id === "string" && args.session_id.trim() ? args.session_id : undefined;
-  const requestedCustomerId = typeof args.customer_id === "string" && args.customer_id.trim() ? args.customer_id : undefined;
-  const session = requestedSessionId ? app.debrief.getSession(requestedSessionId) : app.debrief.getLatestSession();
-  if (!session) throw new Error("No active debrief session is available for the customer timeline");
-  if (!session.customerId) throw new Error(`Debrief session "${session.sessionId}" has no customer for the timeline`);
-  if (requestedCustomerId && requestedCustomerId !== session.customerId) {
-    throw new Error("Customer timeline customer does not match the requested session");
-  }
-  const customer = await app.debrief.getCustomer(session.customerId);
-  if (!customer) throw new Error(`Customer "${session.customerId}" was not found`);
-  const [events, sessionTelemetry, customerTelemetry] = await Promise.all([
-    app.debrief.listCustomerEvents(session.customerId),
-    app.telemetry.query({ orgId: app.orgId, sessionId: session.sessionId }),
-    app.telemetry.query({ orgId: app.orgId, customerId: session.customerId }),
-  ]);
-  const metadataEvents = [...new Map([...sessionTelemetry, ...customerTelemetry].map((event) => [event.id, event])).values()];
-  const snapshot: CustomerTimelineLoaderSnapshot = {
-    session_id: session.sessionId,
-    customer_id: customer.customerId,
-    company: customer.company,
-    contact_name: customer.contactName,
-    location: customer.location,
-    events: events.map((event) => ({
-      event_id: event.eventId,
-      customer_id: event.customerId,
-      session_id: event.sessionId,
-      type: event.type,
-      occurred_at: event.occurredAt,
-      payload: event.payload,
-    })),
-    provider_metadata: {
-      providers: metadataEvents.map((event) => event.provider),
-      models: metadataEvents.map((event) => event.model),
-      estimated_cost_usd: metadataEvents.reduce((total, event) => total + (event.estimatedCostUsd ?? 0), 0),
-      latency_ms: metadataEvents.reduce((total, event) => total + (event.latencyMs ?? 0), 0),
-    },
-  };
-  return toCustomerTimelineViewData(
-    { session_id: session.sessionId, customer_id: customer.customerId },
-    snapshot,
-  ) as unknown as Record<string, unknown>;
-}
-
-async function kitDispatch(
-  app: DemoApp,
-  input: Record<string, unknown>,
-  args: Record<string, unknown>,
-): Promise<unknown> {
-  const sessionId = typeof input.sessionId === "string" ? input.sessionId : undefined;
-  return app.plugins.dispatch("kit:debrief", input, pluginContext(app, undefined, sessionId ?? (typeof args.session_id === "string" ? args.session_id : undefined)));
-}
-
 function bodySessionId(body: Record<string, unknown> | undefined): string | undefined {
   return typeof body?.session_id === "string" ? body.session_id : undefined;
 }
@@ -505,13 +209,6 @@ function pluginContext(app: DemoApp, request?: DemoAppRouteRequest, sessionId?: 
 function stringField(body: Record<string, unknown> | undefined, name: string, fallback?: string): string {
   const value = body?.[name];
   if (typeof value === "string" && value.trim()) return value;
-  if (fallback !== undefined) return fallback;
-  throw new Error(`${name} is required`);
-}
-
-function numberField(body: Record<string, unknown> | undefined, name: string, fallback?: number): number {
-  const value = body?.[name];
-  if (typeof value === "number" && Number.isFinite(value)) return value;
   if (fallback !== undefined) return fallback;
   throw new Error(`${name} is required`);
 }
@@ -652,16 +349,6 @@ function providerHealth(events: TelemetryEvent[]): DemoProviderHealth[] {
 }
 
 function json<T>(status: number, body: T): DemoHttpResponse<T> { return { status, headers: JSON_HEADERS, body }; }
-
-function mcpAuthResponse(error: unknown): DemoHttpResponse {
-  if (!(error instanceof McpAuthError)) return json(500, { error: "mcp_auth_misconfigured" });
-  const status = error.code === "insufficient_scope" ? 403 : error.code === "misconfigured" ? 500 : 401;
-  return {
-    status,
-    headers: status === 401 ? { ...JSON_HEADERS, "www-authenticate": "Bearer" } : JSON_HEADERS,
-    body: { error: error.code, message: error.message },
-  };
-}
 
 function adminAuthorized(app: DemoApp, request: DemoAppRouteRequest): boolean {
   if (app.mcpAuthMode === "none") return true;

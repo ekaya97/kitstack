@@ -1,6 +1,8 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { createDefineAgentVoiceLoop, createSignedSessionTokenCodec, type OpenAIRealtimeSocket, type VoiceWebSocket } from "../adapters/voice/realtime.js";
 import { createDebriefVoiceTools } from "../adapters/voice/tools.js";
+import { createBoundDebriefKit } from "../composition/kit.js";
+import { createDebriefKitServer } from "../composition/host.js";
 import { createDemoApp, type DemoApp } from "../composition/app/index.js";
 import { attachVoiceMediaBridge, handleLiveVoiceStart, type LiveVoiceHttpOptions } from "./http/voice.js";
 
@@ -207,7 +209,8 @@ describe("integrated voice persistence boundary", () => {
     const sessionToken = await codec.sign({ sessionId: prepared.sessionId, orgId: app.orgId, appId: app.appId });
     const twilio = new FakeSocket();
     const openai = new FakeSocket();
-    const voiceTools = createDebriefVoiceTools(app.debrief);
+    const kit = createBoundDebriefKit(app);
+    const voiceTools = createDebriefVoiceTools(kit, createDebriefKitServer(app, { transport: "http" }, kit));
     const bridge = attachVoiceMediaBridge({
       socket: twilio,
       verifier: codec,
@@ -228,7 +231,7 @@ describe("integrated voice persistence boundary", () => {
         telemetry: app!.telemetry,
         provider: "local-openai-realtime",
         model: "gpt-realtime",
-        tools: voiceTools.agent,
+        tools: voiceTools.agent(() => undefined),
         sendToolResult: provider.sendToolResult,
         onStop: async () => { await app!.debrief.awaitConfirmation(binding.sessionId); },
       }),

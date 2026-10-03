@@ -31,12 +31,12 @@ describe("demo MCP stdio adapter", () => {
 
     const listed = await adapter.handleRequest({ jsonrpc: "2.0", id: 3, method: "tools/list" });
     const tools = (listed as DemoMcpResponse).result as { tools: Array<{ name: string; inputSchema: { required?: string[] } }> };
-    expect(tools.tools.map((tool) => tool.name)).toEqual([
-      "prepare_debrief", "get_session", "get_debrief", "get_debrief_for_confirmation", "update_debrief_draft", "confirm_debrief_draft", "confirm_debrief", "teach_from_correction", "approve_memory", "publish_memory", "start_voice_call", "get_voice_status",
-    ]);
-    expect(tools.tools[0].inputSchema.required).toEqual([
-      "goal", "company", "contact_name", "location", "callback_at", "callback_timezone",
-    ]);
+    expect(tools.tools.map((tool) => tool.name)).toEqual(["kit", "kit_view"]);
+    const described = await adapter.handleRequest({
+      jsonrpc: "2.0", id: 4, method: "tools/call", params: { name: "kit", arguments: { id: "debrief", cmd: "prepare_debrief" } },
+    });
+    const description = ((described as DemoMcpResponse).result as any).content[0].text as string;
+    for (const field of ["goal", "company", "contact_name", "location", "callback_at", "callback_timezone"]) expect(description).toContain(field);
   });
 
   it("runs a debrief tool call through the shared demo services over stdio", async () => {
@@ -54,7 +54,7 @@ describe("demo MCP stdio adapter", () => {
       jsonrpc: "2.0",
       id: 4,
       method: "tools/call",
-      params: { name: "prepare_debrief", arguments: { goal: "Qualify the next opportunity" } },
+      params: { name: "kit", arguments: { id: "debrief", cmd: "prepare_rehearsal", params: { goal: "Qualify the next opportunity" } } },
     }) + "\n");
     input.end();
     await running;
@@ -73,11 +73,11 @@ describe("demo MCP stdio adapter", () => {
       id: 7,
       error: { code: -32601 },
     });
-    await expect(adapter.handleRequest({
-      jsonrpc: "2.0", id: 8, method: "tools/call", params: { name: "prepare_debrief", arguments: {} },
-    })).resolves.toMatchObject({
-      id: 8,
-      error: { code: -32603, message: "goal is required" },
+    // Tool argument errors come back as a tool error from dispatch validation.
+    const invalid = await adapter.handleRequest({
+      jsonrpc: "2.0", id: 8, method: "tools/call", params: { name: "kit", arguments: { id: "debrief", cmd: "prepare_debrief", params: {} } },
     });
+    expect(invalid).toMatchObject({ id: 8, result: { isError: true } });
+    expect(((invalid as DemoMcpResponse).result as any).content[0].text).toContain("goal");
   });
 });

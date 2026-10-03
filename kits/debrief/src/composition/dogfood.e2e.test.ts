@@ -1,6 +1,7 @@
 import { afterEach, describe, expect, it } from "vitest";
 import { createDemoApp, type DemoApp } from "./app/index.js";
 import { handleDemoAppRequest, type DemoAppRouteRequest } from "../transports/http/app.js";
+import { kitCall, mcpRequest } from "../transports/test-support.js";
 
 let app: DemoApp | undefined;
 
@@ -27,7 +28,7 @@ describe("T-0158 sales voice demo dogfood", () => {
 
     const first = await callTool<{ sessionId: string; state: string; instructionVersion: string; memoryIds: string[] }>(
       1,
-      "prepare_debrief",
+      "prepare_rehearsal",
       { goal: "Improve German sales qualification" },
     );
     expect(first.state).toBe("prepared");
@@ -123,7 +124,7 @@ describe("T-0158 sales voice demo dogfood", () => {
 
     const second = await callTool<{ sessionId: string; instructionVersion: string; memoryIds: string[] }>(
       8,
-      "prepare_debrief",
+      "prepare_rehearsal",
       { goal: "Improve German sales qualification" },
     );
     expect(second.sessionId).not.toBe(first.sessionId);
@@ -197,7 +198,7 @@ describe("T-0158 sales voice demo dogfood", () => {
 
     const repeat = await callTool<{ sessionId: string; memoryIds: string[] }>(
       12,
-      "prepare_debrief",
+      "prepare_rehearsal",
       { goal: "Improve German sales qualification" },
     );
     expect(repeat.sessionId).not.toBe(first.sessionId);
@@ -247,15 +248,13 @@ async function request(request: DemoAppRouteRequest): Promise<{ status: number; 
 }
 
 async function callTool<T>(id: number, name: string, args: Record<string, unknown>): Promise<T> {
-  const response = await request({
-    method: "POST",
-    path: "/mcp",
-    body: { id, method: "tools/call", params: { name, arguments: args } },
-  });
+  if (!app) throw new Error("Demo app is not initialized");
+  const response = await mcpRequest(app, { body: { id, method: "tools/call", params: kitCall(name, args) } });
   expect(response.status).toBe(200);
-  const result = response.body as { result?: { content?: Array<{ text?: string }> } };
+  const result = response.body as { result?: { content?: Array<{ text?: string }>; isError?: boolean } };
   const text = result.result?.content?.[0]?.text;
   if (!text) throw new Error(`MCP tool ${name} returned no text content`);
+  if (result.result?.isError) throw new Error(`MCP tool ${name} failed: ${text}`);
   return JSON.parse(text) as T;
 }
 

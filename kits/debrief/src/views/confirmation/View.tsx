@@ -1,7 +1,8 @@
 import { useEffect, useState } from "react";
 import { useKit } from "@kitstackco/sdk/view";
 import type { ViewComponentProps } from "@kitstackco/sdk";
-import { CONFIRMATION_FIELDS, type ConfirmationField, type ConfirmationViewData } from "./loader";
+import { CONFIRMATION_FIELDS, type ConfirmationField } from "./fields";
+import type { ConfirmationViewData } from "./loader";
 
 const labels: Record<ConfirmationField, string> = {
   outcome: "Outcome",

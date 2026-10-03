@@ -2,6 +2,7 @@ import { afterEach, describe, expect, it } from "vitest";
 import { createDemoApp, type DemoApp } from "../../composition/app/index.js";
 import type { LiveVoiceHttpOptions } from "./voice.js";
 import { handleDemoAppRequest, type DemoLiveVoiceRoute } from "./app.js";
+import { kitCall, kitView, mcpRequest } from "../test-support.js";
 
 type InjectedLiveVoiceConfig = DemoLiveVoiceRoute;
 
@@ -15,8 +16,8 @@ afterEach(async () => {
 describe("composed demo HTTP surface", () => {
   it("protects MCP with an app token when explicitly enabled", async () => {
     app = await createDemoApp({ url: ":memory:", mcpAuthMode: "app-token" });
-    const missing = await handleDemoAppRequest(app, {
-      method: "POST", path: "/mcp", body: { id: 1, method: "tools/list" },
+    const missing = await mcpRequest(app, {
+      body: { id: 1, method: "tools/list" },
     });
     expect(missing.status).toBe(401);
     expect(missing.headers["www-authenticate"]).toBe("Bearer");
@@ -34,41 +35,39 @@ describe("composed demo HTTP surface", () => {
     const appId = (registered.body as any).id as string;
     const issued = await handleDemoAppRequest(app, { method: "POST", path: `/v1/apps/${appId}/token`, headers: { "x-demo-admin-token": app.adminToken } });
     const token = (issued.body as any).token as string;
-    const authenticated = await handleDemoAppRequest(app, {
-      method: "POST", path: "/mcp",
+    const authenticated = await mcpRequest(app, {
+      
       headers: { authorization: `Bearer ${token}` },
       body: { id: 2, method: "tools/list" },
     });
     expect(authenticated.status).toBe(200);
-    expect((authenticated.body as any).result.tools).toHaveLength(13);
+    expect((authenticated.body as any).result.tools.map((tool: { name: string }) => tool.name)).toEqual(["kit", "kit_view"]);
   });
 
   it("serves the standard HTTP MCP lifecycle", async () => {
     app = await createDemoApp({ url: ":memory:" });
-    const initialized = await handleDemoAppRequest(app, {
-      method: "POST", path: "/mcp", body: { id: 1, method: "initialize" },
+    const initialized = await mcpRequest(app, {
+      body: { id: 1, method: "initialize" },
     });
     expect(initialized.body).toMatchObject({
       result: { protocolVersion: "2025-11-25", capabilities: { tools: {} } },
     });
-    const ping = await handleDemoAppRequest(app, {
-      method: "POST", path: "/mcp", body: { id: 2, method: "ping" },
+    const ping = await mcpRequest(app, {
+      body: { id: 2, method: "ping" },
     });
     expect(ping.body).toMatchObject({ id: 2, result: {} });
-    const notification = await handleDemoAppRequest(app, {
-      method: "POST", path: "/mcp", body: { jsonrpc: "2.0", method: "notifications/initialized" },
+    const notification = await mcpRequest(app, {
+      body: { jsonrpc: "2.0", method: "notifications/initialized" },
     });
-    expect(notification.status).toBe(204);
+    expect(notification.status).toBe(202);
   });
 
   it("generates a presenter-shaped customer prebrief with schedule and AI metadata", async () => {
     app = await createDemoApp({ url: ":memory:" });
     const callbackAt = new Date(Date.now() + 30 * 60 * 1000).toISOString();
-    const response = await handleDemoAppRequest(app, {
-      method: "POST", path: "/mcp", body: {
-        id: 11, method: "tools/call", params: {
-          name: "prepare_debrief",
-          arguments: {
+    const response = await mcpRequest(app, {
+      body: {
+        id: 11, method: "tools/call", params: kitCall("prepare_debrief", {
             goal: "Prepare the next sales conversation",
             company: " Acme   Corp ",
             contact_name: "Mr John Doe",
@@ -76,8 +75,7 @@ describe("composed demo HTTP surface", () => {
             callback_at: callbackAt,
             callback_timezone: "Europe/Berlin",
             buffer_minutes: 5,
-          },
-        },
+          }),
       },
     });
     expect(response.status).toBe(200);
@@ -112,50 +110,44 @@ describe("composed demo HTTP surface", () => {
     await app.debrief.publish(prepared.session_id, learned.memoryId);
     await app.debrief.confirmDebrief(prepared.session_id);
 
-    const secondResponse = await handleDemoAppRequest(app, {
-      method: "POST", path: "/mcp", body: {
-        id: 12, method: "tools/call", params: {
-          name: "prepare_debrief",
-          arguments: {
+    const secondResponse = await mcpRequest(app, {
+      body: {
+        id: 12, method: "tools/call", params: kitCall("prepare_debrief", {
             goal: "Prepare the next sales conversation",
             company: "Acme Corp",
             contact_name: "Mr John Doe",
             location: "Berlin Office",
             callback_at: new Date(Date.now() + 35 * 60 * 1000).toISOString(),
             callback_timezone: "Europe/Berlin",
-          },
-        },
+          }),
       },
     });
     const second = JSON.parse(((secondResponse.body as any).result.content[0].text)) as Record<string, any>;
     expect(second.customer_id).toBe(prepared.customer_id);
-    expect(second.prebrief_sections.last_interaction).toBe("Previous debrief was confirmed.");
+    expect(second.prebrief_sections.last_interaction).toMatch(/^Debrief confirmed on \d{4}-\d{2}-\d{2}/);
     expect(second.prebrief_sections.open_items).toContain("Approved memory: Ask about the implementation timeline.");
   });
 
   it("runs the confirmation tools through HTTP and returns the confirmation View payload", async () => {
     app = await createDemoApp({ url: ":memory:" });
-    const preparedResponse = await handleDemoAppRequest(app, {
-      method: "POST", path: "/mcp", body: {
-        id: 21, method: "tools/call", params: {
-          name: "prepare_debrief",
-          arguments: {
+    const preparedResponse = await mcpRequest(app, {
+      body: {
+        id: 21, method: "tools/call", params: kitCall("prepare_debrief", {
             goal: "Confirm the opportunity",
             company: "Acme Corp",
             contact_name: "Mr John Doe",
             location: "Köln Café",
             callback_at: new Date(Date.now() + 20 * 60 * 1000).toISOString(),
             callback_timezone: "Europe/Berlin",
-          },
-        },
+          }),
       },
     });
     const prepared = JSON.parse(((preparedResponse.body as any).result.content[0].text)) as Record<string, string>;
     await app.voice.start(prepared.session_id);
     await app.voice.advance(prepared.session_id);
 
-    const loaded = await handleDemoAppRequest(app, {
-      method: "POST", path: "/mcp", body: { id: 22, method: "tools/call", params: { name: "get_debrief_for_confirmation", arguments: { session_id: prepared.session_id } } },
+    const loaded = await mcpRequest(app, {
+      body: { id: 22, method: "tools/call", params: kitCall("get_debrief_for_confirmation", { session_id: prepared.session_id }) },
     });
     expect(JSON.parse(((loaded.body as any).result.content[0].text))).toMatchObject({
       session_id: prepared.session_id,
@@ -163,33 +155,27 @@ describe("composed demo HTTP surface", () => {
       kit_view: { view: "confirmation" },
     });
 
-    const updated = await handleDemoAppRequest(app, {
-      method: "POST", path: "/mcp", body: {
-        id: 23, method: "tools/call", params: {
-          name: "update_debrief_draft",
-          arguments: { session_id: prepared.session_id, next_step: "Send proposal", discovered_address: "Neue Straße 1" },
-        },
+    const updated = await mcpRequest(app, {
+      body: {
+        id: 23, method: "tools/call", params: kitCall("update_debrief_draft", { session_id: prepared.session_id, next_step: "Send proposal", discovered_address: "Neue Straße 1" }),
       },
     });
     expect(JSON.parse(((updated.body as any).result.content[0].text))).toMatchObject({ draft: { fields: { next_step: "Send proposal" } } });
 
-    const confirmed = await handleDemoAppRequest(app, {
-      method: "POST", path: "/mcp", body: { id: 24, method: "tools/call", params: { name: "confirm_debrief_draft", arguments: { session_id: prepared.session_id } } },
+    const confirmed = await mcpRequest(app, {
+      body: { id: 24, method: "tools/call", params: kitCall("confirm_debrief_draft", { session_id: prepared.session_id }) },
     });
     const result = JSON.parse(((confirmed.body as any).result.content[0].text)) as Record<string, string>;
     expect(result).toMatchObject({ state: "confirmed", confirmed_event_id: expect.any(String), address_event_id: expect.any(String) });
 
-    const view = await handleDemoAppRequest(app, {
-      method: "POST", path: "/mcp", body: { id: 25, method: "tools/call", params: { name: "kit_view", arguments: { id: "debrief", view: "confirmation" } } },
+    const view = await mcpRequest(app, {
+      body: { id: 25, method: "tools/call", params: kitView("confirmation") },
     });
-    expect(JSON.parse(((view.body as any).result.content[0].text))).toMatchObject({ data: { state: "confirmed", confirmed_event_id: result.confirmed_event_id } });
+    expect(JSON.parse(((view.body as any).result.content[0].text))).toMatchObject({ data: { state: "confirmed", confirmedEventId: result.confirmed_event_id } });
 
-    const timeline = await handleDemoAppRequest(app, {
-      method: "POST", path: "/mcp", body: {
-        id: 26, method: "tools/call", params: {
-          name: "kit_view",
-          arguments: { id: "debrief", view: "customer-timeline", session_id: prepared.session_id, customer_id: prepared.customer_id },
-        },
+    const timeline = await mcpRequest(app, {
+      body: {
+        id: 26, method: "tools/call", params: kitView("customer-timeline", { session_id: prepared.session_id, customer_id: prepared.customer_id }),
       },
     });
     const timelineData = JSON.parse(((timeline.body as any).result.content[0].text)).data;
@@ -203,11 +189,9 @@ describe("composed demo HTTP surface", () => {
     const other = await app.debrief.prepareDebrief({
       goal: "Other customer", company: "Globex", contactName: "Jane Doe", location: "Berlin Office",
     });
-    const isolated = await handleDemoAppRequest(app, {
-      method: "POST", path: "/mcp", body: {
-        id: 27, method: "tools/call", params: {
-          name: "kit_view", arguments: { id: "debrief", view: "customer-timeline", session_id: other.sessionId, customer_id: other.customerId },
-        },
+    const isolated = await mcpRequest(app, {
+      body: {
+        id: 27, method: "tools/call", params: kitView("customer-timeline", { session_id: other.sessionId, customer_id: other.customerId }),
       },
     });
     const isolatedData = JSON.parse(((isolated.body as any).result.content[0].text)).data;
@@ -220,40 +204,41 @@ describe("composed demo HTTP surface", () => {
 
   it("supports Claude tool discovery and a two-run route dogfood flow", async () => {
     app = await createDemoApp({ url: ":memory:" });
-    const list = await handleDemoAppRequest(app, {
-      method: "POST", path: "/mcp", body: { id: 1, method: "tools/list" },
+    const list = await mcpRequest(app, {
+      body: { id: 1, method: "tools/list" },
     });
     const tools = (list.body as { result: { tools: Array<{ name: string }> } }).result.tools;
-    expect(tools.map((tool) => tool.name)).toEqual([
-      "prepare_debrief", "get_session", "get_debrief", "get_debrief_for_confirmation", "update_debrief_draft", "confirm_debrief_draft", "confirm_debrief", "teach_from_correction", "approve_memory", "publish_memory", "start_voice_call", "get_voice_status",
-      "kit_view",
-    ]);
+    // KitStack exposes kits through `kit` and `kit_view`; the debrief commands are discovered via kit(id).
+    expect(tools.map((tool) => tool.name)).toEqual(["kit", "kit_view"]);
+    const discovered = await mcpRequest(app, {
+      body: { id: 10, method: "tools/call", params: { name: "kit", arguments: { id: "debrief" } } },
+    });
+    const discovery = (discovered.body as any).result.content[0].text as string;
+    for (const command of [
+      "prepare_debrief", "prepare_rehearsal", "get_session", "get_debrief", "get_debrief_draft", "get_debrief_for_confirmation", "update_debrief_draft", "confirm_debrief_draft", "confirm_debrief", "teach_from_correction", "approve_memory", "publish_memory", "start_voice_call", "get_voice_status",
+    ]) expect(discovery).toContain(command);
 
-    const prepared = await handleDemoAppRequest(app, {
-      method: "POST", path: "/mcp", body: {
-        id: 2, method: "tools/call", params: { name: "prepare_debrief", arguments: { goal: "Improve qualification" } },
+    const prepared = await mcpRequest(app, {
+      body: {
+        id: 2, method: "tools/call", params: kitCall("prepare_rehearsal", { goal: "Improve qualification" }),
       },
     });
     const first = JSON.parse(((prepared.body as any).result.content[0].text)) as { sessionId: string };
     await handleDemoAppRequest(app, { method: "POST", path: "/t/voice/start", body: { session_id: first.sessionId } });
     await handleDemoAppRequest(app, { method: "POST", path: "/t/voice/status", body: { session_id: first.sessionId } });
     await app.voice.complete(first.sessionId, "partial");
-    const taught = await handleDemoAppRequest(app, {
-      method: "POST", path: "/mcp", body: {
-        id: 3, method: "tools/call", params: {
-          name: "teach_from_correction", arguments: { session_id: first.sessionId, correction: "Ask about timeline before price." },
-        },
+    const taught = await mcpRequest(app, {
+      body: {
+        id: 3, method: "tools/call", params: kitCall("teach_from_correction", { session_id: first.sessionId, correction: "Ask about timeline before price." }),
       },
     });
     const memoryId = JSON.parse(((taught.body as any).result.content[0].text)).memoryId as string;
     await app.debrief.approve(first.sessionId, memoryId);
     await app.debrief.publish(first.sessionId, memoryId);
 
-    const secondResponse = await handleDemoAppRequest(app, {
-      method: "POST", path: "/mcp", body: {
-        id: 4, method: "tools/call", params: {
-          name: "prepare_debrief", arguments: { goal: "Improve qualification" },
-        },
+    const secondResponse = await mcpRequest(app, {
+      body: {
+        id: 4, method: "tools/call", params: kitCall("prepare_rehearsal", { goal: "Improve qualification" }),
       },
     });
     const secondPrepared = JSON.parse(((secondResponse.body as any).result.content[0].text)) as {
@@ -267,11 +252,9 @@ describe("composed demo HTTP surface", () => {
     await handleDemoAppRequest(app, {
       method: "POST", path: "/t/voice/status", body: { session_id: secondPrepared.sessionId },
     });
-    const confirmed = await handleDemoAppRequest(app, {
-      method: "POST", path: "/mcp", body: {
-        id: 5, method: "tools/call", params: {
-          name: "confirm_debrief", arguments: { session_id: secondPrepared.sessionId, outcome: "confirmed" },
-        },
+    const confirmed = await mcpRequest(app, {
+      body: {
+        id: 5, method: "tools/call", params: kitCall("confirm_debrief", { session_id: secondPrepared.sessionId, outcome: "confirmed" }),
       },
     });
     expect(JSON.parse(((confirmed.body as any).result.content[0].text)).status).toBe("confirmed");

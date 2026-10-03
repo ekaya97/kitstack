@@ -1,14 +1,8 @@
 import { defineLoader, type KitContext } from "@kitstackco/sdk";
 
-export const CONFIRMATION_FIELDS = [
-  "outcome",
-  "next_step",
-  "customer_update",
-  "discovered_address",
-  "follow_up_date",
-] as const;
+import { CONFIRMATION_FIELDS, type ConfirmationField } from "./fields";
 
-export type ConfirmationField = (typeof CONFIRMATION_FIELDS)[number];
+export { CONFIRMATION_FIELDS, type ConfirmationField } from "./fields";
 
 export interface ConfirmationDraftSnapshot {
   draft_id: string;

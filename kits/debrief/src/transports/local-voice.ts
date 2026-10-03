@@ -11,7 +11,8 @@ import {
   type SessionBinding,
   type VoiceWebSocket,
 } from "../adapters/voice/realtime.js";
-import { createDebriefVoiceTools, DEBRIEF_VOICE_REALTIME_TOOLS } from "../adapters/voice/tools.js";
+import type { KitDefinition, KitToolExecutor } from "@kitstackco/sdk";
+import { createDebriefVoiceTools } from "../adapters/voice/tools.js";
 
 /**
  * Local microphone transport for testing the real voice agent without a
@@ -19,7 +20,7 @@ import { createDebriefVoiceTools, DEBRIEF_VOICE_REALTIME_TOOLS } from "../adapte
  * Twilio, using G.711 μ-law at 8 kHz, so defineAgent and persistence exercise
  * the same path as the deployed call.
  */
-export async function composeLocalVoiceRoute(app: DemoApp): Promise<DemoLocalVoiceRoute | undefined> {
+export async function composeLocalVoiceRoute(app: DemoApp, kit: KitDefinition, executor: KitToolExecutor): Promise<DemoLocalVoiceRoute | undefined> {
   const apiKey = process.env.OPENAI_API_KEY?.trim();
   if (!apiKey) return undefined;
 
@@ -32,7 +33,7 @@ export async function composeLocalVoiceRoute(app: DemoApp): Promise<DemoLocalVoi
     pluginId: "channel:voice",
   });
   const model = process.env.OPENAI_REALTIME_MODEL?.trim() || "gpt-realtime";
-  const voiceTools = createDebriefVoiceTools(app.debrief);
+  const voiceTools = createDebriefVoiceTools(kit, executor);
   const tokenCodec = createSignedSessionTokenCodec(app.apps.secret);
   const openai = {
     socketFactory: createOpenAIRealtimeSocketFactory(),
@@ -41,12 +42,14 @@ export async function composeLocalVoiceRoute(app: DemoApp): Promise<DemoLocalVoi
     model,
     instructions: instructionsContent,
     voice: process.env.OPENAI_REALTIME_VOICE?.trim() || "marin",
-    tools: DEBRIEF_VOICE_REALTIME_TOOLS,
+    ...(optionalNumber(process.env.OPENAI_REALTIME_VAD_THRESHOLD) !== undefined ? { vadThreshold: optionalNumber(process.env.OPENAI_REALTIME_VAD_THRESHOLD) } : {}),
+    tools: voiceTools.realtime,
   };
 
   const voiceContextFor = async (binding: SessionBinding) => {
     const session = app.debrief.getSession(binding.sessionId);
     const customer = session.customerId ? await app.debrief.getCustomer(session.customerId) : null;
+    const history = session.customerId ? await app.debrief.recentDebriefSummaries(session.customerId) : [];
     const records = await app.memory.readRelevant({
       orgId: session.orgId,
       kitId: session.kitId,
@@ -67,9 +70,11 @@ export async function composeLocalVoiceRoute(app: DemoApp): Promise<DemoLocalVoi
       "\nPrepared debrief context:",
       `Goal: ${session.goal}`,
       customer ? `Customer: ${customer.company}; contact ${customer.contactName}; location ${customer.location}` : "Customer: unavailable.",
+      history.length ? `Previous confirmed debriefs with this customer (newest first). Refer to them and ask how the agreed next steps went:\n${history.map((entry) => `- ${entry}`).join("\n")}` : "Previous confirmed debriefs with this customer: none.",
       selected.length ? `Approved workflow feedback:\n${selected.map((record) => `- ${record.correction}`).join("\n")}` : "Approved workflow feedback: none.",
       "Use this context during the call. Ask one useful question at a time and do not invent customer details.",
       "When the caller explicitly states or agrees an outcome, next step, customer update, address, or follow-up date, call update_debrief_draft with those facts. Never call a confirmation or publish action; the operator confirms the draft after the call.",
+      "When the debrief goals are covered, briefly summarise the saved facts, say goodbye, then call end_call. Also call end_call if the caller asks to end the call.",
     ].join("\n");
     return {
       content,
@@ -119,6 +124,7 @@ export async function composeLocalVoiceRoute(app: DemoApp): Promise<DemoLocalVoi
   };
 
   const bridge = (socket: VoiceWebSocket) => attachVoiceMediaBridge({
+      bargeInMs: optionalNumber(process.env.KITSTACK_VOICE_BARGE_IN_MS),
     socket,
     verifier: tokenCodec,
     openai,
@@ -128,7 +134,7 @@ export async function composeLocalVoiceRoute(app: DemoApp): Promise<DemoLocalVoi
     telemetry: app.telemetry,
     instructionsFor: async (binding) => (await voiceContextFor(binding)).content,
     onCallCompleted: complete,
-    agent: async (binding, provider) => {
+    agent: async (binding, provider, call) => {
       const context = await voiceContextFor(binding);
       return createDefineAgentVoiceLoop({
         sessionId: binding.sessionId,
@@ -141,12 +147,12 @@ export async function composeLocalVoiceRoute(app: DemoApp): Promise<DemoLocalVoi
         routingReason: modelRoute.reason,
         callId: binding.callSid ?? null,
         memoryIds: context.memoryIds,
-        tools: voiceTools.agent,
+        tools: voiceTools.agent(() => call.hangup()),
         sendToolResult: provider.sendToolResult,
         onStop: async () => { await app.debrief.awaitConfirmation(binding.sessionId); },
         onError: async (error) => {
           console.error(`[kitstack local voice] ${error.message}`);
-          await app.debrief.markFailed(binding.sessionId, error);
+          await app.debrief.endCallAfterInterruption(binding.sessionId, error);
         },
       });
     },
@@ -179,3 +185,9 @@ function play(payload){const binary=atob(payload),buffer=audio.createBuffer(1,bi
 async function stopCall(){if(ws){ws.send(JSON.stringify({event:'stop',streamSid:'local-stream'}));ws.close();ws=undefined}if(processor)processor.disconnect();if(source)source.disconnect();if(gain)gain.disconnect();if(stream)stream.getTracks().forEach(t=>t.stop());if(audio)await audio.close();start.disabled=false;stop.disabled=true;log('Call stopped. Use the Claude debrief tools to review and confirm it.')}
 start.onclick=async()=>{try{if(!session.value.trim())throw Error('Paste a prepared session ID first');const response=await fetch('/t/voice/local/start',{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify({session_id:session.value.trim(),confirmation:true})});const result=await response.json();if(!response.ok)throw Error(result.message||result.error||'Could not start local call');audio=new AudioContext();stream=await navigator.mediaDevices.getUserMedia({audio:true});ws=new WebSocket((location.protocol==='https:'?'wss://':'ws://')+location.host+result.mediaPath);ws.onopen=()=>ws.send(JSON.stringify({event:'start',streamSid:'local-stream',start:{streamSid:'local-stream',callSid:result.callId,customParameters:{kitstack_session_token:result.sessionToken}}}));ws.onmessage=(event)=>{const message=JSON.parse(event.data);if(message.event==='media')play(message.media.payload);if(message.event==='clear')nextOutput=audio.currentTime};ws.onerror=()=>log('WebSocket error. Check the local server and OPENAI_API_KEY.');ws.onclose=()=>{start.disabled=false;stop.disabled=true};source=audio.createMediaStreamSource(stream);processor=audio.createScriptProcessor(4096,1,1);gain=audio.createGain();gain.gain.value=0;processor.onaudioprocess=(event)=>{if(ws&&ws.readyState===1){const pcm=downsample(event.inputBuffer.getChannelData(0),event.inputBuffer.sampleRate,8000);ws.send(JSON.stringify({event:'media',streamSid:'local-stream',media:{payload:encode(pcm)}}))}};source.connect(processor);processor.connect(gain);gain.connect(audio.destination);start.disabled=true;stop.disabled=false;log('Connected. Speak into your microphone.');}catch(error){log(error.message);await stopCall()}};stop.onclick=stopCall;
 </script></body></html>`;
+
+function optionalNumber(value: string | undefined): number | undefined {
+  if (!value?.trim()) return undefined;
+  const parsed = Number(value);
+  return Number.isFinite(parsed) ? parsed : undefined;
+}
