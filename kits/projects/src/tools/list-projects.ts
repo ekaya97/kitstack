@@ -1,5 +1,5 @@
 import { defineTool, kit } from "@kitstackco/sdk";
-import { withToolMetadata } from "../tool-metadata";
+import { withToolMetadata } from "@kitstackco/sdk";
 import { z } from "zod";
 import { eq, like, and, isNull, desc, sql } from "drizzle-orm";
 import type { SQL } from "drizzle-orm";

@@ -1,7 +1,7 @@
 import { z } from "zod";
 import { eq } from "drizzle-orm";
 import { defineTool, kit } from "@kitstackco/sdk";
-import { withToolMetadata } from "../tool-metadata";
+import { withToolMetadata } from "@kitstackco/sdk";
 import { customAlphabet } from "nanoid";
 import { basketLines, orders } from "../schema";
 import { buildBasket, eur } from "../domain/basket";

@@ -1,6 +1,6 @@
 import { z } from "zod";
 import { defineTool, kit, type KitContext } from "@kitstackco/sdk";
-import { withToolMetadata } from "../tool-metadata";
+import { withToolMetadata } from "@kitstackco/sdk";
 import { findTrigger, type TriggerView } from "../domain/read-model.js";
 
 const args = z.object({

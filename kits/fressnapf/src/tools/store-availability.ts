@@ -1,6 +1,6 @@
 import { z } from "zod";
 import { defineTool, kit } from "@kitstackco/sdk";
-import { withToolMetadata } from "../tool-metadata";
+import { withToolMetadata } from "@kitstackco/sdk";
 import { MOCK_STORE, PICKUP_WINDOW } from "../domain/store";
 
 export const storeAvailability = withToolMetadata(defineTool({
