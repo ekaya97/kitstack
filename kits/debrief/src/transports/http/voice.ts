@@ -170,6 +170,7 @@ export interface VoiceMediaBridgeOptions {
   instructionsFor?: (binding: SessionBinding) => Promise<string>;
   onCallCompleted?: (call: { sessionId: string; orgId: string; appId: string | null; callId: string | null; reason: string; occurredAt: string; provider: string }) => Promise<void>;
   stopReason?: string;
+  bargeInMs?: number;
   telemetry: Pick<TelemetryStore, "append">;
   agent?: Parameters<typeof bridgeTwilioToOpenAI>[0]["agent"];
 }
@@ -178,7 +179,7 @@ export interface VoiceMediaBridgeOptions {
 export function attachVoiceMediaBridge(options: VoiceMediaBridgeOptions): TwilioOpenAIBridge {
   return bridgeTwilioToOpenAI({
     twilioSocket: options.socket, signature: options.signature, verifier: options.verifier,
-    openai: options.openai, provider: options.provider, routingReason: options.routingReason, telemetry: options.telemetry, agent: options.agent, instructionsFor: options.instructionsFor, stopReason: options.stopReason,
+    openai: options.openai, provider: options.provider, routingReason: options.routingReason, telemetry: options.telemetry, agent: options.agent, instructionsFor: options.instructionsFor, stopReason: options.stopReason, bargeInMs: options.bargeInMs,
     onCallCompleted: options.onCallCompleted,
   });
 }

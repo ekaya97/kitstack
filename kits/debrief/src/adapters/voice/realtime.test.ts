@@ -208,6 +208,7 @@ describe("Twilio and OpenAI Realtime boundary", () => {
       openai: { socketFactory: { connect: vi.fn(async () => openai) }, url: "wss://openai.example/realtime", apiKey: "server-key", model: "gpt-4o-realtime-preview" },
       verifier: { verify: vi.fn(async (token: string) => { expect(token).toBe("signed-session"); return { sessionId: "session-1", orgId: "org-demo", appId: "app-sales" }; }) },
       bindings: createSessionBindingStore(), telemetry: store, agent, routingReason: "declarative-task-class", onCallCompleted, now: () => "2026-01-01T00:00:00.000Z", createId: (() => { let i = 0; return () => `event-${++i}`; })(),
+      bargeInMs: 0,
     });
     twilio.emit("message", JSON.stringify({ event: "start", streamSid: "MZ123", start: { streamSid: "MZ123", callSid: "CA123", customParameters: { kitstack_session_token: "signed-session" } } }));
     await expect(bridge.binding).resolves.toMatchObject({ streamSid: "MZ123", sessionId: "session-1" });
@@ -220,8 +221,10 @@ describe("Twilio and OpenAI Realtime boundary", () => {
     await new Promise((resolve) => setTimeout(resolve, 0));
     expect(JSON.parse(twilio.sent.at(-1)!)).toEqual({ event: "media", streamSid: "MZ123", media: { payload: "BAUG" } });
 
+    // Sustained speech while the agent is responding is a real barge-in.
+    openai.emit("message", JSON.stringify({ type: "response.created" }));
     openai.emit("message", JSON.stringify({ type: "input_audio_buffer.speech_started" }));
-    await new Promise((resolve) => setTimeout(resolve, 0));
+    await new Promise((resolve) => setTimeout(resolve, 10));
     expect(openai.sent.some((value) => JSON.parse(value).type === "response.cancel")).toBe(true);
     expect(JSON.parse(twilio.sent.at(-1)!)).toEqual({ event: "clear", streamSid: "MZ123" });
     expect(agent.onInterruption).toHaveBeenCalledOnce();

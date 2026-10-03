@@ -301,12 +301,16 @@ export interface RealtimeSessionOptions {
   tools?: readonly RealtimeFunctionTool[];
   /** Let the bridge attach event handlers before the initial greeting starts. */
   deferInitialResponse?: boolean;
+  /** Server VAD activation threshold (0-1); higher ignores more background noise. */
+  vadThreshold?: number;
 }
 
 export interface OpenAIRealtimeSession {
   socket: OpenAIRealtimeSocket;
   sendAudio(payload: string): void;
   cancelResponse(): void;
+  /** Drop a committed caller turn (noise or a backchannel) from the conversation. */
+  deleteItem(itemId: string): void;
   sendToolResult(callId: string, output: unknown): void;
   startResponse(): void;
   close(): void;
@@ -324,7 +328,18 @@ export async function createOpenAIRealtimeSession(options: RealtimeSessionOption
       audio: {
         input: {
           format: { type: "audio/pcmu" },
-          turn_detection: { type: "server_vad", create_response: true, interrupt_response: true },
+          // Phone audio picks up line noise and the agent's own echo. The
+          // bridge decides when speech is a real turn or barge-in, so the
+          // model neither answers nor cancels on its own.
+          noise_reduction: { type: "near_field" },
+          turn_detection: {
+            type: "server_vad",
+            threshold: options.vadThreshold ?? 0.6,
+            prefix_padding_ms: 300,
+            silence_duration_ms: 500,
+            create_response: false,
+            interrupt_response: false,
+          },
         },
         output: { format: { type: "audio/pcmu" }, ...(options.voice ? { voice: options.voice } : {}) },
       },
@@ -341,6 +356,7 @@ export async function createOpenAIRealtimeSession(options: RealtimeSessionOption
     socket,
     sendAudio(payload) { socket.send(JSON.stringify({ type: "input_audio_buffer.append", audio: payload })); },
     cancelResponse() { socket.send(JSON.stringify({ type: "response.cancel" })); },
+    deleteItem(itemId) { socket.send(JSON.stringify({ type: "conversation.item.delete", item_id: itemId })); },
     sendToolResult(callId, output) {
       socket.send(JSON.stringify({
         type: "conversation.item.create",
@@ -686,7 +702,9 @@ export interface RealtimeToolCallEvent {
 
 export type TranslatedRealtimeEvent =
   | { kind: "audio_delta"; payload: string }
-  | { kind: "interruption" }
+  | { kind: "speech_started" }
+  | { kind: "speech_stopped" }
+  | { kind: "speech_committed"; itemId?: string }
   | { kind: "turn_started" }
   | { kind: "turn_completed"; usage: { inputTokens?: number; outputTokens?: number } }
   | { kind: "tool_call"; callId: string; name: string; args: unknown }
@@ -700,7 +718,9 @@ export function translateOpenAIRealtimeEvent(raw: unknown): TranslatedRealtimeEv
   const event = message as Record<string, unknown>;
   const type = typeof event.type === "string" ? event.type : "";
   if (type === "response.created") return { kind: "turn_started" };
-  if (type === "input_audio_buffer.speech_started") return { kind: "interruption" };
+  if (type === "input_audio_buffer.speech_started") return { kind: "speech_started" };
+  if (type === "input_audio_buffer.speech_stopped") return { kind: "speech_stopped" };
+  if (type === "input_audio_buffer.committed") return { kind: "speech_committed", ...(typeof event.item_id === "string" ? { itemId: event.item_id } : {}) };
   if (type === "response.audio.delta" || type === "response.output_audio.delta") {
     if (typeof event.delta !== "string") throw new Error("OpenAI audio delta is missing");
     return { kind: "audio_delta", payload: event.delta };
@@ -777,12 +797,19 @@ export interface TwilioOpenAIBridgeOptions {
   bindings?: SessionBindingStore;
   signature?: { validator: TwilioSignatureValidator; url: string; params: Readonly<Record<string, string | string[] | undefined>>; value: string | undefined };
   telemetry: Pick<TelemetryStore, "append">;
-  agent?: VoiceAgentLoopAdapter | ((binding: SessionBinding, provider: OpenAIRealtimeSession) => VoiceAgentLoopAdapter | Promise<VoiceAgentLoopAdapter>);
+  agent?: VoiceAgentLoopAdapter | ((binding: SessionBinding, provider: OpenAIRealtimeSession, call: VoiceCallControl) => VoiceAgentLoopAdapter | Promise<VoiceAgentLoopAdapter>);
   /** Resolve prepared-session context before opening the provider model session. */
   instructionsFor?: (binding: SessionBinding) => Promise<string>;
   /** Finalize metadata-only call state once, after the provider stream stops. */
   onCallCompleted?: (call: { sessionId: string; orgId: string; appId: string | null; callId: string | null; reason: string; occurredAt: string; provider: string }) => Promise<void>;
   stopReason?: string;
+  /** Upper bound between an agent hangup request and the call ending. */
+  hangupTimeoutMs?: number;
+  /**
+   * How long the caller must keep talking over the agent before it stops.
+   * Shorter sounds (noise, echo, "mhm") are ignored while the agent speaks.
+   */
+  bargeInMs?: number;
   now?: () => string;
   createId?: () => string;
   estimateCostUsd?: (usage: { inputTokens?: number; outputTokens?: number }) => number | null;
@@ -794,6 +821,22 @@ export interface TwilioOpenAIBridge {
 }
 
 /** Bridges Twilio JSON media events and OpenAI Realtime JSON events without persisting bodies. */
+/** Call controls the bridge hands to the agent loop for its tools. */
+export interface VoiceCallControl {
+  /**
+   * End the call once the agent's next response has finished playing. The
+   * provider is told via a Twilio mark; a timeout ends the call if the mark
+   * is never echoed (for example, by a local browser stream).
+   */
+  hangup(): void;
+}
+
+const HANGUP_MARK = "kitstack-hangup";
+const DEFAULT_BARGE_IN_MS = 600;
+// μ-law at 8 kHz: one byte per sample, eight samples per millisecond.
+const PCMU_BYTES_PER_MS = 8;
+const DEFAULT_HANGUP_TIMEOUT_MS = 15_000;
+
 export function bridgeTwilioToOpenAI(options: TwilioOpenAIBridgeOptions): TwilioOpenAIBridge {
   if (options.signature && !options.signature.validator.validate({ url: options.signature.url, params: options.signature.params, signature: options.signature.value })) {
     options.twilioSocket.close(1008, "invalid Twilio signature");
@@ -817,10 +860,47 @@ export function bridgeTwilioToOpenAI(options: TwilioOpenAIBridgeOptions): Twilio
   let openaiQueue = Promise.resolve();
   const handledProviderToolCalls = new Set<string>();
   let agent: VoiceAgentLoopAdapter | undefined;
+  let responsesStarted = 0;
+  let responseActive = false;
+  // When the audio already sent to the caller finishes playing (wall clock).
+  let playbackEndsAt = 0;
+  // The caller turn currently being heard: `bargeIn` while the agent speaks.
+  let callerTurn: { bargeIn: boolean; confirmed: boolean; timer?: ReturnType<typeof setTimeout> } | undefined;
+  let hangupAfterResponse: number | undefined;
+  // Name of the mark whose echo ends the call; cleared when an interruption
+  // makes Twilio echo pending marks without playing the queued audio.
+  let hangupMark: string | undefined;
+  let hangupMarks = 0;
+  let hangupTimer: ReturnType<typeof setTimeout> | undefined;
+
+  const endCall = async (reason: string) => {
+    if (hangupTimer) clearTimeout(hangupTimer);
+    await finish(reason);
+    // <Connect><Stream> is the last TwiML verb, so closing the stream ends the call.
+    options.twilioSocket.close(1000, "call ended by agent");
+  };
+  const sendHangupMark = () => {
+    if (hangupMark || finished) return;
+    hangupMarks += 1;
+    hangupMark = `${HANGUP_MARK}-${hangupMarks}`;
+    options.twilioSocket.send(JSON.stringify({ event: "mark", streamSid, mark: { name: hangupMark } }));
+  };
+  const callControl: VoiceCallControl = {
+    hangup() {
+      if (hangupAfterResponse !== undefined || finished) return;
+      // Wait for a response that starts after this request (the goodbye that
+      // follows the tool result), so the caller hears it before the line drops.
+      hangupAfterResponse = responsesStarted;
+      hangupTimer = setTimeout(() => { void endCall("agent_hangup_timeout"); }, options.hangupTimeoutMs ?? DEFAULT_HANGUP_TIMEOUT_MS);
+    },
+  };
 
   const finish = async (reason: string, error?: Error) => {
     if (finished) return;
     finished = true;
+    if (hangupTimer) clearTimeout(hangupTimer);
+    if (callerTurn?.timer) clearTimeout(callerTurn.timer);
+    if (error) console.error(`[voice] media stream ended with error (${reason}): ${error.message}`);
     const current = streamSid ? bindings.get(streamSid) : undefined;
     if (streamSid) bindings.remove(streamSid);
     realtime?.close();
@@ -846,6 +926,9 @@ export function bridgeTwilioToOpenAI(options: TwilioOpenAIBridgeOptions): Twilio
       traceId: current?.sessionId ?? streamSid ?? null, channel: "voice", kitId: "kit:debrief", type: "voice.call",
       operation: error ? "media_stream_error" : "media_stream_stopped", provider, callId: current?.callSid ?? null, outcome: error ? "error" : "success",
     });
+    // Without a working model the caller would hear silence; end the call.
+    // Closing an already-closed provider stream is a no-op.
+    if (error) options.twilioSocket.close(1011, "call ended after provider error");
     resolveDone();
   };
 
@@ -864,11 +947,12 @@ export function bridgeTwilioToOpenAI(options: TwilioOpenAIBridgeOptions): Twilio
       bindings.bind(sessionBinding);
       const instructions = await options.instructionsFor?.(sessionBinding);
       realtime = await createOpenAIRealtimeSession({ ...options.openai, deferInitialResponse: true, ...(instructions ? { instructions } : {}) });
-      agent = typeof options.agent === "function" ? await options.agent(sessionBinding, realtime) : options.agent;
+      agent = typeof options.agent === "function" ? await options.agent(sessionBinding, realtime, callControl) : options.agent;
       realtime.socket.on("message", (data: unknown) => {
         openaiQueue = openaiQueue.then(() => handleOpenAI(data)).catch((error) => finish("openai_error", asError(error)));
       });
       realtime.socket.on("error", (error: Error) => { void finish("openai_error", error); });
+      realtime.socket.on("close", () => { void finish("openai_close", new Error("OpenAI Realtime connection closed")); });
       await appendVoiceTelemetry(options.telemetry, {
         id: id(), timestamp: now(), orgId: claims.orgId, appId: claims.appId, sessionId: claims.sessionId,
         traceId: claims.sessionId, channel: "voice", kitId: "kit:debrief", type: "voice.call",
@@ -890,8 +974,37 @@ export function bridgeTwilioToOpenAI(options: TwilioOpenAIBridgeOptions): Twilio
       await finish(options.stopReason ?? "twilio_stop");
       return;
     }
-    if (event.event === "mark") return;
+    if (event.event === "mark") {
+      const mark = event.mark as Record<string, unknown> | undefined;
+      // Twilio echoes a mark once all audio sent before it has played.
+      if (hangupMark && mark?.name === hangupMark) await endCall("agent_hangup");
+      return;
+    }
+    // Twilio always sends `connected` before `start`; treating it as fatal
+    // would finish the bridge before the call begins and ignore the real stop.
+    if (event.event === "connected" || event.event === "dtmf") return;
     throw new Error(`Unsupported Twilio media event: ${String(event.event)}`);
+  };
+
+  const interruptAgent = async (current: SessionBinding | undefined) => {
+    if (responseActive) realtime?.cancelResponse();
+    playbackEndsAt = 0;
+    if (hangupAfterResponse !== undefined) {
+      // `clear` makes Twilio echo pending marks at once, so the old mark no
+      // longer means "goodbye played". Hang up after the agent's reply instead.
+      hangupMark = undefined;
+      hangupAfterResponse = responsesStarted;
+      if (hangupTimer) clearTimeout(hangupTimer);
+      hangupTimer = setTimeout(() => { void endCall("agent_hangup_timeout"); }, options.hangupTimeoutMs ?? DEFAULT_HANGUP_TIMEOUT_MS);
+    }
+    options.twilioSocket.send(JSON.stringify({ event: "clear", streamSid }));
+    await appendVoiceTelemetry(options.telemetry, {
+      id: id(), timestamp: now(), orgId: current?.orgId ?? "unknown", appId: current?.appId ?? null,
+      sessionId: current?.sessionId ?? null, traceId: current?.sessionId ?? null, channel: "voice", kitId: "kit:debrief",
+      type: "voice.call", operation: hangupAfterResponse !== undefined ? "caller_interruption:hangup_pending" : "caller_interruption",
+      provider, callId: current?.callSid ?? null, outcome: "success",
+    });
+    await agent?.onInterruption?.();
   };
 
   const handleOpenAI = async (raw: unknown) => {
@@ -899,18 +1012,52 @@ export function bridgeTwilioToOpenAI(options: TwilioOpenAIBridgeOptions): Twilio
     const current = streamSid ? bindings.get(streamSid) : undefined;
     if (translated.kind === "turn_started") {
       turnStartedAt = Date.now();
+      responsesStarted += 1;
+      responseActive = true;
       await agent?.onProviderTurn?.({ kind: "turn_started", sessionId: current?.sessionId ?? "unknown" });
       return;
     }
-    if (translated.kind === "interruption") {
-      realtime?.cancelResponse();
-      options.twilioSocket.send(JSON.stringify({ event: "clear", streamSid }));
-      await agent?.onInterruption?.();
+    if (translated.kind === "speech_started") {
+      const agentSpeaking = responseActive || Date.now() < playbackEndsAt;
+      if (callerTurn?.timer) clearTimeout(callerTurn.timer);
+      callerTurn = { bargeIn: agentSpeaking, confirmed: !agentSpeaking };
+      if (agentSpeaking) {
+        const turn = callerTurn;
+        turn.timer = setTimeout(() => {
+          if (callerTurn !== turn || finished) return;
+          turn.confirmed = true;
+          openaiQueue = openaiQueue.then(() => interruptAgent(current)).catch((error) => finish("openai_error", asError(error)));
+        }, options.bargeInMs ?? DEFAULT_BARGE_IN_MS);
+      }
+      return;
+    }
+    if (translated.kind === "speech_stopped") {
+      if (callerTurn?.timer) clearTimeout(callerTurn.timer);
+      return;
+    }
+    if (translated.kind === "speech_committed") {
+      const turn = callerTurn;
+      callerTurn = undefined;
+      const agentStillSpeaking = responseActive || Date.now() < playbackEndsAt;
+      if (turn && !turn.confirmed && agentStillSpeaking) {
+        // Too short to be a real barge-in: keep talking and forget the sound.
+        // (If the agent has finished meanwhile, it was an answer: respond.)
+        if (translated.itemId) realtime?.deleteItem(translated.itemId);
+        await appendVoiceTelemetry(options.telemetry, {
+          id: id(), timestamp: now(), orgId: current?.orgId ?? "unknown", appId: current?.appId ?? null,
+          sessionId: current?.sessionId ?? null, traceId: current?.sessionId ?? null, channel: "voice", kitId: "kit:debrief",
+          type: "voice.call", operation: "caller_sound_ignored", provider, callId: current?.callSid ?? null, outcome: "success",
+        });
+        return;
+      }
+      realtime?.startResponse();
       return;
     }
     if (translated.kind === "audio_delta") {
       if (!streamSid) throw new Error("OpenAI audio delta arrived before stream start");
       options.twilioSocket.send(JSON.stringify({ event: "media", streamSid, media: { payload: translated.payload } }));
+      const bytes = Math.floor((translated.payload.length * 3) / 4);
+      playbackEndsAt = Math.max(Date.now(), playbackEndsAt) + bytes / PCMU_BYTES_PER_MS;
       return;
     }
     if (translated.kind === "tool_call") {
@@ -933,6 +1080,8 @@ export function bridgeTwilioToOpenAI(options: TwilioOpenAIBridgeOptions): Twilio
         latencyMs: latencyMs ?? null, estimatedCostUsd: options.estimateCostUsd?.(usage) ?? null, outcome: "success",
       });
       turnStartedAt = undefined;
+      responseActive = false;
+      if (hangupAfterResponse !== undefined && responsesStarted > hangupAfterResponse) sendHangupMark();
       return;
     }
     if (translated.kind === "error") {

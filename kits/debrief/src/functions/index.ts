@@ -248,6 +248,21 @@ export class DebriefService {
     return this.getSession(sessionId);
   }
 
+  /**
+   * End a live call that did not stop cleanly. Facts the agent already saved
+   * stay reviewable: with a non-empty draft the session moves to confirmation
+   * (keeping the error), otherwise it fails. Sessions that already left
+   * `calling` are left untouched.
+   */
+  async endCallAfterInterruption(sessionId: string, error: unknown): Promise<DebriefSession> {
+    const session = this.require(sessionId);
+    if (session.state !== "calling") return this.getSession(sessionId);
+    const draft = await this.getDraft(sessionId);
+    if (!draft || Object.keys(draft.fields).length === 0) return this.markFailed(sessionId, error);
+    session.error = error instanceof Error ? error.message : String(error);
+    return this.transition(sessionId, "awaiting_confirmation");
+  }
+
   async teachFromCorrection(sessionId: string, correction: string): Promise<MemoryRecord> {
     const session = this.require(sessionId);
     if (session.state !== "awaiting_confirmation" && session.state !== "partial") throw new Error("Teaching requires an awaiting or partial debrief");
@@ -313,6 +328,16 @@ export class DebriefService {
     return this.persistence?.getCustomer(this.context.orgId, customerId) ?? null;
   }
 
+  /** Confirmed facts from this customer's most recent debriefs, newest first. */
+  async recentDebriefSummaries(customerId: string, limit = 3): Promise<string[]> {
+    const events = await this.listCustomerEvents(customerId);
+    return events
+      .filter((event) => event.type === "debrief_confirmed")
+      .sort((a, b) => b.occurredAt.localeCompare(a.occurredAt))
+      .slice(0, limit)
+      .map(summarizeEvent);
+  }
+
   async listCustomerEvents(customerId: string): Promise<CustomerEventRecord[]> {
     return this.persistence?.listCustomerEvents(this.context.orgId, customerId, this.kitId) ?? [];
   }
@@ -376,9 +401,12 @@ export class DebriefService {
           draft_id: draft.draftId,
         }, `address-discovered-${sessionId}`);
       }
+      // Keep the business outcome from the draft; "confirmed" is only the
+      // fallback when the call captured no outcome.
       await this.appendCustomerEvent(session, "debrief_confirmed", {
-        ...draft.fields,
         outcome: "confirmed",
+        ...draft.fields,
+        status: "confirmed",
         draft_id: draft.draftId,
       }, confirmedEventId);
     }
@@ -514,8 +542,24 @@ function buildPrebriefSections(
   return { known, last_interaction, open_items, call_objective: goal };
 }
 
+const DEBRIEF_FACT_LABELS: ReadonlyArray<readonly [string, string]> = [
+  ["outcome", "outcome"],
+  ["next_step", "next step"],
+  ["follow_up_date", "follow-up"],
+  ["customer_update", "customer update"],
+  ["discovered_address", "address"],
+];
+
 function summarizeEvent(event: CustomerEventRecord): string {
-  if (event.type === "debrief_confirmed") return "Previous debrief was confirmed.";
+  if (event.type === "debrief_confirmed") {
+    const payload = event.payload as Record<string, unknown>;
+    const facts = DEBRIEF_FACT_LABELS.flatMap(([key, label]) => {
+      const value = payload[key];
+      return typeof value === "string" && value.trim() && !(key === "outcome" && value === "confirmed") ? [`${label}: ${value.trim()}`] : [];
+    });
+    const date = event.occurredAt.slice(0, 10);
+    return facts.length ? `Debrief confirmed on ${date} — ${facts.join("; ")}.` : `Debrief confirmed on ${date} without recorded facts.`;
+  }
   if (event.type === "address_discovered") return "Previous call captured a new address.";
   if (event.type === "note") return "Previous debrief included an operator note.";
   if (event.type === "call_completed") return "Previous voice call completed.";
