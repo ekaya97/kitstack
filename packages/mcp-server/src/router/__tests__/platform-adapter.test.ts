@@ -117,13 +117,19 @@ describe("platform debrief adapter", () => {
     expect(debrief).toBeDefined();
     expect(debrief?.tools.map((tool) => tool.name)).toEqual([
       "prepare_debrief",
+      "prepare_rehearsal",
       "get_session",
       "get_debrief",
+      "get_debrief_draft",
       "get_debrief_for_confirmation",
       "update_debrief_draft",
       "confirm_debrief_draft",
       "confirm_debrief",
       "teach_from_correction",
+      "approve_memory",
+      "publish_memory",
+      "start_voice_call",
+      "get_voice_status",
     ]);
     expect(debrief?.tools[0].inputSchema).toMatchObject({
       type: "object",
@@ -168,8 +174,8 @@ describe("platform debrief adapter", () => {
       expect(JSON.parse(String(init?.body))).toMatchObject({
         method: "tools/call",
         params: {
-          name: "prepare_debrief",
-          arguments: { company: "Acme Corp", callback_at: "22:05" },
+          name: "kit",
+          arguments: { id: "debrief", cmd: "prepare_debrief", params: { company: "Acme Corp", callback_at: "22:05" } },
         },
       });
       return response({

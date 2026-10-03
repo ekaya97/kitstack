@@ -243,6 +243,7 @@ export function platformAdapter(deps: PlatformAdapterDeps): KitServerAdapter {
       viewSlug: string,
       userId: string,
       loaderContext?: PlatformAdapterRequestContext,
+      viewParams?: Record<string, unknown>,
     ): Promise<unknown> {
       const effectiveContext = loaderContext ?? requestContext;
       if (kitId === PLATFORM_KIT_ID) {
@@ -254,7 +255,7 @@ export function platformAdapter(deps: PlatformAdapterDeps): KitServerAdapter {
         const result = await callDebriefVoiceService({
           operation: "view",
           name: "kit_view",
-          args: { id: DEBRIEF_KIT_ID, view: viewSlug },
+          args: { view: viewSlug, ...(viewParams ? { params: viewParams } : {}) },
           userId,
           voiceServiceUrl: resolveString(deps.voiceServiceUrl, demoVoiceServiceUrl),
           voiceInternalSecret: resolveSecret(deps.voiceInternalSecret, demoInternalSecret),
@@ -484,13 +485,17 @@ async function callDebriefVoiceService(input: DebriefVoiceCallInput): Promise<Ki
         ...(parentId ? { "x-parent-id": parentId } : {}),
         ...(traceparent ? { traceparent } : {}),
       },
+      // The voice service is a KitStack server: tools are called through
+      // `kit`, and View data is loaded with the internal `__load_view` command.
       body: JSON.stringify({
         jsonrpc: "2.0",
         id: requestId,
         method: "tools/call",
         params: {
-          name: input.name,
-          arguments: input.args,
+          name: "kit",
+          arguments: input.operation === "view"
+            ? { id: DEBRIEF_KIT_ID, cmd: "__load_view", params: input.args }
+            : { id: DEBRIEF_KIT_ID, cmd: input.name, params: input.args },
         },
       }),
       signal: controller.signal,
