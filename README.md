@@ -351,7 +351,7 @@ packages/
   authz/          Zanzibar-style tuple store: check, grant, revoke, listObjects
 kits/
   debrief/        Reference implementation: sales voice agent kit + plugin-composed host
-  crm/ expenses/ content-planner/ decision-journal/ projects/ adint/ fressnapf/
+  fressnapf/ projects/ adint/ platform/
                   Earlier kits on the hosted platform path; useful as SDK examples
 web/              Next.js app: docs, marketplace, /demo control plane
 infra/            SST: mcp router, demo voice service, web, storage, secrets

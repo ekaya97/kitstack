@@ -94,7 +94,7 @@ kits/
     src/channels/ triggers/    voice channel, manual and Twilio triggers
     src/transports/            server.ts, http/, mcp/stdio.ts
     src/composition/app/       concrete wiring for this repository; the dogfood e2e test
-  crm/ expenses/ content-planner/ decision-journal/ projects/ adint/ fressnapf/
+  fressnapf/ projects/ adint/ platform/
                                earlier kits on the hosted path; each has its own package.json
 
 web/

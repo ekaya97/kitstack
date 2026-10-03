@@ -2,10 +2,6 @@ import { spawnSync } from "node:child_process";
 
 const kits = [
   "adint",
-  "content-planner",
-  "crm",
-  "decision-journal",
-  "expenses",
   "fressnapf",
   "projects",
   "debrief",
