@@ -217,10 +217,28 @@ export interface ServeHandle {
   readonly finished?: Promise<void>;
 }
 
+/**
+ * A server plugin such as a voice or messaging channel: its routes, upgrade
+ * handler and shutdown hook are mounted next to the kit's own.
+ */
+export interface ServerPlugin {
+  readonly routes?: readonly HttpRoute[];
+  /** Return true after taking ownership of the upgraded socket. */
+  onUpgrade?(upgrade: DaemonUpgrade): boolean | Promise<boolean>;
+  /** Runs on close() before the HTTP server stops, e.g. to end live calls. */
+  onShutdown?(): void | Promise<void>;
+}
+
 /** The composed kit runtime, before any transport is started. */
 export interface KitServer {
   readonly adapter: KitServerAdapter;
   readonly protocol: ProtocolHandler;
+  /**
+   * Mount a plugin before listen(). Plugins can call the kit's tools through
+   * this server (e.g. kitAgentTools({ executor: server })), so they are
+   * created after the server and mounted here.
+   */
+  use(plugin: ServerPlugin): KitServer;
   /** Run a kit tool through the same dispatch path as MCP (validation, authz, telemetry). */
   executeTool(kitId: string, toolName: string, args: Record<string, unknown>, principal: string): Promise<KitToolResult>;
   /** Start the configured transport. */
@@ -287,14 +305,24 @@ export function createKitServer(options: ServeOptions): KitServer {
     : undefined;
   const protocol = createProtocolHandler({ adapter, ...(serverInfo ? { serverInfo } : {}) });
 
-  return {
+  const plugins: ServerPlugin[] = [];
+  let listening = false;
+  const server: KitServer = {
     adapter,
     protocol,
+    use(plugin) {
+      if (listening) throw new Error("Mount plugins before listen()");
+      plugins.push(plugin);
+      return server;
+    },
     executeTool: (kitId, toolName, args, principal) => adapter.executeTool(kitId, toolName, args, principal),
-    listen: () => transport === "stdio"
-      ? runStdioTransport(protocol, options)
-      : runHttpTransport(protocol, options),
+    listen: () => {
+      listening = true;
+      const composed = withPlugins(options, plugins);
+      return transport === "stdio" ? runStdioTransport(protocol, composed) : runHttpTransport(protocol, composed);
+    },
   };
+  return server;
 }
 
 /**
@@ -325,6 +353,32 @@ export function createKitServer(options: ServeOptions): KitServer {
  */
 export async function serve(options: ServeOptions): Promise<ServeHandle> {
   return createKitServer(options).listen();
+}
+
+/** Plugin routes come first so a kit's catch-all route cannot shadow them. */
+function withPlugins(options: ServeOptions, plugins: readonly ServerPlugin[]): ServeOptions {
+  if (plugins.length === 0) return options;
+  const upgradeHandlers = [
+    ...plugins.flatMap((plugin) => plugin.onUpgrade ? [plugin.onUpgrade.bind(plugin)] : []),
+    ...(options.daemon?.onUpgrade ? [options.daemon.onUpgrade] : []),
+  ];
+  return {
+    ...options,
+    // Plugins that take over upgrades (e.g. media streams) need daemon mode.
+    mode: upgradeHandlers.length ? "daemon" : options.mode,
+    routes: [...plugins.flatMap((plugin) => plugin.routes ?? []), ...(options.routes ?? [])],
+    daemon: {
+      ...options.daemon,
+      onUpgrade: async (upgrade) => {
+        for (const handler of upgradeHandlers) if (await handler(upgrade)) return true;
+        return false;
+      },
+    },
+    onShutdown: async () => {
+      for (const plugin of plugins) await plugin.onShutdown?.();
+      await options.onShutdown?.();
+    },
+  };
 }
 
 function resolveDatabase(db: ServeDatabase): LibSQLDatabase {

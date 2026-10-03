@@ -3,7 +3,7 @@ import { z } from "zod";
 import { defineKit } from "../src/define-kit";
 import { defineTool } from "../src/define-tool";
 import { kit } from "../src/result";
-import { serve, type ServeHandle } from "../src/server/index";
+import { createKitServer, serve, type ServeHandle } from "../src/server/index";
 
 const echo = defineTool({
   name: "echo",
@@ -68,6 +68,27 @@ describe("serve() HTTP host", () => {
     expect((await rpc(base, list)).status).toBe(401);
     expect((await rpc(base, list, { authorization: "Bearer good" })).status).toBe(200);
     expect((await rpc(base, { padding: "x".repeat(1024) }, { authorization: "Bearer good" })).status).toBe(413);
+  });
+
+  it("mounts plugins ahead of kit routes and shuts them down first", async () => {
+    const order: string[] = [];
+    const server = createKitServer({
+      kit: testKit, db: { url: ":memory:" }, transport: "http", port: 0,
+      routes: [{ path: /^\//, handler: () => ({ status: 200, body: "kit catch-all" }) }],
+      onShutdown: () => { order.push("kit"); },
+    });
+    server.use({
+      routes: [{ method: "GET", path: "/plugin/status", handler: () => ({ status: 200, body: "plugin" }) }],
+      onShutdown: () => { order.push("plugin"); },
+    });
+    handle = await server.listen();
+    expect(() => server.use({})).toThrow(/before listen/);
+    const base = `http://127.0.0.1:${handle.port}`;
+    expect(await (await fetch(`${base}/plugin/status`)).text()).toBe("plugin");
+    expect(await (await fetch(`${base}/anything`)).text()).toBe("kit catch-all");
+    await handle.close();
+    handle = undefined;
+    expect(order).toEqual(["plugin", "kit"]);
   });
 
   it("answers CORS preflight and runs onShutdown before closing", async () => {
