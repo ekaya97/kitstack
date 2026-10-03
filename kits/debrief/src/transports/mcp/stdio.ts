@@ -1,6 +1,9 @@
 import { pathToFileURL } from "node:url";
 import { createDemoApp, type DemoApp } from "../../composition/app/index.js";
+import { createConnectorRegistry } from "@kitstackco/sdk";
+import { CRM_CONNECTOR_KEY } from "@kitstackco/crm";
 import { createDebriefKitServer } from "../../composition/host.js";
+import { bindDebriefCrm } from "../../composition/crm.js";
 
 export interface DemoMcpRequest {
   jsonrpc: "2.0";
@@ -35,6 +38,7 @@ export async function createDemoMcpStdio(options: DemoMcpStdioOptions = {}): Pro
   const app = options.app ?? await createDemoApp(options.appOptions);
   const server = createDebriefKitServer(app, {
     transport: "stdio",
+    connectors: createConnectorRegistry({ [CRM_CONNECTOR_KEY]: await bindDebriefCrm(app) }),
     ...(options.input && options.output ? { stdio: { input: options.input, output: options.output } } : {}),
   });
   return {

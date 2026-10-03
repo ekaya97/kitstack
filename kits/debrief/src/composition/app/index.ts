@@ -12,7 +12,7 @@ import { createScheduledCallStore } from "../../scheduler/index.js";
 import { createTelemetryStore, type TelemetryStore } from "../../telemetry/index.js";
 import { VoiceSimulator } from "../../adapters/voice/index.js";
 import { createLibsqlStorageAdapter } from "../../storage/libsql.js";
-import { createDeclarativeModelRouter, createTelemetryExporter, type TelemetryExportConfig } from "@kitstackco/sdk";
+import { createDeclarativeModelRouter, createTelemetryExporter, type StorageAdapter, type TelemetryExportConfig } from "@kitstackco/sdk";
 
 export interface DemoApp {
   readonly client: Client;
@@ -27,6 +27,8 @@ export interface DemoApp {
   readonly voice: VoiceSimulator;
   /** Registry-backed scheduled-call operations. The provider seam is owned by the poller. */
   readonly scheduler: ScheduledCallOperations;
+  /** Scoped SDK storage (sql + objects) for this org and kit. */
+  readonly storage: StorageAdapter;
   readonly plugins: PluginRegistry;
   readonly mcpAuthMode: McpAuthMode;
   readonly adminToken: string;
@@ -411,7 +413,7 @@ export async function createDemoApp(options: CreateDemoAppOptions = {}): Promise
   };
 
   return {
-    client, orgId, appId, telemetry, modelRouter, apps, memory, instructions, debrief, voice, scheduler, plugins, mcpAuthMode, adminToken,
+    client, orgId, appId, telemetry, modelRouter, apps, memory, instructions, debrief, voice, scheduler, storage, plugins, mcpAuthMode, adminToken,
     async reset() {
       debrief.clearSessions();
       await plugins.dispatch("memory:default", {

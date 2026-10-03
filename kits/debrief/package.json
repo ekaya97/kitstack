@@ -10,6 +10,7 @@
     "./kit.config": "./kit.config.ts"
   },
   "dependencies": {
+    "@kitstackco/crm": "*",
     "@kitstackco/sdk": "*",
     "@kitstackco/voice": "*",
     "@libsql/client": "^0.14",

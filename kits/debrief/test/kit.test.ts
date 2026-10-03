@@ -20,6 +20,8 @@ describe("debrief kit boundary", () => {
       "publish_memory",
       "start_voice_call",
       "get_voice_status",
+      "get_crm_context",
+      "sync_debrief_to_crm",
     ]);
   });
 

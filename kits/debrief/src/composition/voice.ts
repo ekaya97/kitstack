@@ -2,7 +2,9 @@ import { createHash } from "node:crypto";
 import { readFileSync } from "node:fs";
 import type { KitDefinition, KitToolExecutor, TelemetryEventInput as SdkTelemetryEventInput } from "@kitstackco/sdk";
 import { createVoiceChannel, type OpenAIRealtimeSocketFactory, type VoiceCall, type VoiceChannel } from "@kitstackco/voice";
+import type { CrmClient } from "@kitstackco/crm";
 import { createDebriefVoiceTools } from "../adapters/voice/tools.js";
+import { crmAccountFor, crmBriefingLines } from "./crm.js";
 import type { TelemetryEventInput } from "../telemetry/index.js";
 import type { DemoApp } from "./app/index.js";
 
@@ -31,6 +33,7 @@ export async function createDebriefVoiceChannel(
   executor: KitToolExecutor,
   providers: VoiceProviderOverrides = {},
   env: NodeJS.ProcessEnv = process.env,
+  crm?: CrmClient,
 ): Promise<VoiceChannel | undefined> {
   const value = (name: string) => env[name]?.trim() ?? "";
   const phoneConfigured = PHONE_ENV.some((name) => value(name));
@@ -75,7 +78,7 @@ export async function createDebriefVoiceChannel(
     localHarness: true,
     bargeInMs: optionalNumber(value("KITSTACK_VOICE_BARGE_IN_MS")),
     tools: createDebriefVoiceTools(kit, executor),
-    briefing: (call) => debriefBriefing(app, call, baseInstructions, baseVersion),
+    briefing: (call) => debriefBriefing(app, call, baseInstructions, baseVersion, crm),
     sessions: {
       async startSession(sessionId, channel) {
         const session = app.debrief.getSession(sessionId);
@@ -106,7 +109,7 @@ export async function createDebriefVoiceChannel(
 }
 
 /** The debrief agent's per-call instructions: goal, customer, history and approved feedback. */
-async function debriefBriefing(app: DemoApp, call: VoiceCall, baseInstructions: string, baseVersion: string) {
+async function debriefBriefing(app: DemoApp, call: VoiceCall, baseInstructions: string, baseVersion: string, crm?: CrmClient) {
   const session = app.debrief.getSession(call.sessionId);
   const customer = session.customerId ? await app.debrief.getCustomer(session.customerId) : null;
   const history = session.customerId ? await app.debrief.recentDebriefSummaries(session.customerId) : [];
@@ -125,11 +128,13 @@ async function debriefBriefing(app: DemoApp, call: VoiceCall, baseInstructions: 
     customerId: session.customerId,
   });
   const selected = records.filter((record) => session.memoryIds.includes(record.memoryId));
+  const crmLines = crmBriefingLines(await crmAccountFor(app, crm, session.sessionId));
   const content = [
     baseInstructions.trim(),
     "\nPrepared debrief context:",
     `Goal: ${session.goal}`,
     customer ? `Customer: ${customer.company}; contact ${customer.contactName}; location ${customer.location}` : "Customer: unavailable.",
+    ...(crmLines.length ? [`CRM context (read-only; do not read it out verbatim):\n${crmLines.map((line) => `- ${line}`).join("\n")}`] : []),
     history.length
       ? `Previous confirmed debriefs with this customer (newest first). Refer to them and ask how the agreed next steps went:\n${history.map((entry) => `- ${entry}`).join("\n")}`
       : "Previous confirmed debriefs with this customer: none.",

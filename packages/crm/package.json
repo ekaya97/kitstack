@@ -1,0 +1,17 @@
+{
+  "name": "@kitstackco/crm",
+  "version": "0.1.0",
+  "description": "Provider-neutral CRM capability for KitStack kits, with a HubSpot connector and an in-memory CRM.",
+  "type": "module",
+  "private": true,
+  "exports": {
+    ".": "./src/index.ts"
+  },
+  "scripts": {
+    "test": "vitest run",
+    "typecheck": "tsc -p tsconfig.json --noEmit"
+  },
+  "peerDependencies": {
+    "@kitstackco/sdk": "*"
+  }
+}

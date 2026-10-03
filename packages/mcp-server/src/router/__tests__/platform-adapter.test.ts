@@ -130,6 +130,8 @@ describe("platform debrief adapter", () => {
       "publish_memory",
       "start_voice_call",
       "get_voice_status",
+      "get_crm_context",
+      "sync_debrief_to_crm",
     ]);
     expect(debrief?.tools[0].inputSchema).toMatchObject({
       type: "object",

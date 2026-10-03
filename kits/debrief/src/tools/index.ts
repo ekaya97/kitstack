@@ -17,10 +17,12 @@ export type DebriefToolName =
   | "approve_memory"
   | "publish_memory"
   | "start_voice_call"
-  | "get_voice_status";
+  | "get_voice_status"
+  | "get_crm_context"
+  | "sync_debrief_to_crm";
 
 const ASSIST_TOOLS: ReadonlySet<DebriefToolName> = new Set([
-  "get_session", "get_debrief", "get_debrief_draft", "get_debrief_for_confirmation", "get_voice_status",
+  "get_session", "get_debrief", "get_debrief_draft", "get_debrief_for_confirmation", "get_voice_status", "get_crm_context",
 ]);
 
 export type { DebriefToolHandler } from "../contracts";
@@ -107,7 +109,7 @@ export function createDebriefTools(
         next_step: z.string().optional().describe("The next sales action"),
         customer_update: z.string().optional().describe("What changed for the customer"),
         discovered_address: z.string().optional().describe("A new customer address learned on the call"),
-        follow_up_date: z.string().optional().describe("The requested follow-up date"),
+        follow_up_date: z.string().optional().describe("The agreed follow-up date, as YYYY-MM-DD when a date was named"),
       }),
       handlers,
     ),
@@ -162,6 +164,18 @@ export function createDebriefTools(
     tool(
       "get_voice_status",
       "Poll the simulator voice call until it reaches confirmation.",
+      z.object({ session_id: z.string().min(1).describe("The shared debrief session ID") }),
+      handlers,
+    ),
+    tool(
+      "get_crm_context",
+      "Load the customer's CRM account for a debrief: company, contacts, open deals and recent activity.",
+      z.object({ session_id: z.string().min(1).describe("The shared debrief session ID") }),
+      handlers,
+    ),
+    tool(
+      "sync_debrief_to_crm",
+      "Write a confirmed debrief to the CRM (call log and follow-up task). Runs automatically on confirmation; use it to retry after a failure. Idempotent.",
       z.object({ session_id: z.string().min(1).describe("The shared debrief session ID") }),
       handlers,
     ),

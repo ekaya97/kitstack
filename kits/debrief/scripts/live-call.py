@@ -55,6 +55,11 @@ env.update({
     "KITSTACK_DEMO_PUBLIC_HTTPS_URL": public,
     "KITSTACK_DEMO_PUBLIC_WSS_URL": public.replace("https://", "wss://", 1) + "/t/voice/media",
 })
+# HubSpot (private app token) when configured; otherwise an in-memory demo CRM.
+if env_file.get("HUBSPOT_ACCESS_TOKEN"):
+    env["HUBSPOT_ACCESS_TOKEN"] = env_file["HUBSPOT_ACCESS_TOKEN"]
+else:
+    env.setdefault("KITSTACK_DEMO_CRM", "memory")
 
 
 def post(path, body, headers=None):
@@ -126,6 +131,8 @@ def run_round(number):
     session_id = session["sessionId"]
     print(f"prepared session {session_id}; approved memories in the briefing: {len(session.get('memoryIds') or [])}")
     print(f"last interaction in the briefing: {(session.get('prebrief_sections') or {}).get('last_interaction', 'n/a')}")
+    for line in session.get("crm_context") or ["CRM: no matching account (or no CRM configured)"]:
+        print(f"  {line}")
 
     ask("Press Enter to place the call (answer your phone)... ")
     status, started = post("/t/voice/live/start",
@@ -166,6 +173,11 @@ def run_round(number):
         return True
     confirmed = mcp("confirm_debrief_draft", {"session_id": session_id})
     print(f"debrief confirmed (state {confirmed['state']}, event {confirmed.get('confirmed_event_id')})")
+    crm = confirmed.get("crm") or {}
+    if crm.get("status") == "synced":
+        print(f"CRM ({crm['provider']}): call {crm['callId']} logged" + (f", task {crm['taskId']} created" if crm.get("taskId") else "") + f" on company {crm.get('companyId')}")
+    else:
+        print(f"CRM: {crm.get('status')} - {crm.get('message') or crm.get('reason')}")
     return True
 
 

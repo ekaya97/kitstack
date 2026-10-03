@@ -1,5 +1,6 @@
 import { pathToFileURL } from "node:url";
-import { dispatchTrigger } from "@kitstackco/sdk";
+import { createConnectorRegistry, dispatchTrigger } from "@kitstackco/sdk";
+import { CRM_CONNECTOR_KEY, type CrmClient } from "@kitstackco/crm";
 import type { HttpRouteRequest, ServeHandle } from "@kitstackco/sdk/server";
 import type { VoiceChannel } from "@kitstackco/voice";
 import { createDemoApp, type DemoApp } from "../composition/app/index.js";
@@ -7,6 +8,7 @@ import type { McpAuthMode } from "../adapters/auth/mcp.js";
 import { createBoundDebriefKit } from "../composition/kit.js";
 import { createDebriefKitServer } from "../composition/host.js";
 import { createDebriefVoiceChannel, type VoiceProviderOverrides } from "../composition/voice.js";
+import { bindDebriefCrm } from "../composition/crm.js";
 import { handleDemoAppRequest, type DemoAppRouteRequest } from "./http/app.js";
 import { createScheduledCallJob, ScheduledCallPoller, type ScheduledCallPoller as ScheduledCallPollerType } from "../scheduler/index.js";
 import { createScheduledTrigger } from "../triggers/index.js";
@@ -27,6 +29,8 @@ export interface DemoServerOptions {
   appOptions?: Parameters<typeof createDemoApp>[0];
   /** Replace only the provider network seams of the env-composed voice channel (tests). */
   liveVoiceProviders?: VoiceProviderOverrides;
+  /** Use this CRM instead of binding one from the environment (tests, demos). */
+  crm?: CrmClient;
   /** Optional provider-neutral scheduler seam. T-0189 supplies the live-call adapter. */
   scheduledCallPoller?: ScheduledCallPoller;
   /** Request mode rejects upgrades; daemon mode owns long-lived channel upgrades. */
@@ -83,6 +87,7 @@ export async function createDemoServer(options: DemoServerOptions = {}): Promise
 
   const mode = options.mode ?? "daemon";
   const kit = createBoundDebriefKit(app);
+  const crm = options.crm ?? await bindDebriefCrm(app);
   let voice: VoiceChannel | undefined;
   const kitServer = createDebriefKitServer(app, {
     transport: "http",
@@ -91,12 +96,13 @@ export async function createDemoServer(options: DemoServerOptions = {}): Promise
     mode: mode === "daemon" ? "daemon" : "request",
     cors: { origin: "*", headers: CORS_ALLOWED_HEADERS },
     maxBodyBytes,
+    connectors: createConnectorRegistry({ [CRM_CONNECTOR_KEY]: crm }),
     // Demo control-plane routes; plugin routes (voice) are matched first.
     routes: [{ path: /^\//, handler: (request: HttpRouteRequest) => handleDemoAppRequest(app, routeRequest(request), voice) }],
   }, kit);
   // The voice agent calls kit tools through this server, so the channel is
   // created after it and mounted as a plugin.
-  voice = await createDebriefVoiceChannel(app, kit, kitServer, options.liveVoiceProviders);
+  voice = await createDebriefVoiceChannel(app, kit, kitServer, options.liveVoiceProviders, process.env, crm);
   if (voice) {
     // Request mode keeps the routes but refuses long-lived media upgrades.
     kitServer.use(mode === "daemon" ? voice : { routes: voice.routes, onShutdown: () => voice!.onShutdown() });

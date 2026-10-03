@@ -9,6 +9,8 @@ import { toCustomerTimelineViewData, type CustomerTimelineLoaderSnapshot } from 
 import type { DemoApp } from "./app/index.js";
 import type { DebriefDraftUpdate } from "../confirmation-contracts.js";
 import type { VoiceStatusResult } from "../adapters/voice/index.js";
+import { CRM_CONNECTOR_KEY, type CrmClient } from "@kitstackco/crm";
+import { crmAccountFor, crmBriefingLines, syncDebriefToCrm } from "./crm.js";
 
 const DRAFT_FIELDS = ["outcome", "next_step", "customer_update", "discovered_address", "follow_up_date"] as const;
 
@@ -23,7 +25,7 @@ export function createBoundDebriefKit(app: DemoApp) {
   return {
     ...base,
     views: [
-      bindLoader(prebriefView, async () => toPrebriefViewData(...await prebriefSnapshot(app))),
+      bindLoader(prebriefView, async (ctx) => toPrebriefViewData(...await prebriefSnapshot(app, ctx))),
       bindLoader(confirmationView, async (ctx) => {
         const sessionId = stringParam(ctx, "session_id") ?? app.debrief.getLatestSession()?.sessionId;
         if (!sessionId) throw new Error("No debrief session is available for confirmation");
@@ -47,7 +49,8 @@ function createDebriefToolHandlers(app: DemoApp): Record<DebriefToolName, Debrie
   };
 
   return {
-    prepare_debrief: (ctx, args) => viaKit({
+    prepare_debrief: async (ctx, args) => {
+      const prepared = await app.plugins.dispatch<Record<string, unknown>, Record<string, unknown>>("kit:debrief", {
       operation: "prepare",
       goal: String(args.goal),
       company: String(args.company),
@@ -56,14 +59,29 @@ function createDebriefToolHandlers(app: DemoApp): Record<DebriefToolName, Debrie
       callbackAt: String(args.callback_at),
       callbackTimezone: String(args.callback_timezone),
       bufferMinutes: typeof args.buffer_minutes === "number" ? args.buffer_minutes : 0,
-    })(ctx, args),
+      }, pluginContext(app, ctx));
+      const sessionId = typeof prepared.sessionId === "string" ? prepared.sessionId : undefined;
+      const account = sessionId ? await crmAccountFor(app, crm(ctx), sessionId) : null;
+      return result.json({ ...prepared, crm_context: crmBriefingLines(account) });
+    },
     prepare_rehearsal: (ctx, args) => viaKit({ operation: "prepare", goal: String(args.goal) })(ctx, args),
     get_session: (ctx, args) => viaKit({ operation: "get_session", sessionId: String(args.session_id) })(ctx, args),
     get_debrief: (ctx, args) => viaKit({ operation: "get_debrief", sessionId: String(args.session_id) })(ctx, args),
     get_debrief_draft: withSession(async (sessionId) => ({ fields: (await app.debrief.getDraft(sessionId))?.fields ?? {} })),
     get_debrief_for_confirmation: withSession((sessionId) => app.debrief.getDebriefForConfirmation(sessionId)),
     update_debrief_draft: withSession((sessionId, args) => app.debrief.updateDebriefDraft(sessionId, draftUpdate(args))),
-    confirm_debrief_draft: withSession((sessionId) => app.debrief.confirmDebriefDraft(sessionId)),
+    confirm_debrief_draft: withSession(async (sessionId, _args, ctx) => {
+      const confirmation = await app.debrief.confirmDebriefDraft(sessionId);
+      // Confirmation is the act boundary for external writes; a CRM failure
+      // is reported but never undoes the confirmed debrief.
+      return { ...confirmation, crm: await syncDebriefToCrm(app, crm(ctx), sessionId) };
+    }),
+    get_crm_context: withSession(async (sessionId, _args, ctx) => {
+      const client = crm(ctx);
+      if (!client) return { configured: false };
+      return { configured: true, provider: client.provider, account: await crmAccountFor(app, client, sessionId) };
+    }),
+    sync_debrief_to_crm: withSession((sessionId, _args, ctx) => syncDebriefToCrm(app, crm(ctx), sessionId)),
     teach_from_correction: (ctx, args) => viaKit({ operation: "teach", sessionId: String(args.session_id), correction: String(args.correction) })(ctx, args),
     approve_memory: (ctx, args) => viaKit({ operation: "approve", sessionId: String(args.session_id), memoryId: String(args.memory_id) })(ctx, args),
     publish_memory: (ctx, args) => viaKit({ operation: "publish", sessionId: String(args.session_id), memoryId: String(args.memory_id) })(ctx, args),
@@ -86,12 +104,13 @@ function createDebriefToolHandlers(app: DemoApp): Record<DebriefToolName, Debrie
   };
 }
 
-async function prebriefSnapshot(app: DemoApp): Promise<[{ session_id: string; customer_id: string }, PrebriefLoaderSnapshot]> {
+async function prebriefSnapshot(app: DemoApp, ctx: KitContext): Promise<[{ session_id: string; customer_id: string }, PrebriefLoaderSnapshot]> {
   const session = app.debrief.getLatestSession();
   if (!session?.customerId || !session.callbackAt || !session.scheduledCallAt) throw new Error("No prepared customer prebrief is available");
   const customer = await app.debrief.getCustomer(session.customerId);
   if (!customer) throw new Error(`Customer "${session.customerId}" was not found`);
   const history = await app.debrief.recentDebriefSummaries(session.customerId);
+  const crmLines = crmBriefingLines(await crmAccountFor(app, crm(ctx), session.sessionId));
   const providerStatus = session.state === "failed" ? "unavailable" : session.state === "confirmed" ? "completed" : session.state === "calling" ? "calling" : "scheduled";
   return [
     { session_id: session.sessionId, customer_id: customer.customerId },
@@ -102,7 +121,7 @@ async function prebriefSnapshot(app: DemoApp): Promise<[{ session_id: string; cu
       contact_name: customer.contactName,
       location: customer.location,
       prebrief_sections: {
-        known: [`Company: ${customer.company}`, `Contact: ${customer.contactName}`, `Location: ${customer.location}`],
+        known: [`Company: ${customer.company}`, `Contact: ${customer.contactName}`, `Location: ${customer.location}`, ...crmLines],
         last_interaction: history[0] ?? "No prior interaction recorded.",
         relevant_history: history.slice(1),
         open_items: ["No open items recorded."],
@@ -161,6 +180,11 @@ async function customerTimelineData(app: DemoApp, ctx: KitContext) {
 function bindLoader<TView extends { loader?: unknown; loaders?: unknown }>(view: TView, load: (ctx: KitContext) => Promise<unknown>): TView {
   const loader = defineLoader(load);
   return { ...view, loader, loaders: [loader] };
+}
+
+/** The CRM bound for this request, if any (kits never see the provider). */
+function crm(ctx: KitContext): CrmClient | undefined {
+  return ctx.connectors.get<CrmClient>(CRM_CONNECTOR_KEY);
 }
 
 /** Plugin-registry context so host telemetry spans keep the dispatch session. */

@@ -13,7 +13,8 @@
     "paths": {
       "@kitstackco/sdk": ["../../packages/sdk/src/index.ts"],
       "@kitstackco/sdk/*": ["../../packages/sdk/src/*"],
-      "@kitstackco/voice": ["../../packages/voice/src/index.ts"]
+      "@kitstackco/voice": ["../../packages/voice/src/index.ts"],
+      "@kitstackco/crm": ["../../packages/crm/src/index.ts"]
     }
   },
   "include": ["src", "kit.config.ts", "test"]
