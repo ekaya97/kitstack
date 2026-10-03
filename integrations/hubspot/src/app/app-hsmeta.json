@@ -1,0 +1,28 @@
+{
+  "uid": "kitstack_crm_app",
+  "type": "app",
+  "config": {
+    "description": "KitStack sales agents read accounts, contacts and deals, and log confirmed debriefs (calls and follow-up tasks).",
+    "name": "KitStack CRM",
+    "distribution": "private",
+    "auth": {
+      "type": "static",
+      "requiredScopes": [
+        "oauth",
+        "crm.objects.companies.read",
+        "crm.objects.contacts.read",
+        "crm.objects.contacts.write",
+        "crm.objects.deals.read"
+      ],
+      "optionalScopes": [],
+      "conditionallyRequiredScopes": []
+    },
+    "permittedUrls": {
+      "fetch": [
+        "https://api.hubapi.com"
+      ],
+      "iframe": [],
+      "img": []
+    }
+  }
+}
