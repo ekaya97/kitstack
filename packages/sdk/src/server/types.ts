@@ -62,6 +62,8 @@ export interface KitServerAdapter {
     viewSlug: string,
     userId: string,
     context?: ServerRequestContext,
+    /** View parameters, e.g. which customer to show; exposed as `ctx.params`. */
+    params?: Record<string, unknown>,
   ): Promise<unknown>;
 
   /** Get the HTML shell for rendering embedded views. */

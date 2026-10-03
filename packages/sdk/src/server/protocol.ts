@@ -39,6 +39,7 @@ const KIT_VIEW_INPUT_SCHEMA = {
   properties: {
     id: { type: "string", description: "Kit ID, e.g. 'cold-outreach'" },
     view: { type: "string", description: "View slug, e.g. 'sequence-builder'" },
+    params: { type: "object", description: "Optional View parameters, e.g. which record to show" },
   },
   required: ["id"] as string[],
 };

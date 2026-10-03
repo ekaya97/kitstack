@@ -37,7 +37,8 @@ export async function handleKitCall(
   // kit(id, cmd, "__load_view") — internal: reload view data
   if (cmd === "__load_view" && params?.view) {
     try {
-      const data = await adapter.executeLoader(id, params.view as string, userId, context);
+      const viewParams = params.params && typeof params.params === "object" ? params.params as Record<string, unknown> : undefined;
+      const data = await adapter.executeLoader(id, params.view as string, userId, context, viewParams);
       return text(JSON.stringify({ data }));
     } catch (err: any) {
       return text(JSON.stringify({ data: null, error: err.message }));

@@ -145,11 +145,11 @@ describe("createTestKit — authorize hook", () => {
 // -- MCP handler authorize tests --
 
 describe("MCP handler — authorize hook", () => {
-  async function setupHandler(checkAuthz?: any) {
+  async function setupHandler(checkAuthz?: any, authorization?: "enforce" | "skip") {
     const client = createClient({ url: ":memory:" });
     const db = drizzle(client);
     await client.execute("CREATE TABLE IF NOT EXISTS t (id TEXT PRIMARY KEY)");
-    return createMcpHandler({ kit: testKitDef, db, checkAuthz });
+    return createMcpHandler({ kit: testKitDef, db, checkAuthz, authorization });
   }
 
   it("evaluates authorize when checkAuthz is configured", async () => {
@@ -168,7 +168,7 @@ describe("MCP handler — authorize hook", () => {
     expect((result.content[0] as any).text).toContain("Forbidden");
   });
 
-  it("skips authorize when checkAuthz is not configured", async () => {
+  it("denies guarded tools when no checkAuthz is configured (fail closed)", async () => {
     const handler = await setupHandler();
     const res = await handler.handleRequest({
       jsonrpc: "2.0",
@@ -180,7 +180,22 @@ describe("MCP handler — authorize hook", () => {
       },
     });
     const result = (res!.result as any);
+    expect(result.isError).toBe(true);
+    expect((result.content[0] as any).text).toContain("no authorization check is configured");
+  });
+
+  it("still runs tools without authorize hooks when no checkAuthz is configured", async () => {
+    const handler = await setupHandler();
+    const result = await handler.callTool("list_items", {});
     expect(result.isError).toBeUndefined();
+    expect((result.content[0] as any).text).toBe("Items listed.");
+  });
+
+  it("runs guarded tools unchecked only when authorization is explicitly skipped", async () => {
+    const handler = await setupHandler(undefined, "skip");
+    const result = await handler.callTool("delete_item", { itemId: "x" });
+    expect(result.isError).toBeUndefined();
+    expect((result.content[0] as any).text).toBe("Deleted.");
   });
 
   it("allows when checkAuthz returns true", async () => {

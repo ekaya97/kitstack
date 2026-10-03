@@ -99,7 +99,7 @@ export async function call(args: string[]) {
   }
 
   // Fall back to in-process runtime
-  const runtime = await createLocalRuntime({ kitRoot, dbUrl });
+  const runtime = await createLocalRuntime({ kitRoot, dbUrl, authorization: "skip" });
   try {
     const response = await runtime.protocol.handleRequest(request, "dev-user");
     if (response) {

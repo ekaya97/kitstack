@@ -15,6 +15,9 @@ export type {
   KitToolResult,
   KitToolContentBlock,
   ToolDefinition,
+  ToolMode,
+  ToolClassification,
+  ToolAnnotations,
   ViewDefinition,
   ViewHost,
   ViewHostKind,
@@ -135,7 +138,16 @@ export {
 
 // Factory functions
 export { defineKit } from "./define-kit";
-export { defineTool } from "./define-tool";
+export { defineTool, withToolMetadata } from "./define-tool";
+export {
+  kitAgentTools,
+  toolFunctionSchema,
+  unwrapToolResult,
+  type KitAgentTools,
+  type KitAgentToolsOptions,
+  type KitToolExecutor,
+  type ToolFunctionSchema,
+} from "./agent-tools";
 export { defineView } from "./define-view";
 export { defineLoader } from "./define-loader";
 export { defineAgent } from "./define-agent";

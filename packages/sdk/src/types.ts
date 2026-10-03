@@ -168,11 +168,27 @@ export interface AuthzRequirement {
 
 // --- Tool Definition ---
 
+/** "assist" reads or prepares; "act" changes state or has external side effects. */
+export type ToolMode = "assist" | "act";
+
+/** Data sensitivity of a tool's inputs and outputs, e.g. "internal" or "sensitive". */
+export type ToolClassification = "public" | "internal" | "sensitive" | "destructive" | (string & {});
+
+export interface ToolAnnotations {
+  readOnlyHint: boolean;
+  destructiveHint: boolean;
+}
+
 export interface ToolBase {
   name: string;
   description: string;
   args: z.ZodType;
   authorize?: (args: any, ctx: KitContext) => AuthzRequirement[];
+  /** Read/act boundary used for grants (`kit:use` vs `kit:act`). Defaults to "assist". */
+  mode?: ToolMode;
+  classification?: ToolClassification;
+  /** MCP hints derived from `mode` and `classification`. */
+  annotations?: ToolAnnotations;
 }
 
 /** Tool with load() (handler auto-generated if omitted) */

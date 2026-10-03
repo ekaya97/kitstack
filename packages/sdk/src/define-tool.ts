@@ -1,5 +1,5 @@
 import type { z } from "zod";
-import type { ToolBase, ToolDefinition, KitToolResult, KitContext, AuthzRequirement } from "./types";
+import type { ToolBase, ToolDefinition, KitToolResult, KitContext, AuthzRequirement, ToolClassification, ToolMode } from "./types";
 import { kit } from "./result";
 
 /**
@@ -90,6 +90,8 @@ export function defineTool<T extends z.ZodType, TData>(config: {
   description: string;
   args: T;
   authorize?: (args: z.infer<T>, ctx: KitContext) => AuthzRequirement[];
+  mode?: ToolMode;
+  classification?: ToolClassification;
   load: (ctx: KitContext, args: z.infer<T>) => Promise<TData>;
   handler?: (ctx: KitContext, args: z.infer<T>) => Promise<KitToolResult>;
 }): TypedToolWithLoad<T, TData>;
@@ -100,6 +102,8 @@ export function defineTool<T extends z.ZodType>(config: {
   description: string;
   args: T;
   authorize?: (args: z.infer<T>, ctx: KitContext) => AuthzRequirement[];
+  mode?: ToolMode;
+  classification?: ToolClassification;
   handler: (ctx: KitContext, args: z.infer<T>) => Promise<KitToolResult>;
 }): ToolDefinition;
 
@@ -111,5 +115,22 @@ export function defineTool(config: any): any {
       return kit.json(data);
     };
   }
+  if (config.mode || config.classification) {
+    return withToolMetadata(config, config.mode ?? "assist", config.classification ?? "internal");
+  }
   return config;
+}
+
+/**
+ * Set a tool's read/act mode and classification, and the MCP hints derived
+ * from them. Prefer passing `mode`/`classification` to `defineTool`.
+ */
+export function withToolMetadata<T extends ToolBase>(tool: T, mode: ToolMode, classification: ToolClassification): T {
+  tool.mode = mode;
+  tool.classification = classification;
+  tool.annotations = {
+    readOnlyHint: mode === "assist",
+    destructiveHint: classification === "destructive",
+  };
+  return tool;
 }

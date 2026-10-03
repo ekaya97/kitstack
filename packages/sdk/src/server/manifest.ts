@@ -184,7 +184,7 @@ export function withMcpServers(
       return registration.call(passthrough.request, { userId });
     },
 
-    executeLoader: (kitId, viewSlug, userId, context) => adapter.executeLoader(kitId, viewSlug, userId, context),
+    executeLoader: (kitId, viewSlug, userId, context, params) => adapter.executeLoader(kitId, viewSlug, userId, context, params),
     getShellHtml: (kitId) => adapter.getShellHtml(kitId),
     ...(adapter.getCdnUrl ? { getCdnUrl: () => adapter.getCdnUrl!() } : {}),
   };

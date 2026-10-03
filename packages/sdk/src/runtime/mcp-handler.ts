@@ -55,6 +55,8 @@ export interface McpHandlerConfig {
     requirement: AuthzRequirement,
     ctx: KitContext
   ) => Promise<boolean>;
+  /** See LocalAdapterOptions.authorization; "skip" is for local development only. */
+  authorization?: "enforce" | "skip";
 }
 
 // ---------------------------------------------------------------------------
@@ -94,6 +96,7 @@ export function createMcpHandler(config: McpHandlerConfig): McpHandler {
     kitCdn: config.kitCdn,
     devAssetBaseUrl: config.devAssetBaseUrl,
     checkAuthz: config.checkAuthz,
+    authorization: config.authorization,
   });
 
   const protocol = createProtocolHandler({

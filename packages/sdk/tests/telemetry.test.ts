@@ -110,7 +110,7 @@ describe("SDK metadata telemetry", () => {
   });
 
   it("posts a content-free OTLP/HTTP trace to the configured collector", async () => {
-    const fetcher = vi.fn(async (_input: string | URL, _init?: RequestInit) => new Response(null, { status: 200 }));
+    const fetcher = vi.fn(async (_input: string | URL | Request, _init?: RequestInit) => new Response(null, { status: 200 }));
     const exporter = createOtlpHttpTelemetryExporter({
       endpoint: "https://collector.example/v1/traces",
       headers: { authorization: "Bearer collector-token" },
@@ -144,7 +144,7 @@ describe("SDK metadata telemetry", () => {
   });
 
   it("rejects untyped content before an external request is made", async () => {
-    const fetcher = vi.fn(async (_input: string | URL, _init?: RequestInit) => new Response(null, { status: 200 }));
+    const fetcher = vi.fn(async (_input: string | URL | Request, _init?: RequestInit) => new Response(null, { status: 200 }));
     const exporter = createOtlpHttpTelemetryExporter({
       endpoint: "https://collector.example/v1/traces",
       fetch: fetcher,

@@ -33,6 +33,7 @@ Options:
   --port <number>     HTTP port (default: 3001, env: KITSTACK_PORT)
   --db <url>          Database URL (default: file:.kitstack/dev.db, env: KITSTACK_DB_URL)
   --db-token <token>  Database auth token (env: KITSTACK_DB_TOKEN)
+  --unsafe-skip-authz Run tools that declare authorize hooks without checking them (development only)
   --config <path>     Path to kit root directory (default: .)
   --help, -h          Show help
 `.trim();
@@ -49,6 +50,7 @@ export async function serve(args: string[]) {
   let port = parseInt(process.env.KITSTACK_PORT || "3001", 10);
   let dbUrl = process.env.KITSTACK_DB_URL;
   let dbToken = process.env.KITSTACK_DB_TOKEN;
+  let authorization: "enforce" | "skip" = "enforce";
 
   for (let i = 0; i < args.length; i++) {
     const flag = args[i];
@@ -60,10 +62,11 @@ export async function serve(args: string[]) {
       case "--port": port = parseInt(next, 10); i++; break;
       case "--db": dbUrl = next; i++; break;
       case "--db-token": dbToken = next; i++; break;
+      case "--unsafe-skip-authz": authorization = "skip"; break;
     }
   }
 
-  const { kit, protocol } = await createLocalRuntime({ kitRoot, dbUrl, dbToken });
+  const { kit } = await createLocalRuntime({ kitRoot, dbUrl, dbToken, authorization });
 
   const { serve: startServer } = await import("../../server/index.js");
   await startServer({
@@ -72,5 +75,6 @@ export async function serve(args: string[]) {
     transport: transport as "stdio" | "http",
     mode: mode as "request" | "daemon",
     port,
+    authorization,
   });
 }

@@ -10,7 +10,7 @@ const APP_SHELL_URI = "ui://kitstack/app";
  * kit_view(id, view)  → render the view as an embedded resource
  */
 export async function handleKitViewCall(
-  args: { id?: string; view?: string },
+  args: { id?: string; view?: string; params?: Record<string, unknown> },
   userId: string,
   adapter: KitServerAdapter,
   context?: ServerRequestContext,
@@ -32,7 +32,7 @@ export async function handleKitViewCall(
   }
 
   // kit_view(id, view) → render
-  return handleRenderView(kit, args.view, userId, adapter, context);
+  return handleRenderView(kit, args.view, userId, adapter, context, args.params);
 }
 
 // --- List Views ---
@@ -59,6 +59,7 @@ async function handleRenderView(
   userId: string,
   adapter: KitServerAdapter,
   context?: ServerRequestContext,
+  params?: Record<string, unknown>,
 ): Promise<KitToolResult> {
   const view = kit.views.find((v) => v.slug === viewSlug);
   if (!view) {
@@ -69,7 +70,7 @@ async function handleRenderView(
   // Execute the loader
   let loaderData: unknown = null;
   try {
-    loaderData = await adapter.executeLoader(kit.id, viewSlug, userId, context);
+    loaderData = await adapter.executeLoader(kit.id, viewSlug, userId, context, params);
   } catch (err: any) {
     console.error(`[kit_view] Loader failed for ${kit.id}/${viewSlug}:`, err.message);
   }

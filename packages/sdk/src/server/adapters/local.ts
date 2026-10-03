@@ -24,12 +24,21 @@ export interface LocalAdapterOptions {
   kitCdn?: string;
   /** Dev asset base URL for relay mode. */
   devAssetBaseUrl?: string;
-  /** Authorization check function. If omitted, authorize hooks are skipped. */
+  /**
+   * Authorization check for tools that declare `authorize` hooks. Without it,
+   * such tools are denied (fail closed) unless `authorization` is "skip".
+   */
   checkAuthz?: (
     db: LibSQLDatabase,
     requirement: AuthzRequirement,
     ctx: KitContext
   ) => Promise<boolean>;
+  /**
+   * "enforce" (default) denies tools with `authorize` hooks when no
+   * `checkAuthz` is configured. "skip" runs them unchecked — local
+   * development only; it is never the default.
+   */
+  authorization?: "enforce" | "skip";
 }
 
 /**
@@ -89,12 +98,12 @@ export function localAdapter(options: LocalAdapterOptions): KitServerAdapter {
     })),
   };
 
-  function makeCtx(userId: string, session?: KitContext["session"]): KitContext {
+  function makeCtx(userId: string, session?: KitContext["session"], params?: Record<string, unknown>): KitContext {
     const effectiveUserId = userId || defaultUserId;
     const base = options.context;
     return createKitContext({
       db,
-      params: base?.params,
+      params: params ? { ...base?.params, ...params } : base?.params,
       connectors: base?.connectors,
       identity: {
         principal: effectiveUserId,
@@ -137,6 +146,7 @@ export function localAdapter(options: LocalAdapterOptions): KitServerAdapter {
         ? {
             kitId,
             command: toolName,
+            mode: tool.mode ?? "assist",
             validate(input) {
               const parsed = tool.args.safeParse(input);
               if (!parsed.success) {
@@ -194,7 +204,14 @@ export function localAdapter(options: LocalAdapterOptions): KitServerAdapter {
               }
               return { allowed: true };
             }
-          : undefined,
+          : options.authorization === "skip"
+            ? undefined
+            : async (_request, requirements) => requirements.length === 0
+              ? { allowed: true }
+              : {
+                  allowed: false,
+                  reason: "Forbidden: this tool requires authorization, but no authorization check is configured for this server",
+                },
         invoke: async (_request, _target, parsedArgs, ctx) => {
           if (!tool) throw new Error(`Unknown tool: "${toolName}"`);
           return tool.handler!(ctx!, parsedArgs);
@@ -202,7 +219,7 @@ export function localAdapter(options: LocalAdapterOptions): KitServerAdapter {
       });
     },
 
-    async executeLoader(kitId, viewSlug, userId, requestContext?: ServerRequestContext) {
+    async executeLoader(kitId, viewSlug, userId, requestContext?: ServerRequestContext, params?: Record<string, unknown>) {
       const view = viewMap.get(viewSlug);
       if (!view) {
         throw new Error(`Unknown view: "${viewSlug}"`);
@@ -225,7 +242,7 @@ export function localAdapter(options: LocalAdapterOptions): KitServerAdapter {
         }),
         {
           resolve: async () => ({ target: { kitId, command: `view:${viewSlug}` } }),
-          createContext: (request) => makeCtx(request.identity.principal, request.session),
+          createContext: (request) => makeCtx(request.identity.principal, request.session, params),
           invoke: async (_request, _target, _args, ctx) => ({
             content: [{ type: "text" as const, text: JSON.stringify(await view.loader(ctx!)) }],
           }),

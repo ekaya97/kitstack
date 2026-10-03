@@ -18,6 +18,8 @@ export interface LocalRuntimeOptions {
   dbUrl?: string;
   /** Database auth token (for Turso). */
   dbToken?: string;
+  /** "skip" runs `authorize`-guarded tools unchecked (local development only). */
+  authorization?: "enforce" | "skip";
 }
 
 export interface LocalRuntime {
@@ -89,7 +91,9 @@ export async function createLocalRuntime(options: LocalRuntimeOptions = {}): Pro
   const { localAdapter } = await import("../server/adapters/local.js");
   const { createProtocolHandler } = await import("../server/protocol.js");
 
-  const adapter = localAdapter({ kit, db });
+  const authorization = options.authorization ?? "enforce";
+  if (authorization === "skip") warnAuthorizationSkipped(kit);
+  const adapter = localAdapter({ kit, db, authorization });
   const protocol = createProtocolHandler({
     adapter,
     serverInfo: { name: kit.name, version: kit.version ?? "dev" },
@@ -101,4 +105,11 @@ export async function createLocalRuntime(options: LocalRuntimeOptions = {}): Pro
     adapter,
     cleanup: () => client.close(),
   };
+}
+
+/** Make it visible when local tooling runs `authorize`-guarded tools unchecked. */
+export function warnAuthorizationSkipped(kit: KitDefinition): void {
+  const guarded = kit.tools.filter((tool) => typeof tool.authorize === "function").map((tool) => tool.name);
+  if (guarded.length === 0) return;
+  console.error(`[kitstack] Local development: authorize hooks are not enforced for ${guarded.join(", ")}. Self-hosted servers deny these tools unless checkAuthz is configured.`);
 }

@@ -34,7 +34,14 @@ function processZodType(schema: any): Record<string, unknown> {
   }
 
   if (typeName === "ZodString") return { type: "string", ...descProp };
-  if (typeName === "ZodNumber") return { type: "number", ...descProp };
+  if (typeName === "ZodNumber") {
+    const isInt = (schema._def.checks ?? []).some((check: any) => check?.kind === "int");
+    return { type: isInt ? "integer" : "number", ...descProp };
+  }
+  if (typeName === "ZodLiteral") return { const: schema._def.value, ...descProp };
+  if (typeName === "ZodNullable") return { ...processZodType(schema._def.innerType), ...descProp };
+  // Refinements and transforms keep the input shape of the wrapped schema.
+  if (typeName === "ZodEffects") return { ...processZodType(schema._def.schema), ...descProp };
   if (typeName === "ZodBoolean") return { type: "boolean", ...descProp };
 
   if (typeName === "ZodArray") {

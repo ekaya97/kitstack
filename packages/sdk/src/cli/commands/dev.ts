@@ -4,6 +4,7 @@ import { createInterface } from "node:readline";
 import { provisionDevDb } from "../../runtime/dev-db";
 import { createMcpHandler, type JsonRpcRequest } from "../../runtime/mcp-handler";
 import type { KitDefinition } from "../../types";
+import { warnAuthorizationSkipped } from "../kit-runtime";
 
 import { createDevLogger } from "../dev-logger.js";
 
@@ -184,7 +185,8 @@ export async function dev(args: string[]) {
     const { localAdapter } = await import("../../server/adapters/local.js");
     const { createProtocolHandler } = await import("../../server/protocol.js");
 
-    const adapter = localAdapter({ kit, db });
+    warnAuthorizationSkipped(kit);
+    const adapter = localAdapter({ kit, db, authorization: "skip" });
     const protocol = createProtocolHandler({
       adapter,
       serverInfo: { name: kit.name, version: kit.version ?? "dev" },
@@ -272,9 +274,10 @@ export async function dev(args: string[]) {
     const platformCdn = process.env.KITSTACK_CDN || "";
     const kitCdnUrl = process.env.KITSTACK_KIT_CDN || "";
     const devAssetBaseUrl = `${mcpBaseUrl}/dev/${sessionId}`;
+    warnAuthorizationSkipped(kit);
     const handler = createMcpHandler({
       kit, db, platformCdn, kitCdn: kitCdnUrl,
-      devAssetBaseUrl,
+      devAssetBaseUrl, authorization: "skip",
     });
 
     logger.status("connecting");
@@ -307,7 +310,8 @@ export async function dev(args: string[]) {
   }
 
   // Stdio mode — create handler without dev asset URL
-  const handler = createMcpHandler({ kit, db });
+  warnAuthorizationSkipped(kit);
+  const handler = createMcpHandler({ kit, db, authorization: "skip" });
 
   // Stdio transport: newline-delimited JSON-RPC
   const rl = createInterface({ input: process.stdin });
