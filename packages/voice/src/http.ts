@@ -11,8 +11,8 @@ import {
   type TwilioSignatureInput,
   type VoiceWebSocket,
   type SessionBinding,
-} from "../../adapters/voice/realtime.js";
-import type { TelemetryStore } from "../../telemetry/index.js";
+  type VoiceTelemetrySink,
+} from "./realtime.js";
 
 export interface VoiceHttpRequest {
   method: string;
@@ -30,9 +30,13 @@ export interface VoiceHttpResponse<T = unknown> {
 
 export interface LiveVoiceHttpOptions {
   twilio: TwilioCallsClient;
-  telemetry: Pick<TelemetryStore, "append">;
+  telemetry: VoiceTelemetrySink;
+  /** Kit the calls belong to, for telemetry. */
+  kitId?: string;
   orgId: string;
   appId: string | null;
+  /** Per-session identity, when calls span organisations; defaults to orgId/appId. */
+  sessionIdentity?: (sessionId: string) => { orgId: string; appId: string | null } | undefined;
   mediaStreamUrl: string;
   fromNumber: string;
   sessionTokenFor: (sessionId: string) => Promise<string>;
@@ -43,7 +47,7 @@ export interface LiveVoiceHttpOptions {
   allowedDestinations?: readonly string[];
   /** Require an explicit confirmation flag at the protected action boundary. */
   requireConfirmation?: boolean;
-  /** Lifecycle hooks keep the provider action tied to the debrief state machine. */
+  /** Lifecycle hooks keep the provider action tied to the kit's session state machine. */
   beforeStart?: (sessionId: string) => Promise<void>;
   onFailure?: (sessionId: string, error: unknown) => Promise<void>;
   onProviderStart?: (sessionId: string, callId: string) => Promise<void>;
@@ -110,10 +114,11 @@ async function startLiveVoiceCall(
   try {
     await options.beforeStart?.(sessionId);
     const sessionToken = await options.sessionTokenFor(sessionId);
+    const identity = options.sessionIdentity?.(sessionId) ?? { orgId: options.orgId, appId: options.appId };
     const result = await startRealtimeCall({
-      sessionId, orgId: options.orgId, appId: options.appId, to: destination, from: options.fromNumber,
+      sessionId, orgId: identity.orgId, appId: identity.appId, to: destination, from: options.fromNumber,
       mediaStreamUrl: options.mediaStreamUrl, sessionToken, twilio: options.twilio, telemetry: options.telemetry,
-      statusCallbackUrl: options.statusCallbackUrl, now: options.now, createId: options.createId,
+      kitId: options.kitId, statusCallbackUrl: options.statusCallbackUrl, now: options.now, createId: options.createId,
     });
     await options.onProviderStart?.(sessionId, result.callId);
     return result;
@@ -171,7 +176,9 @@ export interface VoiceMediaBridgeOptions {
   onCallCompleted?: (call: { sessionId: string; orgId: string; appId: string | null; callId: string | null; reason: string; occurredAt: string; provider: string }) => Promise<void>;
   stopReason?: string;
   bargeInMs?: number;
-  telemetry: Pick<TelemetryStore, "append">;
+  hangupTimeoutMs?: number;
+  kitId?: string;
+  telemetry: VoiceTelemetrySink;
   agent?: Parameters<typeof bridgeTwilioToOpenAI>[0]["agent"];
 }
 
@@ -180,6 +187,7 @@ export function attachVoiceMediaBridge(options: VoiceMediaBridgeOptions): Twilio
   return bridgeTwilioToOpenAI({
     twilioSocket: options.socket, signature: options.signature, verifier: options.verifier,
     openai: options.openai, provider: options.provider, routingReason: options.routingReason, telemetry: options.telemetry, agent: options.agent, instructionsFor: options.instructionsFor, stopReason: options.stopReason, bargeInMs: options.bargeInMs,
+    hangupTimeoutMs: options.hangupTimeoutMs, kitId: options.kitId,
     onCallCompleted: options.onCallCompleted,
   });
 }

@@ -1,5 +1,5 @@
 import { describe, expect, it, vi } from "vitest";
-import { handleLiveVoiceStart, handleVoiceProviderStatus, handleVoiceTwimlRequest, startScheduledLiveVoiceCall } from "./voice.js";
+import { handleLiveVoiceStart, handleVoiceProviderStatus, handleVoiceTwimlRequest, startScheduledLiveVoiceCall } from "../src/http.js";
 
 describe("live voice HTTP adapters", () => {
   it("starts only through the injected provider and returns a connecting boundary", async () => {

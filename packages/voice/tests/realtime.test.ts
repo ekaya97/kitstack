@@ -15,7 +15,7 @@ import {
   translateOpenAIRealtimeEvent,
   type OpenAIRealtimeSocket,
   type VoiceWebSocket,
-} from "./realtime.js";
+} from "../src/realtime.js";
 import { bindConnector } from "@kitstackco/sdk";
 
 class FakeSocket implements VoiceWebSocket, OpenAIRealtimeSocket {

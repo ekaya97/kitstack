@@ -12,7 +12,8 @@
     "baseUrl": ".",
     "paths": {
       "@kitstackco/sdk": ["../../packages/sdk/src/index.ts"],
-      "@kitstackco/sdk/*": ["../../packages/sdk/src/*"]
+      "@kitstackco/sdk/*": ["../../packages/sdk/src/*"],
+      "@kitstackco/voice": ["../../packages/voice/src/index.ts"]
     }
   },
   "include": ["src", "kit.config.ts", "test"]

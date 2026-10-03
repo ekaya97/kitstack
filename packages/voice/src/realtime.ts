@@ -2,8 +2,22 @@ import { createHmac, timingSafeEqual } from "node:crypto";
 import WebSocket from "ws";
 import { defineAgent, type AgentInput, type AgentLifecycleEvent, type AgentModelResponse, type AgentRunResult, type AgentTurnMetadata, type Connector } from "@kitstackco/sdk";
 import { jwtVerify, SignJWT } from "jose";
-import type { TelemetryEventInput, TelemetryStore } from "../../telemetry/index.js";
-import type { RealtimeFunctionTool } from "./tools.js";
+import type { TelemetryEventInput } from "@kitstackco/sdk";
+
+/** Metadata-only telemetry sink; audio, transcripts and tool payloads never reach it. */
+export interface VoiceTelemetrySink {
+  append(event: TelemetryEventInput): Promise<unknown> | unknown;
+}
+
+/** A function the realtime model may call. */
+export interface RealtimeFunctionTool {
+  readonly type: "function";
+  readonly name: string;
+  readonly description: string;
+  readonly parameters: Readonly<Record<string, unknown>>;
+}
+
+const DEFAULT_KIT_ID = "kit:voice";
 
 export const REALTIME_AUDIO_FORMAT = "g711_ulaw" as const;
 export const REALTIME_SAMPLE_RATE_HZ = 8_000 as const;
@@ -378,7 +392,9 @@ export interface RealtimeCallStartOptions {
   mediaStreamUrl: string;
   sessionToken: string;
   twilio: TwilioCallsClient;
-  telemetry: Pick<TelemetryStore, "append">;
+  telemetry: VoiceTelemetrySink;
+  /** Kit the call belongs to, for telemetry (e.g. "kit:debrief"). */
+  kitId?: string;
   statusCallbackUrl?: string;
   now?: () => string;
   createId?: () => string;
@@ -409,7 +425,7 @@ export async function startRealtimeCall(options: RealtimeCallStartOptions): Prom
     const call = await options.twilio.createCall({ to: options.to, from: options.from, twiml, statusCallbackUrl: options.statusCallbackUrl, record: false });
     await appendVoiceTelemetry(options.telemetry, {
       id: id(), timestamp: timestamp(), orgId: options.orgId, appId: options.appId, sessionId: options.sessionId,
-      traceId: options.sessionId, channel: "voice", kitId: "kit:debrief", type: "voice.call",
+      traceId: options.sessionId, channel: "voice", kitId: options.kitId ?? DEFAULT_KIT_ID, type: "voice.call",
       operation: "outbound_call_started:recording-off:retention-off", model: null, provider: REALTIME_PROVIDER, callId: call.sid, outcome: "started",
     });
     return {
@@ -420,7 +436,7 @@ export async function startRealtimeCall(options: RealtimeCallStartOptions): Prom
   } catch (error) {
     await appendVoiceTelemetry(options.telemetry, {
       id: id(), timestamp: timestamp(), orgId: options.orgId, appId: options.appId, sessionId: options.sessionId,
-      traceId: options.sessionId, channel: "voice", kitId: "kit:debrief", type: "voice.call",
+      traceId: options.sessionId, channel: "voice", kitId: options.kitId ?? DEFAULT_KIT_ID, type: "voice.call",
       operation: "outbound_call_error:recording-off:retention-off", model: null, provider: REALTIME_PROVIDER, outcome: "error",
     });
     throw error;
@@ -441,7 +457,10 @@ export interface DefineAgentVoiceLoopOptions {
   orgId: string;
   appId: string | null;
   instructions: { version: string; content: string };
-  telemetry: Pick<TelemetryStore, "append">;
+  telemetry: VoiceTelemetrySink;
+  /** Kit and agent identity for telemetry and the defineAgent run. */
+  kitId?: string;
+  agentId?: string;
   now?: () => string;
   createId?: () => string;
   tools?: Parameters<typeof defineAgent>[0]["tools"];
@@ -475,7 +494,7 @@ function lifecycleOutcome(event: AgentLifecycleEvent): "success" | "error" {
   return "success";
 }
 
-/** Adapt the SDK's content-free lifecycle event to the debrief W6-T1 sink. */
+/** Adapt the SDK's content-free agent lifecycle event to a voice telemetry event. */
 function toVoiceLifecycleTelemetry(
   event: AgentLifecycleEvent,
   options: DefineAgentVoiceLoopOptions,
@@ -504,7 +523,7 @@ function toVoiceLifecycleTelemetry(
     traceId: event.traceId,
     parentId: event.parentId ?? null,
     channel: "voice",
-    kitId: "kit:debrief",
+    kitId: options.kitId ?? DEFAULT_KIT_ID,
     type: event.type === "tool_called" ? "mcp.tool_call" : "voice.call",
     operation: `agent.${event.type}`,
     callId: options.callId ?? null,
@@ -568,9 +587,9 @@ export function createDefineAgentVoiceLoop(options: DefineAgentVoiceLoopOptions)
     else providerResponses.push(response);
   };
   const agent = defineAgent({
-    id: "debrief-voice-interviewer",
-    kitId: "kit:debrief",
-    trigger: { id: "voice-call", identity: "sales-agent" },
+    id: options.agentId ?? "voice-agent",
+    kitId: options.kitId ?? DEFAULT_KIT_ID,
+    trigger: { id: "voice-call", identity: "voice-agent" },
     instructions: options.instructions,
     tools: options.tools ?? [],
     turnSource: { next: async () => next() },
@@ -608,8 +627,8 @@ export function createDefineAgentVoiceLoop(options: DefineAgentVoiceLoopOptions)
       result = {
         status: "failed",
         sessionId: options.sessionId,
-        kitId: "kit:debrief",
-        agentId: "debrief-voice-interviewer",
+        kitId: options.kitId ?? DEFAULT_KIT_ID,
+        agentId: options.agentId ?? "voice-agent",
         triggerId: "voice-call",
         instructionsVersion: options.instructions.version,
         turns: 0,
@@ -791,12 +810,14 @@ export interface VoiceWebSocket {
 export interface TwilioOpenAIBridgeOptions {
   twilioSocket: VoiceWebSocket;
   openai: RealtimeSessionOptions;
+  /** Kit the call belongs to, for telemetry (e.g. "kit:debrief"). */
+  kitId?: string;
   provider?: string;
   routingReason?: string | null;
   verifier: SignedSessionTokenVerifier;
   bindings?: SessionBindingStore;
   signature?: { validator: TwilioSignatureValidator; url: string; params: Readonly<Record<string, string | string[] | undefined>>; value: string | undefined };
-  telemetry: Pick<TelemetryStore, "append">;
+  telemetry: VoiceTelemetrySink;
   agent?: VoiceAgentLoopAdapter | ((binding: SessionBinding, provider: OpenAIRealtimeSession, call: VoiceCallControl) => VoiceAgentLoopAdapter | Promise<VoiceAgentLoopAdapter>);
   /** Resolve prepared-session context before opening the provider model session. */
   instructionsFor?: (binding: SessionBinding) => Promise<string>;
@@ -923,7 +944,7 @@ export function bridgeTwilioToOpenAI(options: TwilioOpenAIBridgeOptions): Twilio
     }
     await appendVoiceTelemetry(options.telemetry, {
       id: id(), timestamp: now(), orgId: current?.orgId ?? "unknown", appId: current?.appId ?? null, sessionId: current?.sessionId ?? null,
-      traceId: current?.sessionId ?? streamSid ?? null, channel: "voice", kitId: "kit:debrief", type: "voice.call",
+      traceId: current?.sessionId ?? streamSid ?? null, channel: "voice", kitId: options.kitId ?? DEFAULT_KIT_ID, type: "voice.call",
       operation: error ? "media_stream_error" : "media_stream_stopped", provider, callId: current?.callSid ?? null, outcome: error ? "error" : "success",
     });
     // Without a working model the caller would hear silence; end the call.
@@ -955,7 +976,7 @@ export function bridgeTwilioToOpenAI(options: TwilioOpenAIBridgeOptions): Twilio
       realtime.socket.on("close", () => { void finish("openai_close", new Error("OpenAI Realtime connection closed")); });
       await appendVoiceTelemetry(options.telemetry, {
         id: id(), timestamp: now(), orgId: claims.orgId, appId: claims.appId, sessionId: claims.sessionId,
-        traceId: claims.sessionId, channel: "voice", kitId: "kit:debrief", type: "voice.call",
+        traceId: claims.sessionId, channel: "voice", kitId: options.kitId ?? DEFAULT_KIT_ID, type: "voice.call",
         operation: "media_stream_bound:recording-off:retention-off", provider, callId: start.callSid ?? null, outcome: "started",
       });
       realtime.startResponse();
@@ -1000,7 +1021,7 @@ export function bridgeTwilioToOpenAI(options: TwilioOpenAIBridgeOptions): Twilio
     options.twilioSocket.send(JSON.stringify({ event: "clear", streamSid }));
     await appendVoiceTelemetry(options.telemetry, {
       id: id(), timestamp: now(), orgId: current?.orgId ?? "unknown", appId: current?.appId ?? null,
-      sessionId: current?.sessionId ?? null, traceId: current?.sessionId ?? null, channel: "voice", kitId: "kit:debrief",
+      sessionId: current?.sessionId ?? null, traceId: current?.sessionId ?? null, channel: "voice", kitId: options.kitId ?? DEFAULT_KIT_ID,
       type: "voice.call", operation: hangupAfterResponse !== undefined ? "caller_interruption:hangup_pending" : "caller_interruption",
       provider, callId: current?.callSid ?? null, outcome: "success",
     });
@@ -1045,7 +1066,7 @@ export function bridgeTwilioToOpenAI(options: TwilioOpenAIBridgeOptions): Twilio
         if (translated.itemId) realtime?.deleteItem(translated.itemId);
         await appendVoiceTelemetry(options.telemetry, {
           id: id(), timestamp: now(), orgId: current?.orgId ?? "unknown", appId: current?.appId ?? null,
-          sessionId: current?.sessionId ?? null, traceId: current?.sessionId ?? null, channel: "voice", kitId: "kit:debrief",
+          sessionId: current?.sessionId ?? null, traceId: current?.sessionId ?? null, channel: "voice", kitId: options.kitId ?? DEFAULT_KIT_ID,
           type: "voice.call", operation: "caller_sound_ignored", provider, callId: current?.callSid ?? null, outcome: "success",
         });
         return;
@@ -1072,7 +1093,7 @@ export function bridgeTwilioToOpenAI(options: TwilioOpenAIBridgeOptions): Twilio
       await agent?.onProviderTurn?.({ kind: "turn_completed", sessionId: current?.sessionId ?? "unknown", usage, latencyMs });
       await appendVoiceTelemetry(options.telemetry, {
         id: id(), timestamp: now(), orgId: current?.orgId ?? "unknown", appId: current?.appId ?? null,
-        sessionId: current?.sessionId ?? null, traceId: current?.sessionId ?? null, channel: "voice", kitId: "kit:debrief",
+        sessionId: current?.sessionId ?? null, traceId: current?.sessionId ?? null, channel: "voice", kitId: options.kitId ?? DEFAULT_KIT_ID,
         type: "inference", operation: "realtime_turn", model: options.openai.model,
         provider, callId: current?.callSid ?? null,
         requestTokens: usage.inputTokens ?? null, responseTokens: usage.outputTokens ?? null,
@@ -1107,7 +1128,7 @@ export function bridgeTwilioToOpenAI(options: TwilioOpenAIBridgeOptions): Twilio
   return { binding, done };
 }
 
-async function appendVoiceTelemetry(telemetry: Pick<TelemetryStore, "append">, event: TelemetryEventInput): Promise<void> {
+async function appendVoiceTelemetry(telemetry: VoiceTelemetrySink, event: TelemetryEventInput): Promise<void> {
   await telemetry.append(event);
 }
 

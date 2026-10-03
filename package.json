@@ -8,13 +8,14 @@
     "packages/sdk",
     "packages/mcp-server",
     "packages/authz",
+    "packages/voice",
     "kits/debrief"
   ],
   "scripts": {
     "dev": "sst dev",
     "test": "npm run test:all",
     "test:run": "npm run test:all",
-    "test:all": "npm run test:debrief && npm run test:sdk && npm run test:mcp-server && npm run test:authz && npm run test:web && npm run test:operations",
+    "test:all": "npm run test:debrief && npm run test:sdk && npm run test:voice && npm run test:mcp-server && npm run test:authz && npm run test:web && npm run test:operations",
     "test:operations": "vitest run --config infra/operations/vitest.config.ts",
     "test:debrief": "npm test --workspace @kitstackco/debrief-kit",
     "test:sdk": "npm test --workspace @kitstackco/sdk",
@@ -29,7 +30,8 @@
     "dev:db": "turso dev --db-file databases/local.db",
     "build:layer": "packages/sdk/layer/build.sh",
     "sync:secrets": "./infra/sync-secrets.sh",
-    "deploy:kit": "sst shell -- npx tsx"
+    "deploy:kit": "sst shell -- npx tsx",
+    "test:voice": "npm test --workspace @kitstackco/voice"
   },
   "devDependencies": {
     "@aws-sdk/client-cloudwatch": "^3.1037.0",

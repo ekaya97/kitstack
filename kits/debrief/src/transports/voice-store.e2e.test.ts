@@ -1,10 +1,10 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { createDefineAgentVoiceLoop, createSignedSessionTokenCodec, type OpenAIRealtimeSocket, type VoiceWebSocket } from "../adapters/voice/realtime.js";
+import { createDefineAgentVoiceLoop, createSignedSessionTokenCodec, type OpenAIRealtimeSocket, type VoiceWebSocket } from "@kitstackco/voice";
 import { createDebriefVoiceTools } from "../adapters/voice/tools.js";
 import { createBoundDebriefKit } from "../composition/kit.js";
 import { createDebriefKitServer } from "../composition/host.js";
 import { createDemoApp, type DemoApp } from "../composition/app/index.js";
-import { attachVoiceMediaBridge, handleLiveVoiceStart, type LiveVoiceHttpOptions } from "./http/voice.js";
+import { attachVoiceMediaBridge, handleLiveVoiceStart, type LiveVoiceHttpOptions } from "@kitstackco/voice";
 
 class FakeSocket implements VoiceWebSocket, OpenAIRealtimeSocket {
   readonly sent: string[] = [];
@@ -231,7 +231,7 @@ describe("integrated voice persistence boundary", () => {
         telemetry: app!.telemetry,
         provider: "local-openai-realtime",
         model: "gpt-realtime",
-        tools: voiceTools.agent(() => undefined),
+        tools: voiceTools.agent,
         sendToolResult: provider.sendToolResult,
         onStop: async () => { await app!.debrief.awaitConfirmation(binding.sessionId); },
       }),

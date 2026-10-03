@@ -1,0 +1,26 @@
+/**
+ * Browser test page for the local voice harness. It speaks the same
+ * start/media/mark/stop envelope as Twilio Media Streams (G.711 μ-law, 8 kHz)
+ * and echoes marks once queued audio has played, like Twilio does.
+ */
+export function localVoicePage(options: { startPath: string }): string {
+  return `<!doctype html>
+<html lang="en">
+<head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>KitStack local voice</title>
+<style>body{font:16px system-ui;max-width:760px;margin:48px auto;padding:0 20px;color:#17202a}input,button{font:inherit;padding:10px}input{width:100%;box-sizing:border-box;margin:8px 0 12px}button{cursor:pointer}#log{white-space:pre-wrap;background:#f3f5f7;padding:14px;border-radius:8px;min-height:80px;margin-top:18px}.muted{color:#667}</style></head>
+<body><h1>KitStack local voice agent</h1><p class="muted">This uses your microphone and OpenAI Realtime locally. Twilio is not involved. Audio and transcript bodies are not persisted.</p>
+<label>Prepared session ID <input id="session" placeholder="paste a prepared session_id"></label>
+<button id="start">Start local call</button> <button id="stop" disabled>Stop</button><div id="log">Ready.</div>
+<script>
+const session=document.querySelector('#session'), start=document.querySelector('#start'), stop=document.querySelector('#stop'), logEl=document.querySelector('#log');
+let ws, audio, stream, source, processor, gain, nextOutput=0;
+const log=(x)=>logEl.textContent=x;
+function muLawToFloat(value){value=~value;let sign=value&128, exponent=(value>>4)&7, mantissa=value&15;let sample=((mantissa<<4)+132)<<exponent;return (sign?-sample:sample)/32768}
+function floatToMuLaw(sample){let sign=sample<0?128:0;let magnitude=Math.min(32767,Math.abs(sample)*32767);let exponent=7;for(let mask=0x4000;exponent>0&&!(magnitude&mask);mask>>=1)exponent--;let mantissa=(magnitude>>(exponent?exponent+3:4))&15;return ~(sign|(exponent<<4)|mantissa)&255}
+function downsample(input,fromRate,toRate){if(fromRate===toRate)return input;const ratio=fromRate/toRate,out=new Float32Array(Math.floor(input.length/ratio));for(let i=0;i<out.length;i++){const start=Math.floor(i*ratio),end=Math.min(input.length,Math.floor((i+1)*ratio));let sum=0;for(let j=start;j<end;j++)sum+=input[j];out[i]=sum/Math.max(1,end-start)}return out}
+function encode(input){const out=new Uint8Array(input.length);for(let i=0;i<input.length;i++)out[i]=floatToMuLaw(input[i]);let binary='';for(const byte of out)binary+=String.fromCharCode(byte);return btoa(binary)}
+function play(payload){const binary=atob(payload),buffer=audio.createBuffer(1,binary.length,8000),data=buffer.getChannelData(0);for(let i=0;i<binary.length;i++)data[i]=muLawToFloat(binary.charCodeAt(i));const node=audio.createBufferSource();node.buffer=buffer;node.connect(audio.destination);const now=audio.currentTime;nextOutput=Math.max(now,nextOutput);node.start(nextOutput);nextOutput+=buffer.duration}
+async function stopCall(){if(ws){ws.send(JSON.stringify({event:'stop',streamSid:'local-stream'}));ws.close();ws=undefined}if(processor)processor.disconnect();if(source)source.disconnect();if(gain)gain.disconnect();if(stream)stream.getTracks().forEach(t=>t.stop());if(audio)await audio.close();start.disabled=false;stop.disabled=true;log('Call stopped. Use the Claude debrief tools to review and confirm it.')}
+start.onclick=async()=>{try{if(!session.value.trim())throw Error('Paste a prepared session ID first');const response=await fetch('${options.startPath}',{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify({session_id:session.value.trim(),confirmation:true})});const result=await response.json();if(!response.ok)throw Error(result.message||result.error||'Could not start local call');audio=new AudioContext();stream=await navigator.mediaDevices.getUserMedia({audio:true});ws=new WebSocket((location.protocol==='https:'?'wss://':'ws://')+location.host+result.mediaPath);ws.onopen=()=>ws.send(JSON.stringify({event:'start',streamSid:'local-stream',start:{streamSid:'local-stream',callSid:result.callId,customParameters:{kitstack_session_token:result.sessionToken}}}));ws.onmessage=(event)=>{const message=JSON.parse(event.data);if(message.event==='media')play(message.media.payload);if(message.event==='clear')nextOutput=audio.currentTime;if(message.event==='mark'){const delay=Math.max(0,(nextOutput-audio.currentTime)*1000);setTimeout(()=>{if(ws&&ws.readyState===1)ws.send(JSON.stringify({event:'mark',streamSid:'local-stream',mark:message.mark}))},delay)}};ws.onerror=()=>log('WebSocket error. Check the local server and OPENAI_API_KEY.');ws.onclose=()=>{start.disabled=false;stop.disabled=true};source=audio.createMediaStreamSource(stream);processor=audio.createScriptProcessor(4096,1,1);gain=audio.createGain();gain.gain.value=0;processor.onaudioprocess=(event)=>{if(ws&&ws.readyState===1){const pcm=downsample(event.inputBuffer.getChannelData(0),event.inputBuffer.sampleRate,8000);ws.send(JSON.stringify({event:'media',streamSid:'local-stream',media:{payload:encode(pcm)}}))}};source.connect(processor);processor.connect(gain);gain.connect(audio.destination);start.disabled=true;stop.disabled=false;log('Connected. Speak into your microphone.');}catch(error){log(error.message);await stopCall()}};stop.onclick=stopCall;
+</script></body></html>`;
+}

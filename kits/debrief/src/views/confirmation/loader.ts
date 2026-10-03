@@ -1,6 +1,6 @@
 import { defineLoader, type KitContext } from "@kitstackco/sdk";
 
-import { CONFIRMATION_FIELDS, type ConfirmationField } from "./fields";
+import { CONFIRMATION_FIELDS } from "./fields";
 
 export { CONFIRMATION_FIELDS, type ConfirmationField } from "./fields";
 

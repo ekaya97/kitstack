@@ -1,0 +1,24 @@
+{
+  "name": "@kitstackco/voice",
+  "version": "0.1.0",
+  "description": "Voice channel plugin for KitStack kits: phone calls (Twilio + OpenAI Realtime) and a local browser harness.",
+  "type": "module",
+  "private": true,
+  "exports": {
+    ".": "./src/index.ts"
+  },
+  "scripts": {
+    "test": "vitest run",
+    "typecheck": "tsc -p tsconfig.json --noEmit"
+  },
+  "dependencies": {
+    "jose": "^5.2.3",
+    "ws": "^8.18.0"
+  },
+  "peerDependencies": {
+    "@kitstackco/sdk": "*"
+  },
+  "devDependencies": {
+    "@types/ws": "^8.5.13"
+  }
+}

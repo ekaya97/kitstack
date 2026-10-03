@@ -11,6 +11,7 @@
   },
   "dependencies": {
     "@kitstackco/sdk": "*",
+    "@kitstackco/voice": "*",
     "@libsql/client": "^0.14",
     "drizzle-orm": "^0.38.0",
     "jose": "^5.2.3",

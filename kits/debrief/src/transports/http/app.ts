@@ -1,8 +1,7 @@
 import type { DemoApp } from "../../composition/app/index.js";
 import type { McpAuthMode } from "../../adapters/auth/mcp.js";
 import type { DemoHttpRequest, DemoHttpResponse } from "./index.js";
-import { handleLiveVoiceStart, type LiveVoiceHttpOptions } from "./voice.js";
-import type { TwilioOpenAIBridge, VoiceWebSocket } from "../../adapters/voice/realtime.js";
+import type { VoiceChannel, VoiceChannelCapability } from "@kitstackco/voice";
 import type { ProxyResult } from "../../adapters/proxy/index.js";
 import type { ScheduledCallRecord } from "../../scheduler/index.js";
 import type { TelemetryAggregate, TelemetryEvent } from "../../telemetry/index.js";
@@ -12,30 +11,6 @@ const JSON_HEADERS = { "content-type": "application/json" };
 
 export interface DemoAppRouteRequest extends DemoHttpRequest {
   body?: Record<string, unknown>;
-}
-
-export interface DemoLiveVoiceRoute {
-  http: LiveVoiceHttpOptions;
-  capability: { enabled: true; provider: string; model: string; startPath: string };
-  /** Real phone calls always require the operator token, even in loopback auth-none mode. */
-  requireAdminToken?: boolean;
-  bridge?: (socket: VoiceWebSocket, request: DemoAppRouteRequest) => TwilioOpenAIBridge;
-}
-
-export interface DemoLocalVoiceRoute {
-  capability: { enabled: true; provider: string; model: string; startPath: string; mediaPath: string };
-  page: string;
-  bridge: (socket: VoiceWebSocket) => TwilioOpenAIBridge;
-  start: (sessionId: string) => Promise<{
-    sessionId: string;
-    callId: string;
-    status: "connecting";
-    provider: string;
-    sessionToken: string;
-    mediaPath: string;
-    recording: false;
-    retention: false;
-  }>;
 }
 
 export interface DemoObservabilityCustomer {
@@ -77,16 +52,15 @@ export interface DemoObservabilityResponse {
   customers: DemoObservabilityCustomer[];
   providerHealth: DemoProviderHealth[];
   mcpAuthMode: McpAuthMode;
-  liveCall?: DemoLiveVoiceRoute["capability"];
-  localCall?: DemoLocalVoiceRoute["capability"];
+  liveCall?: VoiceChannelCapability;
+  localCall?: VoiceChannelCapability;
 }
 
 /** Mounts the real app composition behind framework-neutral demo routes. */
 export async function handleDemoAppRequest(
   app: DemoApp,
   request: DemoAppRouteRequest,
-  liveVoice?: DemoLiveVoiceRoute,
-  localVoice?: DemoLocalVoiceRoute,
+  voice?: Pick<VoiceChannel, "capabilities">,
 ): Promise<DemoHttpResponse> {
   const path = request.path.split("?", 1)[0];
   try {
@@ -106,23 +80,6 @@ export async function handleDemoAppRequest(
       return json(200, current.status === "calling"
         ? await app.plugins.dispatch<{ operation: string; sessionId: string }, VoiceStatusResult>("channel:voice", { operation: "advance", sessionId }, pluginContext(app, request, sessionId))
         : current);
-    }
-    if (request.method === "POST" && path === "/t/voice/live/start") {
-      if (!liveVoice) return json(404, { error: "live_voice_disabled" });
-      if (!adminAuthorized(app, request) || (liveVoice.requireAdminToken && readHeader(request.headers, "x-demo-admin-token") !== app.adminToken)) {
-        return json(403, { error: "admin_token_required" });
-      }
-      return responseFromVoice(await handleLiveVoiceStart(request, liveVoice.http));
-    }
-    if (request.method === "GET" && path === "/t/voice/local") {
-      if (!localVoice) return json(404, { error: "local_voice_disabled" });
-      return { status: 200, headers: { "content-type": "text/html; charset=utf-8" }, body: localVoice.page };
-    }
-    if (request.method === "POST" && path === "/t/voice/local/start") {
-      if (!localVoice) return json(404, { error: "local_voice_disabled" });
-      const body = request.body ?? {};
-      if (body.confirmation !== true) return json(400, { error: "confirmation_required" });
-      return json(202, await localVoice.start(stringField(body, "session_id")));
     }
     if (request.method === "POST" && path === "/v1/apps/register") {
       if (!adminAuthorized(app, request)) return json(403, { error: "admin_token_required" });
@@ -167,7 +124,7 @@ export async function handleDemoAppRequest(
       return responseFromWeb(result.response);
     }
     if (request.method === "GET" && path === "/api/demo/observability") {
-      return json(200, await observabilitySnapshot(app, query(request.query), liveVoice, localVoice));
+      return json(200, await observabilitySnapshot(app, query(request.query), voice));
     }
     const sessionMatch = path.match(/^\/api\/demo\/sessions\/([^/]+)$/);
     if (request.method === "GET" && sessionMatch) {
@@ -262,8 +219,7 @@ function query(values: DemoHttpRequest["query"]): {
 async function observabilitySnapshot(
   app: DemoApp,
   filters: ReturnType<typeof query>,
-  liveVoice?: DemoLiveVoiceRoute,
-  localVoice?: DemoLocalVoiceRoute,
+  voice?: Pick<VoiceChannel, "capabilities">,
 ): Promise<DemoObservabilityResponse> {
   const [events, aggregate, schedulerJobs] = await Promise.all([
     app.telemetry.query({ orgId: app.orgId, ...filters }),
@@ -311,8 +267,8 @@ async function observabilitySnapshot(
     customers,
     providerHealth: providerHealth(events),
     mcpAuthMode: app.mcpAuthMode,
-    ...(liveVoice ? { liveCall: liveVoice.capability } : {}),
-    ...(localVoice ? { localCall: localVoice.capability } : {}),
+    ...(voice?.capabilities.phone ? { liveCall: voice.capabilities.phone } : {}),
+    ...(voice?.capabilities.local ? { localCall: voice.capabilities.local } : {}),
   };
 }
 
@@ -361,6 +317,3 @@ async function responseFromWeb(response: Response): Promise<DemoHttpResponse> {
   return { status: response.status, headers: JSON_HEADERS, body };
 }
 
-function responseFromVoice(response: { status: number; headers: Readonly<Record<string, string>>; body: unknown }): DemoHttpResponse {
-  return { status: response.status, headers: response.headers, body: response.body };
-}

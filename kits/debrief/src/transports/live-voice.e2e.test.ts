@@ -2,7 +2,7 @@ import { createHmac } from "node:crypto";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import WebSocket from "ws";
 import { createDemoServer, type DemoServer } from "./server.js";
-import type { OpenAIRealtimeSocket, OpenAIRealtimeSocketFactory } from "../adapters/voice/realtime.js";
+import type { OpenAIRealtimeSocket, OpenAIRealtimeSocketFactory } from "@kitstackco/voice";
 import { kitCall, kitView } from "./test-support.js";
 
 const AUTH_TOKEN = "twilio-test-auth-token";
