@@ -1,3 +1,7 @@
 
 # sst
 .sst
+# Host installs must not shadow the image install (native binaries differ).
+**/node_modules
+# Local demo databases.
+**/.kitstack
