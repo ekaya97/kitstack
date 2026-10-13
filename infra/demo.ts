@@ -19,8 +19,10 @@ const voiceDomain = process.env.KITSTACK_DEMO_VOICE_DOMAIN?.trim();
 const voicePublicHttpsUrl = voiceDomain ? `https://${voiceDomain}` : "";
 const voicePublicWssUrl = voiceDomain ? `wss://${voiceDomain}/t/voice/media` : "";
 
-export const demoVoiceCluster = new sst.aws.Cluster("DemoVoiceCluster", {
-  vpc: new sst.aws.Vpc("DemoVoiceVpc", { az: 2 }),
+// Renamed from DemoVoiceCluster/DemoVoiceVpc: an aborted deploy left those
+// names in state without a component version, which SST reads as v1.
+export const demoVoiceCluster = new sst.aws.Cluster("VoiceCluster", {
+  vpc: new sst.aws.Vpc("VoiceVpc", { az: 2 }),
 });
 
 export const demoVoice = new sst.aws.Service("DemoVoice", {
