@@ -1,11 +1,11 @@
 ---
 title: How to Build and Deploy
-description: Build your kit for production, validate migrations, and publish to the KitStack marketplace.
+description: Build your kit for production, validate migrations, and deploy to the KitStack platform or your own infrastructure.
 ---
 
 # How to Build and Deploy
 
-This guide covers the build pipeline, what it validates, and how to publish your kit.
+This guide covers the build pipeline, what it validates, and the two ways to run a kit in production: deployed to the hosted KitStack platform, or self-hosted on your own infrastructure.
 
 <Note>
 This guide assumes you've completed the [Getting Started](/docs/getting-started) tutorial and have a working kit.
@@ -17,7 +17,7 @@ This guide assumes you've completed the [Getting Started](/docs/getting-started)
 npx kitstack build
 ```
 
-The build pipeline runs these steps in order:
+The build runs locally and needs no account. It first runs `drizzle-kit generate` (if `drizzle.config.ts` exists), then these steps in order:
 
 1. **Load** — imports `kit.config.ts`, running all `defineKit()` validations
 2. **Validate migrations** — executes every SQL statement against an in-memory SQLite database
@@ -52,6 +52,7 @@ Output appears at `.kitstack/build/`:
   ✓ Migration SQL valid (8 statements)
   ✓ Validation passed
   ✓ Server bundle: .kitstack/build/kit.mjs (42.3 KB)
+  ✓ Lambda zip: .kitstack/build/kit.zip (12.8 KB)
   ✓ Generated 5 view entries
   ✓ View bundles: 5 view modules + 2 shared chunks (187.4 KB total)
   ✓ CSS: .kitstack/build/views/style.css (8.2 KB)
@@ -82,8 +83,9 @@ If you see size warnings:
 - **Server bundle > 1MB** — check your esbuild externals. Heavy packages like `@libsql/client` should be externalized, not bundled.
 - **View module > 500KB** — check your component's dependency tree. Import specific subpaths (e.g., `date-fns/format` instead of the full `date-fns` package).
 
-## Publishing to the marketplace
+## Deploying to the KitStack platform
 
+Requires a KitStack account and the hosted KitStack API.
 
 ### Authenticate
 
@@ -93,71 +95,44 @@ npx kitstack login
 
 This opens your browser to authenticate with your KitStack account. Credentials are saved to `~/.kitstack/credentials.json`.
 
-### Build
+### Deploy
 
 ```bash filename="Terminal"
-npx kitstack build
+npx kitstack deploy
 ```
 
-If you've already built and haven't changed anything, this step is optional — `publish` will use the existing build output.
-
-### Publish
-
-```bash filename="Terminal"
-npx kitstack publish
-```
-
-This uploads your build artifacts (server bundle, views, shell) to the KitStack platform. You'll see:
+`deploy` runs the full build itself, then uploads the artifacts (server bundle, views, shell) to the KitStack platform. You'll see:
 
 ```
-  ✓ Submitted for review.
-    Kit ID: crm
-    Version: 1.0.0
-    Status: in review
-  You'll be notified when the review is complete.
+  ✓ Kit "crm" deployed (private)
+    Tools: 12
+    Views: 5
+
+  Activate it from your dashboard at https://kitstack.co/dashboard?tab=developer
 ```
 
-
-Published kits default to **private** visibility — only you can see and use them.
-
-### Visibility options
-
-| Visibility | Who can see it | Who can use it |
-|------------|---------------|---------------|
-| `private` | Only authorized users | Users with activator access |
-| `unlisted` | Anyone with the direct URL | Users with activator access |
-| `public` | Everyone (marketplace listing) | Users with activator access |
+Deployed kits are **private** — only you and the users you grant access can use them. If your organization requires approval, the deploy becomes a request that an admin approves with `kitstack deploy approve <request-id>`. Public marketplace listing (`kitstack publish`) is not available yet.
 
 ## Self-hosted deployment
 
-For running your own MCP server outside the KitStack marketplace, use the `kitstack serve` CLI command.
-
-### kitstack serve
-
-A zero-config entry point that starts a self-hosted MCP server for your kit. Configuration is handled entirely through environment variables:
+To run your kit outside the KitStack platform, as your own MCP server, use [`kitstack serve`](/docs/cli/serve) or the programmatic [`serve()`](/docs/guides/self-hosting#programmatic-serve). No KitStack account is needed.
 
 ```bash filename="Terminal"
-npx kitstack serve
+npx kitstack serve --transport http
+#   http://127.0.0.1:3001/mcp
 ```
 
 | Environment variable | Description | Default |
 |---------------------|-------------|---------|
-| `KITSTACK_TRANSPORT` | MCP transport type (`stdio` or `http`) | `stdio` |
-| `KITSTACK_PORT` | Port number for HTTP transport | `3001` |
-| `KITSTACK_DB_URL` | LibSQL database URL | — |
-| `KITSTACK_DB_TOKEN` | LibSQL auth token (for remote databases) | — |
+| `KITSTACK_TRANSPORT` | MCP transport (`stdio` or `http`) | `stdio` |
+| `KITSTACK_PORT` | HTTP port | `3001` |
+| `KITSTACK_MCP_PATH` | HTTP path of the MCP endpoint | `/mcp` |
+| `KITSTACK_DB_URL` | libSQL database URL | `file:<kit>/.kitstack/dev.db` |
+| `KITSTACK_DB_TOKEN` | libSQL auth token (for remote databases) | — |
 
-```bash filename="Example: HTTP transport with remote Turso database"
-KITSTACK_TRANSPORT=http \
-KITSTACK_PORT=4000 \
-KITSTACK_DB_URL=libsql://my-db.turso.io \
-KITSTACK_DB_TOKEN=eyJ... \
-npx kitstack serve
-```
+`kitstack serve` binds to `127.0.0.1`, does not authenticate callers, and denies tools that declare `authorize` hooks. For a server other machines or users connect to — including in a container — write a small `server.ts` with `serve()` and its `host`, `authenticate`, and `checkAuthz` options. The [Self-hosting guide](/docs/guides/self-hosting) walks through it.
 
-Under the hood, `kitstack serve` uses `createProtocolHandler` paired with a `localAdapter`. For advanced setups (custom transports, embedding in existing servers), you can import `createProtocolHandler` directly from `@kitstackco/sdk` and pair it with your own adapter.
-
-### Security defaults for kit Lambdas
+## Security defaults for hosted kit Lambdas
 
 When deployed to the KitStack platform, kit Lambdas run with these security defaults:
 
@@ -169,19 +144,16 @@ When deployed to the KitStack platform, kit Lambdas run with these security defa
 | Network | VPC lockdown (no outbound internet) |
 | Log retention | 3 days |
 
-These defaults ensure sandboxed execution with minimal blast radius. Kit handlers cannot make outbound HTTP requests or access external services.
+These defaults ensure sandboxed execution with minimal blast radius. On the hosted platform, kit handlers cannot make outbound HTTP requests or access external services. A self-hosted server has no such restriction.
 
 ## Gotchas
 
 <Warning>
-Always build before deploying. The upload does not validate — it sends whatever is in `.kitstack/build/`. If the directory is empty or stale, you'll deploy an old or broken version.
-</Warning>
-
-<Warning>
-`kitstack publish` requires authentication. Run `kitstack login` first. Credentials are stored at `~/.kitstack/credentials.json` and persist across sessions.
+`kitstack deploy` requires authentication. Run `kitstack login` first. Credentials are stored at `~/.kitstack/credentials.json` and persist across sessions.
 </Warning>
 
 ## Next steps
 
 - [CLI: build](/docs/cli/build) — build command reference
 - [CLI: deploy](/docs/cli/deploy) — deploy command reference
+- [Self-hosting](/docs/guides/self-hosting) — run the kit as your own MCP server

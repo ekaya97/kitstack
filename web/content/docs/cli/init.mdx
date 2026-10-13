@@ -10,8 +10,10 @@ Scaffold a complete, runnable kit project.
 ## Usage
 
 ```bash filename="Terminal"
-npx kitstack init <name>
+npx @kitstackco/sdk@latest init <name>
 ```
+
+There is no unscoped `kitstack` package on npm, so a new project starts from the scoped SDK package. Once the project's dependencies are installed, the `kitstack` binary is available inside it as `npx kitstack`.
 
 ## Arguments
 
@@ -23,45 +25,60 @@ npx kitstack init <name>
 
 ```
 <name>/
-  kit.config.ts          # defineKit() with migrationsDir
-  package.json           # @kitstackco/sdk, zod, drizzle-orm, vitest
+  kit.config.ts          # defineKit() — tools, the dashboard view, migrationsDir: "./migrations"
+  package.json           # @kitstackco/sdk pinned to the SDK version that ran init, plus scripts
   tsconfig.json          # ESNext + bundler resolution + JSX
   tailwind.config.ts     # KitStack preset
-  drizzle.config.ts      # drizzle-kit config
-  migrations/            # Generated SQL files
-  .gitignore
+  drizzle.config.ts      # drizzle-kit config: src/schema.ts → migrations/
+  migrations/            # Empty; filled by drizzle-kit on the first test or dev run
+  .gitignore             # .kitstack/, node_modules/, dist/, index.html
   src/
     schema.ts            # Drizzle table definition (items)
-    instructions.ts      # LLM system prompt
+    instructions.ts      # Instructions for the LLM
     tools/
-      example.ts         # defineTool() with load + handler
+      items.ts           # list_items (mode "assist", read) and add_item (mode "act", write)
     views/
+      styles.css         # Tailwind entry for views
       dashboard/
-        index.ts          # defineView()
-        loader.ts         # Server-side data fetching
-        View.tsx           # React component
+        index.ts         # defineView()
+        loader.ts        # Reuses listItems.load()
+        View.tsx         # React component
   test/
-    tools.test.ts         # vitest + createTestKit()
+    tools.test.ts        # Three vitest tests using createTestKit()
 ```
+
+`package.json` includes `zod`, `drizzle-orm`, `drizzle-kit`, `vitest`, `react`, `tailwindcss`, and `vite` with `@vitejs/plugin-react` (for the View DevKit). Its scripts:
+
+| Script | Command |
+|--------|---------|
+| `dev` | `kitstack dev --local` |
+| `mcp` | `kitstack dev --stdio` |
+| `generate` | `drizzle-kit generate` |
+| `build` | `kitstack build` |
+| `test` | `drizzle-kit generate && vitest run` |
 
 ## Details
 
 - **Name validation:** the regex is `/^[a-z][a-z0-9]*(?:-[a-z0-9]+)*$/`. Uppercase, underscores, leading digits, and trailing hyphens are rejected.
-- **Display name:** `"my-crm-kit"` becomes `"My CRM Kit"` via split-on-hyphen capitalization.
+- **Display name:** `"my-crm-kit"` becomes `"My Crm Kit"` (each hyphen-separated word capitalized). Edit `name` in `kit.config.ts` to change it.
 - **Templates are inline:** templates are string functions, not file copies. The CLI is self-contained with no external template directory.
-- **The example tool has a shared `load` function** that's used by both the tool handler and the dashboard view loader — demonstrating the SDK's data-reuse pattern from day one.
+- **`list_items` has a shared `load` function** that's used by both the tool handler and the dashboard view loader — demonstrating the SDK's data-reuse pattern from day one.
+- **Fails if the directory exists.** `init` never overwrites files.
 - **Non-interactive:** no prompts. Everything is created in one shot.
 
 ## Example
 
 ```bash filename="Terminal"
-npx kitstack init expense-tracker
+npx @kitstackco/sdk@latest init expense-tracker
 cd expense-tracker
 npm install
 npm test
-npx kitstack dev
+npx kitstack call kit expense-tracker add_item '{"name":"First item"}'
+npx kitstack call kit expense-tracker list_items '{}'
 ```
+
+`init` prints these next steps, plus the `claude mcp add` command that connects the kit to Claude Code.
 
 ## Next steps
 
-After scaffolding, follow the [Getting Started](/docs/getting-started) tutorial to connect your LLM client.
+After scaffolding, follow the [Getting Started](/docs/getting-started) tutorial, then [Connect your kit to Claude](/docs/guides/connect-to-claude).

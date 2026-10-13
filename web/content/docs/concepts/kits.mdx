@@ -92,11 +92,11 @@ The `instructions` field is a system prompt injected into the LLM's context when
 | Phase | What happens |
 |-------|-------------|
 | **Define** | `defineKit()` validates naming conventions, descriptions, uniqueness |
-| **Dev** | `kitstack dev` connects via relay, provisions a local DB, serves views in real-time |
+| **Dev** | `kitstack dev` provisions a local DB and serves the kit locally (`--local`, `--stdio`) or through the relay, with the View DevKit |
 | **Test** | `createTestKit()` runs against in-memory SQLite |
 | **Build** | `kitstack build` bundles server + views, validates migrations |
-| **Publish** | `kitstack publish` uploads to the KitStack marketplace |
-| **Activate** | Users enable your kit with a single click — no setup required |
+| **Run** | `kitstack deploy` uploads to the KitStack platform (private), or `kitstack serve` / `serve()` runs it on your own infrastructure |
+| **Activate** | On the platform, users enable your kit with a single click — no setup required |
 
 ## Kit vs MCP server vs SaaS
 
@@ -105,7 +105,7 @@ The `instructions` field is a system prompt injected into the LLM's context when
 | **Complexity** | Utility tool — small, focused | Full application infrastructure | Complex business logic |
 | **Data** | Per-user SQLite, managed by platform | Self-managed | Multi-tenant, self-managed |
 | **Auth** | Handled by KitStack | You implement it | You implement it |
-| **Deployment** | `kitstack publish` | Self-hosted or custom | Custom infrastructure |
+| **Deployment** | `kitstack deploy` or `kitstack serve` | Self-hosted or custom | Custom infrastructure |
 | **Best for** | Personal tools, SME/enterprise utilities, bridging LLM and persistence | Custom integrations, complex workflows | Products with multi-user requirements, long-running tasks |
 
 ## Next steps

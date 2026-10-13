@@ -135,8 +135,8 @@ function result(fragments: KitResultFragment[]): KitToolResult
 ```
 
 ```ts filename="src/tools/add-contact.ts"
-const id = nanoid();
-await db.insert(contacts).values({ id, name: args.name });
+const id = crypto.randomUUID();
+await ctx.db.insert(contacts).values({ id, name: args.name });
 return kit.result(kit.created(id, "contact", `Contact "${args.name}" added.`));
 ```
 

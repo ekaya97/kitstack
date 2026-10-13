@@ -1,0 +1,197 @@
+---
+title: How to Self-Host a Kit
+description: Run your kit as your own MCP server — kitstack serve for a quick start, serve() for authentication, authorization, and production.
+---
+
+# How to Self-Host a Kit
+
+A kit runs as a standalone MCP server on your own infrastructure, without a KitStack account. There are two entry points:
+
+| | [`kitstack serve`](/docs/cli/serve) | `serve()` from `@kitstackco/sdk/server` |
+|---|---|---|
+| **What** | CLI, zero code | A few lines in your own `server.ts` |
+| **Transports** | stdio, HTTP | stdio, HTTP |
+| **Binds to** | `127.0.0.1` only | `127.0.0.1` by default, configurable (`host`) |
+| **Migrations** | Applies `migrations/` on start | Not applied — see [Migrations](#migrations) |
+| **Authentication** | None | `authenticate` or an `auth` adapter |
+| **Authorization** | Tools with `authorize` denied (or `--unsafe-skip-authz`) | `checkAuthz` |
+| **Extras** | — | Custom HTTP routes, CORS, connectors, several kits per process |
+
+Start with `kitstack serve` on your machine. Move to `serve()` as soon as the server must be reachable from other machines, authenticate callers, or enforce `authorize` hooks.
+
+<Note>
+This guide assumes you've completed the [Getting Started](/docs/getting-started) tutorial.
+</Note>
+
+## Quick start: kitstack serve
+
+```bash filename="Terminal"
+npx kitstack serve --transport http
+#   KitStack MCP Server (request)
+#   http://127.0.0.1:3001/mcp
+```
+
+MCP is served at `POST /mcp`, and `GET /healthz` returns `{"status":"ok"}`. Connect Claude Code with `claude mcp add --transport http my-kit http://127.0.0.1:3001/mcp`. Without `--transport http`, it speaks MCP over stdin/stdout. See the [`kitstack serve` reference](/docs/cli/serve) for all flags.
+
+## Programmatic serve()
+
+Create `server.ts` in the kit root:
+
+```ts filename="server.ts"
+import { serve } from "@kitstackco/sdk/server";
+import kit from "./kit.config";
+
+const server = await serve({
+  kit,
+  db: { url: process.env.KITSTACK_DB_URL ?? "file:.kitstack/dev.db" },
+  transport: "http",
+  host: "127.0.0.1",
+  port: Number(process.env.PORT ?? 3001),
+  mcpPath: "/mcp",
+});
+
+process.once("SIGTERM", () => void server.close());
+```
+
+Run it with [tsx](https://tsx.is), which loads `kit.config.ts` directly:
+
+```bash filename="Terminal"
+npm install -D tsx
+npx tsx server.ts
+```
+
+### Options
+
+| Option | Default | Description |
+|--------|---------|-------------|
+| `kit` | — | The `defineKit()` result. Single-kit mode. |
+| `db` | — | `{ url, authToken? }` for `@libsql/client` (`file:…`, `libsql://…`), or an existing Drizzle libSQL database. |
+| `transport` | `"stdio"` | `"stdio"` or `"http"`. |
+| `host` | `"127.0.0.1"` | Interface to bind. Use `"0.0.0.0"` in containers. |
+| `port` | `3001` | HTTP port. `0` picks a free port. |
+| `mcpPath` | `"/"` | Path of the MCP JSON-RPC endpoint (`kitstack serve` uses `/mcp`). |
+| `authenticate` | — | `(request) => Promise<{ userId } \| { status: 401 \| 403, body?, headers? }>`. Runs on every MCP request. |
+| `auth` | `none()` | An auth adapter (`none`, `kitstack`, `oauth`) that validates bearer tokens. See [Authentication](#authentication). |
+| `checkAuthz` | — | `(db, requirement, ctx) => Promise<boolean>`. Without it, tools with `authorize` hooks are denied. See [Authorization](/docs/guides/authorization). |
+| `connectors` | — | A `ConnectorRegistry` available to tools and loaders as `ctx.connectors`. |
+| `routes` | `[]` | Extra HTTP routes next to MCP: `{ method?, path: string \| RegExp, handler(request) => { status, headers?, body? } }`. |
+| `cors` | off | `{ origin?, headers?, methods? }` adds CORS headers and answers preflight requests. |
+| `maxBodyBytes` | 1 MiB | Request body limit. |
+| `shellHtml` | — | HTML shell for rendering Views, e.g. the contents of `.kitstack/build/shell.html` from `kitstack build`. |
+| `kits` + `databases` | — | Several kits in one process: `kits: [a, b]` and `databases: { [kitId]: db }`. Keys must match kit IDs exactly. |
+| `onShutdown` | — | Runs on `close()` before the HTTP server stops. |
+
+`serve()` resolves to a handle with `port`, `host`, and `close()`. HTTP mode also answers `GET /healthz` and `GET /.well-known/oauth-authorization-server` (the `auth` adapter's metadata).
+
+To call tools from other code in the same process (a webhook route, a scheduler), use `createKitServer(options)` instead: it returns `executeTool(kitId, toolName, args, principal)`, which goes through the same validation and authorization as MCP, and `listen()` to start the transport.
+
+<Warning>
+In stdio mode, never `console.log()` in tool handlers. Anything written to stdout corrupts the JSON-RPC stream. Use `console.error()` for debug output.
+</Warning>
+
+## Authentication
+
+By default every request is served as the user `default-user`. The caller's identity reaches tools as `ctx.identity.principal`.
+
+To require authentication, pass `authenticate`. It replaces the `auth` adapter's check for the MCP endpoint, and it rejects requests by returning a status:
+
+```ts filename="server.ts"
+await serve({
+  kit,
+  db: { url: process.env.KITSTACK_DB_URL! },
+  transport: "http",
+  mcpPath: "/mcp",
+  authenticate: async (request) => {
+    const header = request.headers.authorization ?? "";
+    const token = header.startsWith("Bearer ") ? header.slice(7) : "";
+    const user = await verifyWithYourIdentityProvider(token); // e.g. validate a JWT from Entra ID
+    return user ? { userId: user.id } : { status: 401 };
+  },
+});
+```
+
+<Warning>
+With an `auth` adapter, every MCP request needs a valid bearer token: a missing or invalid token gets `401`. `serve()` publishes the adapter's OAuth metadata but does not mount `/oauth/authorize` or `/oauth/token` endpoints.
+</Warning>
+
+## Authorization
+
+Tools that declare an `authorize` hook are denied on a self-hosted server until you pass `checkAuthz`. See [Authorization](/docs/guides/authorization).
+
+## Migrations
+
+`serve()` does not create tables. `kitstack serve`, `kitstack dev`, and `kitstack call` apply every file in `migrations/` on start, with `CREATE TABLE IF NOT EXISTS`, so a database first opened by one of them already has the schema.
+
+For a database that only `serve()` uses, apply the migrations before serving. drizzle-kit writes a journal next to the SQL files, so drizzle-orm's migrator can apply them and track which ran:
+
+```ts filename="server.ts"
+import { createClient } from "@libsql/client";
+import { drizzle } from "drizzle-orm/libsql";
+import { migrate } from "drizzle-orm/libsql/migrator";
+import { serve } from "@kitstackco/sdk/server";
+import kit from "./kit.config";
+
+const db = drizzle(createClient({
+  url: process.env.KITSTACK_DB_URL!,
+  authToken: process.env.KITSTACK_DB_TOKEN,
+}));
+await migrate(db, { migrationsFolder: "./migrations" });
+
+await serve({ kit, db, transport: "http", host: "0.0.0.0", mcpPath: "/mcp" });
+```
+
+<Warning>
+Use one approach per database. The drizzle migrator expects to create the tables itself, so do not point it at a database that `kitstack dev`, `call`, or `serve` already created.
+</Warning>
+
+## Containers
+
+Both `kitstack serve` and `serve()` bind to `127.0.0.1` by default, which is not reachable through a container's published port. In a container, start `kitstack serve --transport http --host 0.0.0.0`, or use `serve()` with `host: "0.0.0.0"` (the `server.ts` above):
+
+```dockerfile filename="Dockerfile"
+FROM node:22-slim
+WORKDIR /app
+COPY package*.json ./
+RUN npm ci
+COPY . .
+
+ENV KITSTACK_DB_URL=file:/data/kit.db
+VOLUME /data
+EXPOSE 3001
+CMD ["npx", "tsx", "server.ts"]
+```
+
+```bash filename="Terminal"
+docker build -t my-kit .
+docker run -p 3001:3001 -v "$PWD/data:/data" my-kit
+```
+
+<Note>
+`kitstack build --container` builds a different image: the kit's invocation handler for KitStack's hosting adapters, not an MCP endpoint. See [`kitstack build`](/docs/cli/build).
+</Note>
+
+## Several kits in one server
+
+```ts filename="server.ts"
+import { serve } from "@kitstackco/sdk/server";
+import crmKit from "./kits/crm/kit.config";
+import outreachKit from "./kits/outreach/kit.config";
+
+await serve({
+  kits: [crmKit, outreachKit],
+  databases: {
+    crm: { url: process.env.CRM_DB_URL! },
+    "cold-outreach": { url: process.env.OUTREACH_DB_URL! },
+  },
+  transport: "http",
+  mcpPath: "/mcp",
+});
+```
+
+Each kit keeps its own database and appears under its own ID in the `kit` tool. A missing `databases` entry throws at startup.
+
+## Next steps
+
+- [Authorization](/docs/guides/authorization) — `authorize` hooks and `checkAuthz`
+- [Connect your kit to Claude](/docs/guides/connect-to-claude) — client configuration
+- [`kitstack serve`](/docs/cli/serve) — CLI flags and environment variables

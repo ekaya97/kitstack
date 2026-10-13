@@ -5,7 +5,7 @@ description: CLI reference for kitstack serve — start a self-hosted MCP server
 
 # kitstack serve
 
-Start a self-hosted MCP server for your kit. Zero-config entry point — reads `kit.config.ts`, creates a database, runs migrations, and starts serving.
+Start a self-hosted MCP server for your kit. Zero-config entry point — reads `kit.config.ts`, opens the database, applies the migrations in `migrations/`, and starts serving. No KitStack account is needed.
 
 ## Usage
 
@@ -17,89 +17,89 @@ npx kitstack serve [flags]
 
 | Flag | Env var | Default | Description |
 |------|---------|---------|-------------|
-| `--transport` | `KITSTACK_TRANSPORT` | `stdio` | Transport mode: `stdio` or `http` |
-| `--port` | `KITSTACK_PORT` | `3001` | HTTP port (only for `http` transport) |
-| `--db` | `KITSTACK_DB_URL` | `file:.kitstack/dev.db` | Database URL |
-| `--db-token` | `KITSTACK_DB_TOKEN` | — | Database auth token (for Turso) |
-| `--config` | — | `.` | Path to kit root directory |
+| `--transport <mode>` | `KITSTACK_TRANSPORT` | `stdio` | `stdio` or `http` |
+| `--port <number>` | `KITSTACK_PORT` | `3001` | HTTP port (only for `http` transport) |
+| `--path <path>` | `KITSTACK_MCP_PATH` | `/mcp` | HTTP path of the MCP endpoint |
+| `--host <address>` | `KITSTACK_HOST` | `127.0.0.1` | HTTP address to bind; `0.0.0.0` in containers |
+| `--mode <mode>` | `KITSTACK_SERVE_MODE` | `request` | `request`, or `daemon` for long-lived connections |
+| `--db <url>` | `KITSTACK_DB_URL` | `file:<kit>/.kitstack/dev.db` | Database URL (`file:…` or `libsql://…`) |
+| `--db-token <token>` | `KITSTACK_DB_TOKEN` | — | Database auth token (for Turso / remote libSQL) |
+| `--config <path>` | — | `.` | Kit directory, or the path to its `kit.config.ts` |
+| `--unsafe-skip-authz` | — | off | Run tools that declare `authorize` hooks without checking them. Local development only. |
+| `--help` | — | — | Show help |
+
+Flags take precedence over environment variables.
 
 ## stdio transport
 
 ```bash filename="Terminal"
-kitstack serve
+npx kitstack serve
 ```
 
-Default mode. Reads JSON-RPC from stdin, writes to stdout. Configure your MCP client to launch the process:
-
-```json filename="claude_desktop_config.json"
-{
-  "mcpServers": {
-    "my-kit": {
-      "command": "npx",
-      "args": ["kitstack", "serve"],
-      "cwd": "/path/to/my-kit"
-    }
-  }
-}
-```
+Default mode. Reads JSON-RPC from stdin, writes responses to stdout. MCP clients launch the process themselves; see [Connect your kit to Claude](/docs/guides/connect-to-claude) for client configuration. For local development over stdio, `kitstack dev --stdio` is usually the better fit: it also regenerates migrations and starts the View DevKit.
 
 ## HTTP transport
 
 ```bash filename="Terminal"
-kitstack serve --transport http --port 3001
+npx kitstack serve --transport http
 ```
 
-Starts an HTTP server on the specified port. Point any MCP client at `http://localhost:3001`.
+```
+  KitStack MCP Server (request)
+  http://127.0.0.1:3001/mcp
+```
 
-## Environment variables
+| Endpoint | Purpose |
+|----------|---------|
+| `POST /mcp` | MCP JSON-RPC endpoint (path set by `--path`) |
+| `GET /healthz` | Returns `{"status":"ok"}` |
 
-All flags can be set via environment variables. Flags take precedence over env vars.
+Connect Claude Code with:
 
 ```bash filename="Terminal"
-KITSTACK_TRANSPORT=http \
-KITSTACK_PORT=3001 \
-KITSTACK_DB_URL=file:./data/kit.db \
-kitstack serve
+claude mcp add --transport http my-kit http://127.0.0.1:3001/mcp
 ```
 
-## Remote databases
+<Warning>
+`kitstack serve` does not authenticate requests: every request is served as one default user. It binds to `127.0.0.1` unless you pass `--host`. For a server other people connect to, use [`serve()`](/docs/guides/self-hosting#programmatic-serve) with `host`, `authenticate`, and `checkAuthz`.
+</Warning>
 
-For production self-hosting, point at a Turso database:
+## Authorization
+
+`kitstack serve` is fail-closed. Tools that declare an [`authorize` hook](/docs/guides/authorization) are denied with:
+
+```
+Forbidden: this tool declares an authorize hook, but this server has no authorization check. Pass checkAuthz to serve(), or start `kitstack serve --unsafe-skip-authz` for local development
+```
+
+There is no CLI flag that supplies a `checkAuthz` function. For local development, `--unsafe-skip-authz` runs these tools unchecked and prints a warning naming them. Tools without `authorize` are not affected.
+
+## Databases and migrations
+
+The default database is `.kitstack/dev.db` inside the kit directory — the same file `kitstack dev` and `kitstack call` use, addressed absolutely, so the working directory does not matter. A `--db` URL you pass is used as given; use an absolute `file:` path.
+
+On start, `kitstack serve` applies every SQL file in `migrations/` (with `CREATE TABLE IF NOT EXISTS`). It does **not** generate migrations: after changing `src/schema.ts`, run `npm run generate` (or `npm test`) and commit the new file in `migrations/`.
+
+For a remote libSQL database such as Turso:
 
 ```bash filename="Terminal"
 KITSTACK_DB_URL=libsql://my-kit-db.turso.io \
 KITSTACK_DB_TOKEN=your-token \
-kitstack serve --transport http
-```
-
-## Docker
-
-```dockerfile filename="Dockerfile"
-FROM node:22-alpine
-WORKDIR /app
-COPY . .
-RUN npm ci && npx kitstack build
-
-ENV KITSTACK_TRANSPORT=http
-ENV KITSTACK_PORT=3001
-ENV KITSTACK_DB_URL=file:/data/kit.db
-VOLUME /data
-EXPOSE 3001
-
-CMD ["npx", "kitstack", "serve"]
-```
-
-```bash filename="Terminal"
-docker build -t my-kit .
-docker run -p 3001:3001 -v ./data:/data my-kit
+npx kitstack serve --transport http
 ```
 
 ## serve vs dev
 
 | | `kitstack serve` | `kitstack dev` |
 |---|---|---|
-| **Purpose** | Production / self-hosting | Development |
-| **Views** | No Vite dev server | Vite with HMR |
-| **Logging** | Minimal | Rich dev logger |
-| **Database** | Configurable (local or remote) | Always local SQLite |
-| **Auth** | Configurable via `serve()` API | None (dev) or KitStack (relay) |
+| **Purpose** | Self-hosting | Development |
+| **Migrations** | Applies existing files | Generates from `src/schema.ts`, then applies |
+| **Views** | No DevKit | DevKit with Vite HMR on `localhost:5174` |
+| **Authorization** | Fail-closed (`--unsafe-skip-authz` to skip) | Not enforced (warning) |
+| **Database** | Configurable (local file or remote libSQL) | Local SQLite file |
+| **HTTP endpoint** | `http://127.0.0.1:3001/mcp` | `http://localhost:4567/` (`--local`) |
+
+## Next steps
+
+- [Self-hosting guide](/docs/guides/self-hosting) — `serve()`, authentication, containers
+- [Authorization](/docs/guides/authorization) — `authorize` hooks and `checkAuthz`

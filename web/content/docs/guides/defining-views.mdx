@@ -24,8 +24,8 @@ The loader runs on the server and fetches data for the component. Reuse your too
 import { defineLoader } from "@kitstackco/sdk";
 import { listExpenses } from "../../tools/list-expenses";
 
-export const loader = defineLoader(async (db, ctx) => {
-  const expenses = await listExpenses.load(db, { limit: 50 }, ctx);
+export const loader = defineLoader(async (ctx) => {
+  const expenses = await listExpenses.load(ctx, { limit: 50 });
   const total = expenses.reduce((sum, e) => sum + e.amountGross, 0);
   return { expenses, total };
 });
@@ -188,7 +188,7 @@ The flow: component mounts with `initialData` (instant first paint) → `useKit`
 
 ## Live view development
 
-During `kitstack dev`, views are served through the relay from your local Vite dev server. Have the LLM render the view once, then edit `View.tsx`, save, and refresh the page — your updated code appears immediately on the previous tool call. No rebuild, no redeploy, no need to re-invoke the tool.
+During `kitstack dev` in relay mode (after `kitstack login`), views are served through the relay from your local Vite dev server. Have the LLM render the view once, then edit `View.tsx`, save, and refresh the page — your updated code appears immediately on the previous tool call. No rebuild, no redeploy, no need to re-invoke the tool.
 
 The modules get hot-replaced on refresh. Each page refresh fetches the latest view code from your local Vite dev server through the relay.
 
@@ -198,13 +198,13 @@ View component changes (`View.tsx`) are served fresh on every render — no rest
 
 ### Local DevKit
 
-For rapid iteration without an LLM client, use the DevKit:
+For rapid iteration without an LLM client, use the DevKit. It starts with every `kitstack dev` run when the kit has views:
 
 ```bash filename="Terminal"
-npx kitstack dev --views
+npx kitstack dev --local
 ```
 
-This starts a local server (default port 5174) that renders your views with the same double-iframe architecture as production. The DevKit sidebar lists all views, shows a data inspector (with editable JSON), and logs tool calls.
+The DevKit runs at `http://localhost:5174` (change it with `--views-port`; disable it with `--no-views`). It needs `vite` and `@vitejs/plugin-react` in the kit, which the scaffold includes. It renders your views with the same double-iframe architecture as production. The DevKit sidebar lists all views, shows a data inspector (with editable JSON), and logs tool calls.
 
 ## Placeholder data for development
 

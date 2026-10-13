@@ -5,7 +5,7 @@ description: CLI reference for kitstack dev — start a local MCP server for dev
 
 # kitstack dev
 
-Start a local MCP server for development. By default, connects to the KitStack relay and gives you a public URL that any MCP client can use — with live view updates.
+Start a local MCP server for development. There are three modes: local HTTP (`--local`), stdio for MCP clients that launch the process (`--stdio`), and the default relay mode, which needs a KitStack account and gives you a public URL that any MCP client can use — with live view updates.
 
 ## Usage
 
@@ -13,37 +13,97 @@ Start a local MCP server for development. By default, connects to the KitStack r
 npx kitstack dev [flags]
 ```
 
+Run it inside a kit project after `npm install`. The scaffold's `npm run dev` is `kitstack dev --local`, and `npm run mcp` is `kitstack dev --stdio`.
+
 ## Flags
 
 | Flag | Description |
 |------|-------------|
-| `--stdio` | Use stdio transport instead of relay (for offline development). |
-| `--local` | Start a local HTTP server instead of relay (no auth, no WebSocket). |
-| `--views` | Start the DevKit HTTP server for view development without an LLM client. |
+| `--local` | Serve MCP over HTTP on `http://localhost:4567` (JSON-RPC posted to `/`). No account, no relay. |
+| `--stdio` | Serve MCP over stdin/stdout, for clients that launch the process (Claude Code, Claude Desktop). |
+| `--port <number>` | With `--local`: the MCP port (default `4567`). Otherwise: the DevKit port. Works in any position relative to `--local`. |
+| `--views-port <number>` | DevKit port. Default: `5174`. |
+| `--no-views` | Do not start the DevKit (Vite + view previews). |
 | `--config <path>` | Path to `kit.config.ts`. Default: `./kit.config.ts`. |
-| `--db <path>` | Path to the SQLite database file. Default: `.kitstack/dev.db`. |
+| `--db <path>` | SQLite database file, relative to the kit directory. Default: `.kitstack/dev.db`. |
 | `--reset-db` | Delete the dev database and re-run migrations on startup. |
-| `--port <number>` | Port for the HTTP server (with `--local`) or DevKit server (with `--views`). Default: `4567` for local, `5174` for views. |
-| `--no-views` | Skip starting the Vite dev server for views. |
 
-## Default: relay mode
+With neither `--local` nor `--stdio`, `kitstack dev` uses relay mode. If you are not logged in (`kitstack login`), it falls back to local mode and prints a notice.
+
+The database path and `migrations/` resolve against the kit's directory (where `kit.config.ts` is), not the working directory. MCP clients often start servers in another directory, so pass `--config` as an absolute path there.
+
+## Local mode
 
 ```bash filename="Terminal"
+npx kitstack dev --local
+```
+
+Starts a local HTTP MCP endpoint on `http://localhost:4567` (bound to `127.0.0.1`). No relay, no auth, no WebSocket — a plain HTTP server that accepts MCP JSON-RPC as `POST /`.
+
+Use this when:
+- You want to test with `kitstack call` (it auto-discovers the running local server)
+- You want to send MCP requests by hand with `curl`
+- You're developing without a KitStack account or internet connection
+
+```
+  My Kit  local
+  2 tools · 1 view · .kitstack/dev.db
+  UI  http://localhost:5174
+
+  ● Connected
+  http://localhost:4567
+
+  Use `kitstack call` or point your MCP client here.
+  Press Ctrl+C to stop.
+```
+
+The server writes `.kitstack/dev.json` with the port and PID. `kitstack call` reads this file to route through the running server instead of creating a new in-process runtime. The file is cleaned up on exit.
+
+To connect Claude Code over HTTP, prefer [`kitstack serve --transport http`](/docs/cli/serve), which serves the standard `/mcp` path.
+
+## stdio mode
+
+```bash filename="Terminal"
+npx kitstack dev --stdio
+```
+
+For MCP clients that launch local processes. Reads JSON-RPC from stdin, writes responses to stdout. stdout carries only JSON-RPC; the banner, logs, and migration output go to stderr.
+
+Register it with Claude Code from inside the kit directory:
+
+```bash filename="Terminal"
+claude mcp add my-kit -- npm exec --prefix "$PWD" -- kitstack dev --stdio --config "$PWD/kit.config.ts"
+```
+
+Claude Desktop needs the same command with absolute paths in `claude_desktop_config.json` (it has no `cwd` setting). See [Connect your kit to Claude](/docs/guides/connect-to-claude).
+
+<Warning>
+In stdio mode, never `console.log()` in tool handlers. Anything written to stdout corrupts the JSON-RPC stream. Use `console.error()` for debug output.
+</Warning>
+
+## Relay mode (default)
+
+```bash filename="Terminal"
+npx kitstack login
 npx kitstack dev
 ```
 
-This is the primary development workflow. The dev server:
+Requires a KitStack account. The dev server:
 
 1. Loads your kit config and provisions a local SQLite database
 2. Connects to the KitStack relay via WebSocket
 3. Prints a public URL that any MCP client can connect to
 
 ```
-  Relay connected. Session URL:
+  Connecting to relay...
+
+  ● Connected
   https://mcp.kitstack.co/dev/a3f2b1c8
 
   Add this URL to your LLM client's MCP server list.
 ```
+
+Tool calls are executed on your machine; the relay forwards MCP traffic between the client and your process.
 
 ### Live view development
 
@@ -59,62 +119,9 @@ No need to ask the LLM to re-invoke the tool. The view modules get hot-replaced 
 
 If the WebSocket connection drops, the relay client reconnects automatically with exponential backoff (1s, 2s, 4s, ... capped at 30s). The backoff resets on successful connection.
 
-## Local mode
+## View DevKit
 
-```bash filename="Terminal"
-npx kitstack dev --local
-```
-
-Starts a local HTTP MCP endpoint on `localhost:4567`. No relay, no auth, no WebSocket — just a plain HTTP server that speaks MCP JSON-RPC.
-
-Use this when:
-- You want to test with `kitstack call` (it auto-discovers the running local server)
-- You want to point Claude Desktop or another MCP client at a local URL
-- You're developing without a KitStack account or internet connection
-
-```
-  KitStack Dev (local)
-  Kit: CRM Kit (12 tools, 5 views)
-  http://localhost:4567
-```
-
-The server writes `.kitstack/dev.json` with the port and PID. `kitstack call` reads this file to route through the running server instead of creating a new in-process runtime. The file is cleaned up on exit.
-
-Views still work in local mode — the Vite dev server starts alongside the HTTP endpoint unless `--no-views` is passed.
-
-## stdio mode
-
-```bash filename="Terminal"
-npx kitstack dev --stdio
-```
-
-For offline development or when your LLM client supports launching local processes. Reads JSON-RPC from stdin, writes responses to stdout.
-
-Configure your client to launch the process directly:
-
-```json filename="claude_desktop_config.json"
-{
-  "mcpServers": {
-    "my-kit": {
-      "command": "npx",
-      "args": ["kitstack", "dev", "--stdio"],
-      "cwd": "/path/to/my-kit"
-    }
-  }
-}
-```
-
-<Warning>
-In stdio mode, never `console.log()` in tool handlers. Anything written to stdout corrupts the JSON-RPC stream. Use `console.error()` for debug output. This does not apply in relay mode.
-</Warning>
-
-## DevKit mode
-
-```bash filename="Terminal"
-npx kitstack dev --views
-```
-
-Opens a local HTTP server at `http://localhost:5174` for developing views without an LLM client:
+When the kit declares views, every mode also starts the DevKit at `http://localhost:5174` (bound to `127.0.0.1`) for developing views without an LLM client:
 
 - Sidebar listing all views
 - Double-iframe viewport (same architecture as production)
@@ -122,22 +129,24 @@ Opens a local HTTP server at `http://localhost:5174` for developing views withou
 - Tool call logger
 - Viewport sizing controls
 
+The DevKit needs `vite` and `@vitejs/plugin-react` installed in the kit (the scaffold includes both). If they are missing, `kitstack dev` prints a warning and serves the tools without previews. `--no-views` disables it; `--views-port` changes the port.
+
 ## Startup sequence
 
-1. Parse flags
-2. Load `kit.config.ts` via dynamic import (runs `defineKit()` validation)
-3. Run `drizzle-kit generate` if `drizzle.config.ts` exists
-4. Provision SQLite database at `.kitstack/dev.db` (runs migrations)
-5. Create MCP handler
-6. Connect to relay (default) or start stdio transport
+1. Parse flags (relay mode falls back to local mode when you are not logged in)
+2. Load `kit.config.ts` (runs `defineKit()` validation)
+3. Run the kit's `drizzle-kit generate` if `drizzle.config.ts` exists — a new migration is reported as one line on stderr
+4. Provision the SQLite database at `.kitstack/dev.db` and apply `migrations/`
+5. Start the View DevKit, if the kit has views
+6. Start the local HTTP server, the stdio transport, or the relay connection
 
 ## Database management
 
-The dev database is a SQLite file at `.kitstack/dev.db`. Migrations run on every startup using `CREATE TABLE IF NOT EXISTS`.
+The dev database is a SQLite file at `.kitstack/dev.db` in the kit directory (git-ignored). All migrations are applied on every startup, with `CREATE TABLE IF NOT EXISTS`.
 
-<Warning>
-`CREATE TABLE IF NOT EXISTS` is idempotent for table names but ignores column changes. When you modify columns in `src/schema.ts`, use `--reset-db` to recreate the database from scratch.
-</Warning>
+<Note>
+The dev database records which migration statements already ran, so each runs once, including `ALTER TABLE` changes to existing tables. To start over with an empty database, use `--reset-db` (this deletes local dev data).
+</Note>
 
 ```bash filename="Terminal"
 npx kitstack dev --reset-db
@@ -148,9 +157,10 @@ npx kitstack dev --reset-db
 | | Relay (default) | Local (`--local`) | stdio (`--stdio`) |
 |---|---|---|---|
 | **Setup** | `kitstack login` once | None | Configure client to launch process |
-| **Client support** | Any MCP client with HTTP | Any MCP client with HTTP | Subprocess launch only |
+| **Client support** | Any MCP client with HTTP, including web clients | Local HTTP clients, `kitstack call` | Clients that launch a subprocess |
 | **`kitstack call`** | No | Yes (auto-discovered) | No |
-| **Live views** | Yes (through relay) | Yes (local Vite) | No |
+| **DevKit** | Yes | Yes | Yes |
+| **Live views in the client** | Yes (through relay) | — | — |
 | **Network** | Requires outbound WSS | No network needed | No network needed |
 | **Auth** | KitStack account | None | None |
 | **URL** | `https://mcp.kitstack.co/dev/...` | `http://localhost:4567` | stdin/stdout |

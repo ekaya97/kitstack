@@ -5,65 +5,80 @@ description: CLI reference for kitstack call — execute kit tools from the comm
 
 # kitstack call
 
-Execute kit tools directly from the command line without an MCP client. Useful for testing, scripting, and agent-driven development.
+Execute kit tools directly from the command line without an MCP client. Useful for testing, scripting, and agent-driven development. No KitStack account is needed.
 
 ## Usage
 
 ```bash filename="Terminal"
-npx kitstack call <tool> [id] [cmd] [params_json]
+npx kitstack call kit [kit-id] [tool] [params_json]
+npx kitstack call kit_view <kit-id> [view]
 ```
+
+The arguments mirror the two MCP tools Claude sees, `kit` and `kit_view`.
 
 ## Examples
 
 ```bash filename="Terminal"
 # List available kits
-kitstack call kit
+npx kitstack call kit
 
-# List actions in a kit
-kitstack call kit crm
+# List the actions (tools) in a kit
+npx kitstack call kit my-kit
 
-# Describe an action's parameters
-kitstack call kit crm add_contact
+# Describe a tool's parameters (no JSON → nothing runs)
+npx kitstack call kit my-kit add_item
 
-# Run an action
-kitstack call kit crm add_contact '{"name":"Sarah Chen","company":"Acme Corp"}'
+# Run a tool (pass '{}' for a tool without required parameters)
+npx kitstack call kit my-kit add_item '{"name":"First item"}'
+npx kitstack call kit my-kit list_items '{}'
 
-# List views
-kitstack call kit_view crm
+# List views, or render one
+npx kitstack call kit_view my-kit
+npx kitstack call kit_view my-kit dashboard
 ```
+
+<Note>
+Passing the JSON argument is what runs a tool. Without it, `kitstack call kit <kit-id> <tool>` only prints the tool's parameter schema — even for tools that take no parameters.
+</Note>
 
 ## Flags
 
 | Flag | Description |
 |------|-------------|
-| `--config <path>` | Path to kit root directory. Default: current directory. |
-| `--db <url>` | Override database URL. Default: `file:.kitstack/dev.db`. |
-| `--help` | Show help. |
+| `--config <path>` | Kit directory, or the path to its `kit.config.ts`. Default: current directory. |
+| `--db <url>` | Override the database URL. Default: `file:<kit>/.kitstack/dev.db`. |
+| `--help`, `-h` | Show help. |
 
 ## How it works
 
-`kitstack call` checks for a running [`kitstack dev --local`](/docs/cli/dev#local-mode) server first. If `.kitstack/dev.json` exists and the server is reachable, it routes the request through HTTP. Otherwise, it creates an **in-process runtime** — loading your kit, provisioning the database, and executing the tool directly.
+`kitstack call` checks for a running [`kitstack dev --local`](/docs/cli/dev#local-mode) server first. If `.kitstack/dev.json` exists and the server is reachable, it routes the request through HTTP. Otherwise, it creates an **in-process runtime**: it loads your kit, generates any missing migrations from `src/schema.ts` (reported as one line on stderr), applies them to the database, and executes the tool directly. Tool code is loaded fresh on every in-process call.
+
+Tools declared with an [`authorize` hook](/docs/guides/authorization) run unchecked here, with a warning on stderr.
+
+## Output and exit codes
+
+Text output from the tool is printed to stdout and the command exits `0`. When the tool returns an error result (for example invalid arguments, or `kit.error(...)`), the text is printed to stderr and the command exits `1`, so `kitstack call` works in scripts and CI.
 
 The database persists at `.kitstack/dev.db` by default, so state accumulates across calls. This lets you chain workflows:
 
 ```bash filename="Terminal"
 # Create a contact — returns an ID
-kitstack call kit crm add_contact '{"name":"Sarah Chen","company":"Acme"}'
+npx kitstack call kit crm add_contact '{"name":"Sarah Chen","company":"Acme"}'
 # ✓ created contact V2ksnwkQCVpPEj7x2pTCe
 # Contact "Sarah Chen" added. Company: Acme.
 
 # Use the returned ID to create a deal
-kitstack call kit crm add_deal '{"name":"Enterprise Plan","contactId":"V2ksnwkQCVpPEj7x2pTCe","value":25000}'
+npx kitstack call kit crm add_deal '{"name":"Enterprise Plan","contactId":"V2ksnwkQCVpPEj7x2pTCe","value":25000}'
 # ✓ created deal GTOUdAbtK5jL0-4ZZiY9H
 # Deal "Enterprise Plan" created in prospect — €25,000.
 
 # Verify the data
-kitstack call kit crm list_contacts '{}'
+npx kitstack call kit crm list_contacts '{}'
 ```
 
-## Output format
+## Result format
 
-Write tools return structured output with entity IDs:
+Write tools that use `kit.result(...)` return structured output with entity IDs:
 
 ```
 ✓ created <entityType> <id>
@@ -78,17 +93,17 @@ Delete the database to start with a clean slate:
 
 ```bash filename="Terminal"
 rm -f .kitstack/dev.db
-kitstack call kit crm add_contact '{"name":"Test"}'
+npx kitstack call kit my-kit add_item '{"name":"Test"}'
 ```
 
 ## Use with kitstack dev --local
 
-When `dev --local` is running, `kitstack call` routes through the live server. Both share the same database, so you can use `call` to test while `dev --local` serves an MCP client:
+When `dev --local` is running, `kitstack call` routes through the live server. Both share the same database. The running server uses the tool code it loaded at startup, so restart it after editing tools:
 
 ```bash filename="Terminal"
 # Terminal 1: start local server
-kitstack dev --local
+npx kitstack dev --local
 
 # Terminal 2: test tools against the live server
-kitstack call kit crm add_contact '{"name":"Test"}'
+npx kitstack call kit my-kit add_item '{"name":"Test"}'
 ```

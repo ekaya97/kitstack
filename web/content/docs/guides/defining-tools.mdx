@@ -19,11 +19,11 @@ The simplest tool has a name, description, args, and a handler:
 import { defineTool, kit } from "@kitstackco/sdk";
 import { z } from "zod";
 import { expenses } from "../schema";
-import { nanoid } from "nanoid";
 
 export const addExpense = defineTool({
   name: "add_expense",
   description: "Record a new expense with amount, category, and date",
+  mode: "act",
   args: z.object({
     description: z.string().describe("What the expense is for"),
     amount: z.number().describe("Gross amount in euros"),
@@ -32,9 +32,9 @@ export const addExpense = defineTool({
     date: z.string().optional()
       .describe("Date in YYYY-MM-DD format. Defaults to today."),
   }),
-  handler: async (db, args, ctx) => {
-    const id = nanoid();
-    await db.insert(expenses).values({
+  handler: async (ctx, args) => {
+    const id = crypto.randomUUID();
+    await ctx.db.insert(expenses).values({
       id,
       description: args.description,
       amountGross: args.amount,
@@ -54,13 +54,20 @@ export const addExpense = defineTool({
 When a view needs the same data as a tool, extract the query into a `load` function:
 
 ```ts filename="src/tools/list-expenses.ts"
-import { defineTool, kit } from "@kitstackco/sdk";
+import { defineTool, kit, type KitContext } from "@kitstackco/sdk";
 import { z } from "zod";
 import { expenses } from "../schema";
 import { desc } from "drizzle-orm";
 
-export async function loadExpenses(db, args, ctx) {
-  return db
+const listExpensesArgs = z.object({
+  limit: z.number().optional().default(25)
+    .describe("Maximum number of expenses to return"),
+  category: z.string().optional()
+    .describe("Filter by category"),
+});
+
+export async function loadExpenses(ctx: KitContext, args: z.infer<typeof listExpensesArgs>) {
+  return ctx.db
     .select()
     .from(expenses)
     .orderBy(desc(expenses.date))
@@ -70,15 +77,11 @@ export async function loadExpenses(db, args, ctx) {
 export const listExpenses = defineTool({
   name: "list_expenses",
   description: "List recent expenses, optionally filtered by category",
-  args: z.object({
-    limit: z.number().optional().default(25)
-      .describe("Maximum number of expenses to return"),
-    category: z.string().optional()
-      .describe("Filter by category"),
-  }),
+  mode: "assist",
+  args: listExpensesArgs,
   load: loadExpenses,
-  handler: async (db, args, ctx) => {
-    const rows = await loadExpenses(db, args, ctx);
+  handler: async (ctx, args) => {
+    const rows = await loadExpenses(ctx, args);
     if (rows.length === 0) return kit.text("No expenses found.");
     const lines = rows.map(
       (r) => `| ${r.date} | ${r.description} | €${r.amountGross.toFixed(2)} | ${r.category} |`
@@ -90,7 +93,11 @@ export const listExpenses = defineTool({
 });
 ```
 
-Now any view loader can call `listExpenses.load(db, args, ctx)` to reuse the query.
+Now any view loader can call `listExpenses.load(ctx, { limit: 50 })` to reuse the query.
+
+## Marking reads and writes
+
+Set `mode` on every tool: `"assist"` (the default) for tools that read or prepare, `"act"` for tools that change data or have external side effects. Optionally set `classification` (`"public"`, `"internal"`, `"sensitive"`, `"destructive"`). Clients receive these as MCP hints (`readOnlyHint`, `destructiveHint`), and the hosted platform maps `mode` to the `kit:use` / `kit:act` grants.
 
 ## Result formatting
 
@@ -152,7 +159,7 @@ args: z.object({
 
 ## Adding authorization
 
-For tools that modify or delete resources, add an `authorize` hook:
+For tools that modify or delete resources on a multi-user server, add an `authorize` hook:
 
 ```ts filename="src/tools/delete-expense.ts"
 export const deleteExpense = defineTool({
@@ -161,17 +168,19 @@ export const deleteExpense = defineTool({
   args: z.object({
     expenseId: z.string().describe("The expense ID to delete"),
   }),
+  mode: "act",
+  classification: "destructive",
   authorize: (args, ctx) => [
     { relation: "owner", objectType: "expense", objectId: args.expenseId },
   ],
-  handler: async (db, args, ctx) => {
-    const [expense] = await db
+  handler: async (ctx, args) => {
+    const [expense] = await ctx.db
       .select()
       .from(expenses)
       .where(eq(expenses.id, args.expenseId));
     if (!expense) return kit.notFound("expense", args.expenseId);
 
-    await db.delete(expenses).where(eq(expenses.id, args.expenseId));
+    await ctx.db.delete(expenses).where(eq(expenses.id, args.expenseId));
     return kit.result(
       kit.deleted(args.expenseId, "expense", `Expense "${expense.description}" deleted.`)
     );
@@ -179,7 +188,11 @@ export const deleteExpense = defineTool({
 });
 ```
 
-The `authorize` hook runs *before* the handler. If the authz engine denies the request, the handler never executes.
+The `authorize` hook runs *before* the handler. If the authorization check denies the request, the handler never executes.
+
+<Warning>
+`authorize` hooks are not enforced by `kitstack dev` or `kitstack call` (they print a warning). `kitstack serve` and `serve()` are fail-closed: the tool is denied until you supply a `checkAuthz` function. See [Authorization](/docs/guides/authorization).
+</Warning>
 
 ## Registering tools in your kit
 
@@ -206,8 +219,8 @@ Every tool name must be unique within a kit. `defineKit()` throws `KIT_DUPLICATE
 ### Upsert with conflict handling
 
 ```ts filename="src/tools/update-settings.ts"
-handler: async (db, args, ctx) => {
-  await db
+handler: async (ctx, args) => {
+  await ctx.db
     .insert(settings)
     .values({ key: args.key, value: args.value })
     .onConflictDoUpdate({
@@ -223,8 +236,8 @@ handler: async (db, args, ctx) => {
 When the LLM needs to reason about the result (not just display it), return markdown:
 
 ```ts
-handler: async (db, args, ctx) => {
-  const deal = await db.select().from(deals).where(eq(deals.id, args.dealId));
+handler: async (ctx, args) => {
+  const deal = await ctx.db.select().from(deals).where(eq(deals.id, args.dealId));
   if (!deal[0]) return kit.notFound("deal", args.dealId);
 
   const d = deal[0];
@@ -241,5 +254,6 @@ handler: async (db, args, ctx) => {
 ## Next steps
 
 - [Defining views](/docs/guides/defining-views) — connect tool loaders to React components
+- [Authorization](/docs/guides/authorization) — enforce `authorize` hooks with `checkAuthz`
 - [Testing](/docs/guides/testing) — test tools with `createTestKit()`
 - [`defineTool()` API reference](/docs/api/define-tool) — full parameter documentation

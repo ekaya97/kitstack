@@ -8,26 +8,56 @@ contract, and the self-host runtime.
 ## Quick start
 
 ```bash
-npx kitstack init my-kit
+npx @kitstackco/sdk@latest init my-kit
 cd my-kit
 npm install
-npx kitstack dev
+npm test                                    # generate migrations, run the tests
+npx kitstack call kit my-kit add_item '{"name":"First item"}'
+npx kitstack call kit my-kit list_items '{}'
 ```
+
+There is no unscoped `kitstack` package: start with `npx @kitstackco/sdk@latest`.
+Inside a kit project the binary is `kitstack`, so `npx kitstack <command>` works.
+
+Connect the kit to Claude Code (run inside `my-kit/`):
+
+```bash
+claude mcp add my-kit -- npm exec --prefix "$PWD" -- kitstack dev --stdio --config "$PWD/kit.config.ts"
+```
+
+For Claude Desktop, which has no `cwd` setting, use absolute paths in
+`claude_desktop_config.json`:
+
+```json
+{
+  "mcpServers": {
+    "my-kit": {
+      "command": "npm",
+      "args": ["exec", "--prefix", "/absolute/path/to/my-kit", "--", "kitstack", "dev", "--stdio", "--config", "/absolute/path/to/my-kit/kit.config.ts"]
+    }
+  }
+}
+```
+
+If Desktop cannot find `npm` (for example with nvm), use its absolute path as `command`.
 
 ## Define a kit
 
 ```ts
 import { defineKit, defineTool, kit } from "@kitstackco/sdk";
 import { z } from "zod";
+import * as schema from "./src/schema";
+import { items } from "./src/schema";
 
 const addItem = defineTool({
   name: "add_item",
   description: "Add a new item",
+  mode: "act",
   args: z.object({
     name: z.string().describe("Item name"),
   }),
   handler: async (ctx, args) => {
-    const id = nanoid();
+    const id = crypto.randomUUID();
     await ctx.db.insert(items).values({ id, name: args.name });
     return kit.result(kit.created(id, "item", `Item "${args.name}" added.`));
   },
@@ -38,7 +68,7 @@ export default defineKit({
   version: "1.0.0",
   name: "My Kit",
   description: "A simple item tracker",
-  schema: {},
+  schema,
   migrationsDir: "./migrations",
   instructions: "Help the user manage their items.",
   triggers: ["item", "tracker"],
@@ -133,16 +163,20 @@ for wiring the debrief host and handling collector failures.
 
 | Command | Description |
 |---------|-------------|
-| `kitstack init <name>` | Scaffold a new kit project |
-| `kitstack dev` | Start the dev server through the relay |
-| `kitstack dev --local` | Local HTTP server, no relay |
-| `kitstack dev --stdio` | Stdio transport for Claude Code or Desktop |
+| `kitstack init <name>` | Scaffold a new kit project (`npx @kitstackco/sdk@latest init <name>`) |
+| `kitstack dev --local` | Local MCP over HTTP on `http://localhost:4567` |
+| `kitstack dev --stdio` | MCP over stdio for Claude Code or Desktop |
+| `kitstack dev` | Dev server through the KitStack relay (needs `kitstack login`; falls back to local) |
+| `kitstack call kit <kit-id> [tool] ['<json>']` | List, describe (no JSON), or run (with JSON) a tool |
 | `kitstack build` | Validate and bundle tools, Views, and shell |
-| `kitstack deploy` | Deploy to the hosted platform |
-| `kitstack publish` | Publish built assets |
-| `kitstack serve` | Self-hosted MCP server |
-| `kitstack call <tool> [args]` | Execute a tool from the command line |
-| `kitstack login` | Authenticate with KitStack |
+| `kitstack serve` | Self-hosted MCP server (`--transport stdio\|http`, HTTP at `http://127.0.0.1:3001/mcp`) |
+| `kitstack login` | Authenticate with the hosted KitStack platform |
+| `kitstack deploy` | Deploy privately to the hosted platform (needs login) |
+| `kitstack grants`, `kitstack connectors bind` | Manage hosted-platform grants and connector bindings (needs login) |
+
+`kitstack dev` and `kitstack call` generate migrations from `src/schema.ts`
+into `migrations/` before running; commit that directory. `kitstack publish` is
+not available yet.
 
 ## Result helpers
 
@@ -160,22 +194,34 @@ return kit.notFound("contact", id);
 
 ```ts
 import { serve } from "@kitstackco/sdk/server";
-import crm from "./kits/crm/kit.config";
+import kit from "./kit.config";
 
-serve({
-  kits: [crm],
-  databases: { crm: { url: process.env.CRM_DB_URL! } },
+await serve({
+  kit,
+  db: { url: process.env.KITSTACK_DB_URL! },
   transport: "http",
+  host: "0.0.0.0",          // default 127.0.0.1
   port: 3001,
-  // auth: oauth({ ... })   // none() for local development
+  mcpPath: "/mcp",          // default "/"
+  authenticate: async (req) => {
+    const user = await verifyToken(req.headers.authorization); // your identity provider
+    return user ? { userId: user.id } : { status: 401 };
+  },
+  checkAuthz: async (db, requirement, ctx) => isAllowed(ctx.identity.principal, requirement),
 });
 ```
 
-Or `kitstack serve --transport http --port 3001` in a container.
+For local use, `kitstack serve --transport http` serves the kit at
+`http://127.0.0.1:3001/mcp` with no code. Self-hosted servers are fail-closed
+for tools that declare an `authorize` hook: they are denied unless `checkAuthz`
+is passed to `serve()` (or `kitstack serve --unsafe-skip-authz` is used for local
+development). `kitstack dev` and `kitstack call` do not enforce `authorize`.
+`serve()` does not apply migrations; `kitstack serve` applies the existing ones.
 
 `kitstack build` also emits a generated container context, a single
 Compose-compatible `kitstack.yaml` deployment file, and signed artifact
-metadata. Kit authors do not write Dockerfiles. See
+metadata for KitStack's hosting adapters (the container runs the kit's
+invocation handler, not an MCP endpoint). See
 [`docs/sdk/container-deployment.md`](../../docs/sdk/container-deployment.md)
 for local Compose, Fargate, and Kubernetes operation.
 

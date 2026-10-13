@@ -140,20 +140,20 @@ Test isolation between users:
 ```ts filename="test/multi-user.test.ts"
 it("isolates data by user context", async () => {
   await testKit.callAs(
-    { userId: "user-a" },
+    { identity: { principal: "user-a", actor: "user-a" } },
     "add_expense",
     { description: "User A expense", amount: 10, category: "other" },
   );
 
   await testKit.callAs(
-    { userId: "user-b" },
+    { identity: { principal: "user-b", actor: "user-b" } },
     "add_expense",
     { description: "User B expense", amount: 20, category: "other" },
   );
 
-  // If your tool filters by userId, each user sees only their data
+  // If your tool filters by ctx.identity.principal, each user sees only their data
   const resultA = await testKit.callAs(
-    { userId: "user-a" },
+    { identity: { principal: "user-a", actor: "user-a" } },
     "list_expenses",
     {},
   );
@@ -164,14 +164,14 @@ it("isolates data by user context", async () => {
 
 ## Testing authorization
 
-Pass `checkAuthz` to test access control:
+`createTestKit()` skips `authorize` hooks unless you pass `checkAuthz`. Pass it to test access control (see [Authorization](/docs/guides/authorization)):
 
 ```ts filename="test/authz.test.ts"
 it("denies unauthorized access", async () => {
   const testKit = await createTestKit(kit, {
     checkAuthz: async (db, req, ctx) => {
       // Only allow "test-user" to be an owner
-      return ctx.userId === "test-user" && req.relation === "owner";
+      return ctx.identity.principal === "test-user" && req.relation === "owner";
     },
   });
 
@@ -181,7 +181,7 @@ it("denies unauthorized access", async () => {
 
   // Different user is denied
   const denied = await testKit.callAs(
-    { userId: "attacker" },
+    { identity: { principal: "attacker", actor: "attacker" } },
     "delete_expense",
     { expenseId: "e1" },
   );
@@ -213,13 +213,12 @@ it("loads the expenses view", async () => {
 You can also test a tool's raw `load` function directly:
 
 ```ts
+import { createKitContext } from "@kitstackco/sdk";
 import { listExpenses } from "../src/tools/list-expenses";
 
 it("loads raw expense data", async () => {
-  const data = await listExpenses.load(testKit.db, { limit: 10 }, {
-    userId: "test-user",
-    kitId: "expense",
-  });
+  const ctx = createKitContext({ db: testKit.db });
+  const data = await listExpenses.load(ctx, { limit: 10 });
   expect(data).toEqual([]);
 });
 ```

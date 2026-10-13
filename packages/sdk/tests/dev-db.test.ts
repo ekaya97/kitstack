@@ -33,6 +33,15 @@ const MIGRATION = `
 `;
 
 describe("provisionDevDb", () => {
+  it("runs each statement once, so ALTER TABLE migrations survive a restart", async () => {
+    const path = nextDbPath();
+    const migrations = `${MIGRATION}\nALTER TABLE items ADD COLUMN notes TEXT;`;
+    await provisionDevDb(path, migrations);
+    const db = await provisionDevDb(path, migrations);
+    const columns = await db.all<{ name: string }>(sql`PRAGMA table_info(items)`);
+    expect(columns.map((column) => column.name)).toContain("notes");
+  });
+
   it("creates the database file and runs migrations", async () => {
     const path = nextDbPath();
     const db = await provisionDevDb(path, MIGRATION);
@@ -77,7 +86,7 @@ describe("provisionDevDb", () => {
     `;
     const db = await provisionDevDb(path, migSql);
     const result = await db.all<{ cnt: number }>(
-      sql`SELECT COUNT(*) as cnt FROM sqlite_master WHERE type='table'`
+      sql`SELECT COUNT(*) as cnt FROM sqlite_master WHERE type='table' AND name NOT LIKE '__kitstack%'`
     );
     expect(result[0].cnt).toBe(3);
   });

@@ -31,7 +31,7 @@ async function createTestKit(
 | Parameter | Type | Required | Description |
 |-----------|------|----------|-------------|
 | `kitDef` | `KitDefinition` | Yes | Kit definition from [`defineKit()`](/docs/api/define-kit). |
-| `options.checkAuthz` | `(db, requirement, ctx) => Promise<boolean>` | No | Authorization callback. If omitted, all calls are permitted. |
+| `options.checkAuthz` | `(db, requirement, ctx) => Promise<boolean>` | No | Authorization callback for tools with `authorize` hooks. If omitted, the hooks are skipped and all calls are permitted. |
 
 ## Returns
 
@@ -43,7 +43,7 @@ async function createTestKit(
 call(toolName: string, args?: Record<string, unknown>): Promise<KitToolResult>
 ```
 
-Invoke a tool as the default user (`\{ userId: "test-user", kitId \}`). Arguments are validated with Zod.
+Invoke a tool as the default user (`ctx.identity` is `{ principal: "test-user", actor: "test-user" }`). Arguments are validated with Zod.
 
 ### testKit.callAs()
 
@@ -134,12 +134,12 @@ describe("CRM tools", () => {
 ```ts filename="test/authz.test.ts"
 const testKit = await createTestKit(kit, {
   checkAuthz: async (db, req, ctx) => {
-    return ctx.userId === "test-user";
+    return ctx.identity.principal === "test-user";
   },
 });
 
 const denied = await testKit.callAs(
-  { userId: "attacker" },
+  { identity: { principal: "attacker", actor: "attacker" } },
   "delete_contact",
   { contactId: "c1" },
 );

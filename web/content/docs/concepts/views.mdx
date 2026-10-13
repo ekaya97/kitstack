@@ -17,7 +17,7 @@ When the LLM calls the `kit_view` tool, three things happen:
 
 ```
 LLM calls kit_view(view: "contacts")
-  → Server runs loader(db, ctx) → returns row data
+  → Server runs loader(ctx) → returns row data
   → Server returns [JSON data, HTML shell] as embedded resource
   → Client renders iframe → shell mounts <ContactsView data={...} />
 ```

@@ -151,5 +151,5 @@ it("rejects bad tool names", () => {
 
 - All errors auto-generate a `docUrl` from the `code` field: `https://docs.kitstack.dev/errors/[code]`.
 - Errors thrown by `defineKit()` happen at import time. When the build pipeline imports `kit.config.ts`, validation runs immediately.
-- Migration errors are thrown by `createTestKit()` and `kitstack build`, not during `kitstack dev` (dev uses the existing database file).
+- Migration errors are thrown by `createTestKit()`, `kitstack build`, and `kitstack dev` on startup (dev runs each migration statement once per database; `--reset-db` recreates it). `kitstack call` and `kitstack serve` skip statements that fail.
 - Related: [Kit helpers](/docs/api/kit-helpers) for runtime tool errors, [`defineKit()`](/docs/api/define-kit)

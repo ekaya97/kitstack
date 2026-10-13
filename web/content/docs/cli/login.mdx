@@ -5,7 +5,9 @@ description: CLI reference for kitstack login — authenticate with KitStack.
 
 # kitstack login
 
-Authenticate the CLI with your KitStack account. Required for `kitstack deploy`, `kitstack publish`, and relay mode.
+Authenticate the CLI with your KitStack account. Requires the hosted KitStack service (`https://kitstack.co`) and an account there.
+
+Needed only for commands that talk to the hosted platform: relay mode (`kitstack dev` without flags), `kitstack deploy`, `kitstack grants`, and `kitstack connectors bind`. Not needed for `init`, `dev --local`, `dev --stdio`, `call`, `build`, or `serve`.
 
 ## Usage
 
@@ -30,8 +32,13 @@ npx kitstack login
 
 ```
 $ npx kitstack login
-Opening browser for authentication...
-Authenticated as dev@example.com
+
+  Opening browser to authenticate with KitStack...
+  If the browser doesn't open, visit:
+  https://kitstack.co/cli/authorize?callback=…
+
+  Authenticated as dev@example.com.
+  Token saved to ~/.kitstack/credentials.json
 ```
 
 The flow times out after 2 minutes if no callback is received.
@@ -49,6 +56,17 @@ Stored at `~/.kitstack/credentials.json` with `0600` permissions:
 ```
 
 CLI tokens are standard BetterAuth session tokens (same format as the web app) with a 1-year expiry. They can be revoked from the web app's session management UI.
+
+## Commands that use your login
+
+| Command | What it does on the hosted platform |
+|---------|-------------------------------------|
+| `kitstack dev` (no flags) | Connects to the dev relay. Falls back to local mode when not logged in. |
+| `kitstack deploy` | Deploys the kit privately. See [`kitstack deploy`](/docs/cli/deploy). |
+| `kitstack grants list \| grant \| revoke` | Lists or changes authorization grants (`kit:use`, `kit:act`, …) on the hosted platform. Mutations need `--yes`. |
+| `kitstack connectors bind <connector-id>` | Binds an organization connector using secret references (`--config`, `--secret-ref name=ref`, `--yes`). |
+
+None of these affect a self-hosted server. Self-hosted connectors and authorization are configured in code; see [Self-hosting](/docs/guides/self-hosting).
 
 ## Environment override
 

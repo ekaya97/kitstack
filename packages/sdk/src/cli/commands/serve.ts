@@ -12,6 +12,7 @@
  * | --mode / KITSTACK_SERVE_MODE | request             | request or daemon       |
  * | --port / KITSTACK_PORT    | 3001                 | HTTP port             |
  * | --path / KITSTACK_MCP_PATH | /mcp                | MCP endpoint path     |
+ * | --host / KITSTACK_HOST    | 127.0.0.1            | HTTP bind address     |
  * | --db / KITSTACK_DB_URL    | file:.kitstack/dev.db| Database URL          |
  * | --db-token / KITSTACK_DB_TOKEN | (none)          | Database auth token   |
  * | --config                  | .                    | Path to kit root dir  |
@@ -33,6 +34,7 @@ Options:
   --mode <mode>       Runtime mode: "request" or "daemon" (default: request, env: KITSTACK_SERVE_MODE)
   --port <number>     HTTP port (default: 3001, env: KITSTACK_PORT)
   --path <path>       HTTP path of the MCP endpoint (default: /mcp, env: KITSTACK_MCP_PATH)
+  --host <address>    HTTP address to bind (default: 127.0.0.1, env: KITSTACK_HOST; 0.0.0.0 in containers)
   --db <url>          Database URL (default: file:.kitstack/dev.db, env: KITSTACK_DB_URL)
   --db-token <token>  Database auth token (env: KITSTACK_DB_TOKEN)
   --unsafe-skip-authz Run tools that declare authorize hooks without checking them (development only)
@@ -51,6 +53,7 @@ export async function serve(args: string[]) {
   let mode = process.env.KITSTACK_SERVE_MODE || "request";
   let port = parseInt(process.env.KITSTACK_PORT || "3001", 10);
   let mcpPath = process.env.KITSTACK_MCP_PATH || "/mcp";
+  let host = process.env.KITSTACK_HOST || "127.0.0.1";
   let dbUrl = process.env.KITSTACK_DB_URL;
   let dbToken = process.env.KITSTACK_DB_TOKEN;
   let authorization: "enforce" | "skip" = "enforce";
@@ -64,6 +67,7 @@ export async function serve(args: string[]) {
       case "--mode": mode = next; i++; break;
       case "--port": port = parseInt(next, 10); i++; break;
       case "--path": mcpPath = next; i++; break;
+      case "--host": host = next; i++; break;
       case "--db": dbUrl = next; i++; break;
       case "--db-token": dbToken = next; i++; break;
       case "--unsafe-skip-authz": authorization = "skip"; break;
@@ -80,6 +84,7 @@ export async function serve(args: string[]) {
     mode: mode as "request" | "daemon",
     port,
     mcpPath,
+    host,
     authorization,
   });
 }

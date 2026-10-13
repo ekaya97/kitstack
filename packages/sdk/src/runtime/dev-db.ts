@@ -1,5 +1,6 @@
 import { existsSync, unlinkSync, mkdirSync } from "node:fs";
 import { dirname } from "node:path";
+import { createHash } from "node:crypto";
 import { createClient } from "@libsql/client";
 import { drizzle, type LibSQLDatabase } from "drizzle-orm/libsql";
 import { MigrationError } from "../errors";
@@ -58,7 +59,17 @@ export async function provisionDevDb(
     .map((s) => s.trim())
     .filter((s) => s.length > 0);
 
+  // Each statement runs once per database, so a later ALTER TABLE migration
+  // does not fail on the next start. Databases created before this ledger
+  // existed may already hold a statement's effect; that counts as applied.
+  await client.execute("CREATE TABLE IF NOT EXISTS __kitstack_dev_migrations (hash TEXT PRIMARY KEY)");
+  const applied = new Set(
+    (await client.execute("SELECT hash FROM __kitstack_dev_migrations")).rows.map((row) => String(row.hash)),
+  );
+
   for (const stmt of statements) {
+    const hash = createHash("sha256").update(stmt).digest("hex");
+    if (applied.has(hash)) continue;
     try {
       // Add IF NOT EXISTS to CREATE TABLE/INDEX statements for idempotency
       const safe = stmt
@@ -67,11 +78,15 @@ export async function provisionDevDb(
         .replace(/CREATE UNIQUE INDEX(?! IF NOT EXISTS)/gi, "CREATE UNIQUE INDEX IF NOT EXISTS");
       await client.execute(safe);
     } catch (err: any) {
-      throw new MigrationError(
-        "MIGRATION_FAILED",
-        `Migration failed on statement: ${stmt.slice(0, 80)}... — ${err.message}`
-      );
+      if (!/duplicate column|already exists/i.test(err.message ?? "")) {
+        throw new MigrationError(
+          "MIGRATION_FAILED",
+          `Migration failed on statement: ${stmt.slice(0, 80)}... — ${err.message}`
+        );
+      }
     }
+    await client.execute({ sql: "INSERT OR IGNORE INTO __kitstack_dev_migrations (hash) VALUES (?)", args: [hash] });
+    applied.add(hash);
   }
 
   return db;

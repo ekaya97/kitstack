@@ -1,0 +1,132 @@
+---
+title: Authorization
+description: Guard tools with authorize hooks and supply the check with checkAuthz — fail-closed on self-hosted servers.
+---
+
+# Authorization
+
+Authorization controls *who* can use *which* tools on *which* resources. A tool declares what it needs with an `authorize` hook; the server that runs the kit decides whether the caller has it with a `checkAuthz` function you provide.
+
+Tools without an `authorize` hook are not affected by anything on this page. They run normally everywhere.
+
+## Declaring requirements
+
+```ts filename="src/tools/delete-item.ts"
+import { defineTool, kit } from "@kitstackco/sdk";
+import { z } from "zod";
+import { eq } from "drizzle-orm";
+import { items } from "../schema";
+
+export const deleteItem = defineTool({
+  name: "delete_item",
+  description: "Delete an item by ID",
+  mode: "act",
+  classification: "destructive",
+  args: z.object({
+    itemId: z.string().describe("The item ID to delete"),
+  }),
+  authorize: (args, ctx) => [
+    { relation: "owner", objectType: "item", objectId: args.itemId },
+  ],
+  handler: async (ctx, args) => {
+    await ctx.db.delete(items).where(eq(items.id, args.itemId));
+    return kit.result(kit.deleted(args.itemId, "item", "Item deleted."));
+  },
+});
+```
+
+`authorize(args, ctx)` receives the Zod-validated arguments and the request context, and returns an array of `AuthzRequirement`s:
+
+| Field | Type | Description |
+|-------|------|-------------|
+| `relation` | `string` | The relationship to check (e.g., `"owner"`, `"editor"`) |
+| `objectType` | `string` | The type of resource (e.g., `"item"`, `"deal"`) |
+| `objectId` | `string` | The specific resource ID |
+
+Each requirement reads as: "Does the caller have `relation` on `objectType:objectId`?" Every requirement must pass, or the call returns a `Forbidden: missing "<relation>" on <objectType> "<objectId>"` error and the handler never runs.
+
+## Where it is enforced
+
+| Where the kit runs | Tools with `authorize` |
+|--------------------|------------------------|
+| `kitstack dev` (all modes), `kitstack call` | **Not enforced.** The tools run, and a warning on stderr names them. |
+| `createTestKit(kit)` | Not enforced unless you pass `checkAuthz`. |
+| `kitstack serve` | **Denied** (fail-closed). `--unsafe-skip-authz` runs them unchecked, for local development only. |
+| `serve()` / `createKitServer()` | **Denied** unless you pass `checkAuthz`. |
+
+The denial on a self-hosted server reads:
+
+```
+Forbidden: this tool declares an authorize hook, but this server has no authorization check. Pass checkAuthz to serve(), or start `kitstack serve --unsafe-skip-authz` for local development
+```
+
+`kitstack serve` has no flag that takes a `checkAuthz` function. To enforce authorization on a self-hosted server, start it with [`serve()`](/docs/guides/self-hosting#programmatic-serve) from your own entry file.
+
+## Supplying checkAuthz
+
+```ts
+checkAuthz: (
+  db: LibSQLDatabase,           // the kit's Drizzle database
+  requirement: AuthzRequirement,
+  ctx: KitContext,              // ctx.identity.principal is the caller
+) => Promise<boolean>
+```
+
+It is called once per requirement. Return `true` to allow.
+
+```ts filename="server.ts"
+import { serve } from "@kitstackco/sdk/server";
+import { and, eq } from "drizzle-orm";
+import kit from "./kit.config";
+import { itemOwners } from "./src/schema";
+
+await serve({
+  kit,
+  db: { url: process.env.KITSTACK_DB_URL! },
+  transport: "http",
+  checkAuthz: async (db, requirement, ctx) => {
+    if (requirement.objectType !== "item" || requirement.relation !== "owner") return false;
+    const rows = await db
+      .select()
+      .from(itemOwners)
+      .where(and(
+        eq(itemOwners.itemId, requirement.objectId),
+        eq(itemOwners.userId, ctx.identity.principal),
+      ));
+    return rows.length > 0;
+  },
+});
+```
+
+The `checkAuthz` function can query anything — a table in the kit's database as above, OpenFGA, or your company's entitlement service. The caller identity comes from how the server authenticates requests; see [Self-hosting: authentication](/docs/guides/self-hosting#authentication).
+
+## Testing
+
+Pass `checkAuthz` to [`createTestKit()`](/docs/api/create-test-kit). The default test caller is `"test-user"`; use `callAs()` to call as someone else:
+
+```ts filename="test/authz.test.ts"
+import { expect, it } from "vitest";
+import { createTestKit } from "@kitstackco/sdk/testing";
+import kit from "../kit.config";
+
+it("denies other users", async () => {
+  const testKit = await createTestKit(kit, {
+    checkAuthz: async (db, req, ctx) => ctx.identity.principal === "test-user",
+  });
+
+  const denied = await testKit.callAs(
+    { identity: { principal: "someone-else", actor: "someone-else" } },
+    "delete_item",
+    { itemId: "i1" },
+  );
+  expect(denied.isError).toBe(true);
+  expect(denied.content[0].text).toContain("Forbidden");
+
+  await testKit.cleanup();
+});
+```
+
+## Next steps
+
+- [Self-hosting](/docs/guides/self-hosting) — `serve()` options, authentication, and deployment
+- [`defineTool()` API reference](/docs/api/define-tool) — the `authorize`, `mode`, and `classification` fields

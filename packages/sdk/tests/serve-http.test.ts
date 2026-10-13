@@ -71,6 +71,18 @@ describe("serve() HTTP host", () => {
     expect((await rpc(base, { padding: "x".repeat(1024) }, { authorization: "Bearer good" })).status).toBe(413);
   });
 
+  it("rejects requests without a token when an auth adapter is configured", async () => {
+    handle = await serve({
+      kit: testKit, db: { url: ":memory:" }, transport: "http", port: 0, mcpPath: "/mcp",
+      auth: { validate: async (token: string) => token === "good" ? { userId: "u-1" } : null } as any,
+    });
+    const base = `http://127.0.0.1:${handle.port}`;
+    const list = { jsonrpc: "2.0", id: 1, method: "tools/list" };
+    expect((await rpc(base, list)).status).toBe(401);
+    expect((await rpc(base, list, { authorization: "Bearer bad" })).status).toBe(401);
+    expect((await rpc(base, list, { authorization: "Bearer good" })).status).toBe(200);
+  });
+
   it("hands bound connectors to tools as ctx.connectors", async () => {
     const lookup = defineTool({
       name: "lookup",

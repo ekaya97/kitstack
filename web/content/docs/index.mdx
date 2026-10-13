@@ -23,7 +23,9 @@ const addItem = defineTool({
   args: z.object({
     name: z.string().describe("Name of the item"),
   }),
-  handler: async (db, args, ctx) => {
+  mode: "act",
+  handler: async (ctx, args) => {
+    // ctx.db is a Drizzle database; args is already validated by Zod
     return kit.text(`Item "${args.name}" added.`);
   },
 });
@@ -34,13 +36,13 @@ export default defineKit({
   name: "My Kit",
   description: "A simple item tracker",
   schema: {},
-  migrationsDir: resolve(import.meta.dirname, "migrations"),
+  migrationsDir: "./migrations",
   instructions: "Use this kit to manage items for the user.",
   tools: [addItem],
 });
 ```
 
-Define your tools, define your kit, deploy. Start using it in any MCP-compatible LLM client.
+Define your tools, define your kit, then connect it to Claude or any other MCP-compatible client: locally over stdio, through your own self-hosted server, or through the KitStack platform.
 
 ## What KitStack handles for you
 
@@ -55,7 +57,7 @@ Define your tools, define your kit, deploy. Start using it in any MCP-compatible
     A single MCP router handles authentication, authorization, and request dispatch for all kits. No server to manage.
   </Card>
   <Card title="Build and deploy" href="/docs/guides/deploying">
-    One command to build, validate, and publish. Your kit runs in a sandboxed Lambda with minimal permissions.
+    One command to build, validate, and deploy to the hosted platform — or run the same kit on your own infrastructure with `kitstack serve`.
   </Card>
 </Cards>
 
@@ -63,23 +65,26 @@ Define your tools, define your kit, deploy. Start using it in any MCP-compatible
 
 ### DevKit — WYSIWYG development for MCP apps
 
-Run `kitstack dev` and get a public URL. No port forwarding, no tunnels, no local stdio setup. The relay serves your kit to any MCP client over the internet, and your view changes are served in real-time from your local Vite dev server — what you see is what's deployed.
+Logged in to KitStack, run `kitstack dev` and get a public URL. No port forwarding, no tunnels, no local stdio setup. The relay serves your kit to any MCP client over the internet, and your view changes are served in real-time from your local Vite dev server — what you see is what's deployed.
 
 ```bash filename="Terminal"
+npx kitstack login   # relay mode needs a KitStack account
 npx kitstack dev
-#   Relay connected. Session URL:
+#   ● Connected
 #   https://mcp.kitstack.co/dev/a3f2b1c8
 ```
 
+Without an account, `kitstack dev --local` (HTTP on `localhost:4567`) and `kitstack dev --stdio` give you the same tools locally. See [Connect your kit to Claude](/docs/guides/connect-to-claude).
+
 Edit `View.tsx`, refresh the page, and your update appears immediately on the previous tool call. No need to ask the LLM again — the modules get hot-replaced on refresh. The dev experience is identical to the deployed experience.
 
-For rapid UI iteration without an LLM client, use the DevKit directly:
+For rapid UI iteration without an LLM client, use the DevKit. It starts with every `kitstack dev` run when your kit has views (at `http://localhost:5174`):
 
 ```bash filename="Terminal"
-npx kitstack dev --views
+npx kitstack dev --local
 ```
 
-This opens a local server with a sidebar listing all views, an editable data inspector, a tool call logger, and viewport sizing controls. Build and preview your views the same way you'd build a React app — then see the exact same result inside your LLM client.
+It is a local page with a sidebar listing all views, an editable data inspector, a tool call logger, and viewport sizing controls. Build and preview your views the same way you'd build a React app — then see the exact same result inside your LLM client.
 
 ### Two-tool progressive discovery
 
@@ -101,7 +106,7 @@ Host capabilities such as persistence, memory, instructions, AI, triggers, chann
 
 ## Current limitations
 
-**No network on the hosted platform.** Hosted kit Lambdas cannot call external APIs; every piece of data enters through the conversation. A self-hosted host has no such restriction, and connectors bound at deploy time are on the roadmap.
+**No network on the hosted platform.** Hosted kit Lambdas cannot call external APIs; every piece of data enters through the conversation. A self-hosted server has no such restriction. Connector clients can be passed to a self-hosted server programmatically (the `connectors` option of [`serve()`](/docs/guides/self-hosting#programmatic-serve)) and reach tools as `ctx.connectors`; there is no kit-level connector declaration or CLI binding for self-hosting yet.
 
 **No background execution on the hosted platform.** Hosted kits run only when the LLM calls them. Triggers, a persisted scheduler, and a voice channel exist in the self-hosted reference host and are being generalized into SDK plugins.
 
@@ -113,7 +118,7 @@ Host capabilities such as persistence, memory, instructions, AI, triggers, chann
 
 <Cards>
   <Card title="Quickstart" href="/docs/getting-started">
-    Scaffold your first kit and connect it to an LLM client in 5 minutes.
+    Scaffold your first kit, run its tools, and connect it to Claude.
   </Card>
   <Card title="How kits work" href="/docs/concepts/kits">
     Understand the architecture — tools, views, database, and the MCP protocol.

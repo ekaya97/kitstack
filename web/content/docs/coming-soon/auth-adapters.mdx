@@ -5,11 +5,15 @@ description: API reference for auth adapters — none(), kitstack(), oauth(), an
 
 # Auth Adapters
 
-Auth adapters plug into [`serve()`](/docs/api/serve) to handle user authentication. They validate tokens, manage OAuth flows, and return a `userId` for each MCP request.
+Auth adapters plug into [`serve()`](/docs/guides/self-hosting#programmatic-serve) to handle user authentication. They validate tokens, manage OAuth flows, and return a `userId` for each MCP request.
 
 ```ts
-import { none, kitstack, oauth } from "@kitstack/sdk/server/auth";
+import { none, kitstack, oauth } from "@kitstackco/sdk/server";
 ```
+
+<Warning>
+Current limits of `serve()` with an auth adapter: every MCP request needs a valid bearer token (missing or invalid tokens get `401`), but only the adapter's metadata (`/.well-known/oauth-authorization-server`) is served — `serve()` does not mount the `/oauth/authorize`, `/oauth/token`, or `/oauth/revoke` endpoints. For login flows, use the `authenticate` option described in the [Self-hosting guide](/docs/guides/self-hosting#authentication).
+</Warning>
 
 ## AuthAdapter interface
 
@@ -58,7 +62,7 @@ function none(options?: { userId?: string }): AuthAdapter
 | `userId` | `string` | `"local-dev-user"` | The user ID returned for all requests. |
 
 ```ts filename="server.ts"
-import { none } from "@kitstack/sdk/server/auth";
+import { none } from "@kitstackco/sdk/server";
 
 serve({
   kit,
@@ -104,7 +108,7 @@ function kitstack(config: {
 | `validate()` | `GET /oauth/userinfo` | Reads `sub` claim to get userId |
 
 ```ts filename="server.ts"
-import { kitstack } from "@kitstack/sdk/server/auth";
+import { kitstack } from "@kitstackco/sdk/server";
 
 serve({
   kit,
@@ -151,7 +155,7 @@ If `exchangeCode` is omitted, the token endpoint returns a stub token (`"no-exch
 </Note>
 
 ```ts filename="server.ts"
-import { oauth } from "@kitstack/sdk/server/auth";
+import { oauth } from "@kitstackco/sdk/server";
 
 serve({
   kit,
@@ -203,4 +207,4 @@ serve({
 - Neither adapter caches validated tokens. Every MCP request triggers a `validate()` call.
 - OAuth metadata is constructed in-memory, not fetched from a remote `.well-known` endpoint.
 - Credentials are sent via `client_secret_post` (POST body), not HTTP Basic auth.
-- Related: [Authentication guide](/docs/guides/authentication), [`serve()`](/docs/api/serve)
+- Related: [Authentication guide](/docs/coming-soon/authentication), [`serve()`](/docs/guides/self-hosting#programmatic-serve)

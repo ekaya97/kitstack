@@ -11,22 +11,21 @@ Type-safe wrapper for view loader functions. Returns the same function with prop
 
 ```ts
 function defineLoader<T>(
-  fn: (db: LibSQLDatabase, ctx: KitContext) => Promise<T>
-): (db: LibSQLDatabase, ctx: KitContext) => Promise<T>
+  fn: (ctx: KitContext) => Promise<T>
+): (ctx: KitContext) => Promise<T>
 ```
 
 ## Parameters
 
 | Parameter | Type | Required | Description |
 |-----------|------|----------|-------------|
-| `fn` | `(db, ctx) => Promise<T>` | Yes | Async function that queries the database and returns data for a view. |
+| `fn` | `(ctx) => Promise<T>` | Yes | Async function that queries the database and returns data for a view. |
 
 ### Function parameters
 
 | Parameter | Type | Description |
 |-----------|------|-------------|
-| `db` | `LibSQLDatabase` | Drizzle database instance |
-| `ctx` | `KitContext` | `{ userId: string, kitId: string, params?: Record<string, string> }` |
+| `ctx` | `KitContext` | Request context. `ctx.db` is the Drizzle database; `ctx.params` holds view parameters; `ctx.identity` is the caller. |
 
 ## Returns
 
@@ -41,9 +40,9 @@ import { defineLoader } from "@kitstackco/sdk";
 import { items } from "../../schema";
 import { count } from "drizzle-orm";
 
-export const loader = defineLoader(async (db, ctx) => {
-  const rows = await db.select().from(items);
-  const [countRow] = await db.select({ total: count() }).from(items);
+export const loader = defineLoader(async (ctx) => {
+  const rows = await ctx.db.select().from(items);
+  const [countRow] = await ctx.db.select({ total: count() }).from(items);
   return { items: rows, total: countRow.total };
 });
 ```
@@ -55,9 +54,9 @@ import { defineLoader } from "@kitstackco/sdk";
 import { listContacts } from "../../tools/list-contacts";
 import { listDeals } from "../../tools/list-deals";
 
-export const loader = defineLoader(async (db, ctx) => {
-  const contacts = await listContacts.load(db, { limit: 100 }, ctx);
-  const deals = await listDeals.load(db, { limit: 50 }, ctx);
+export const loader = defineLoader(async (ctx) => {
+  const contacts = await listContacts.load(ctx, { limit: 100 });
+  const deals = await listDeals.load(ctx, { limit: 50 });
   return { contacts, deals };
 });
 ```

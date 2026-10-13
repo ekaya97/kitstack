@@ -5,19 +5,22 @@ description: Configure auth adapters for your self-hosted kit — KitStack OAuth
 
 # How to Set Up Authentication
 
-When you self-host a kit with [`serve()`](/docs/api/serve), you need an auth adapter to identify users. The adapter validates tokens on every MCP request and returns a `userId` that your tools receive in `ctx.userId`.
+When you self-host a kit with [`serve()`](/docs/guides/self-hosting#programmatic-serve), you need an auth adapter to identify users. The adapter validates tokens on every MCP request and returns a `userId` that your tools receive as `ctx.identity.principal`.
 
 <Note>
 This guide covers self-hosted auth. Kits published to the KitStack marketplace use platform authentication automatically.
 </Note>
+
+<Warning>
+Current limits of `serve()` with an auth adapter: every MCP request needs a valid bearer token (missing or invalid tokens get `401`), but only the adapter's metadata (`/.well-known/oauth-authorization-server`) is served — `serve()` does not mount the `/oauth/authorize`, `/oauth/token`, or `/oauth/revoke` endpoints. For login flows, use the `authenticate` option described in the [Self-hosting guide](/docs/guides/self-hosting#authentication).
+</Warning>
 
 ## Using KitStack as identity provider
 
 The simplest production setup. Users authenticate with their KitStack account via OAuth 2.0:
 
 ```ts filename="server.ts"
-import { serve } from "@kitstack/sdk/server";
-import { kitstack } from "@kitstack/sdk/server/auth";
+import { serve, kitstack } from "@kitstackco/sdk/server";
 import kit from "./kit.config";
 
 serve({
@@ -56,8 +59,7 @@ The adapter handles the full OAuth flow:
 For fully self-hosted kits that manage their own users (Auth0, Keycloak, custom):
 
 ```ts filename="server.ts"
-import { serve } from "@kitstack/sdk/server";
-import { oauth } from "@kitstack/sdk/server/auth";
+import { serve, oauth } from "@kitstackco/sdk/server";
 import kit from "./kit.config";
 
 serve({
@@ -131,7 +133,7 @@ When `exchangeCode` is omitted, the token endpoint returns a stub token. Your `v
 For full control, implement the `AuthAdapter` interface:
 
 ```ts filename="src/auth/my-adapter.ts"
-import type { AuthAdapter, OAuthServerMetadata } from "@kitstack/sdk/server/auth";
+import type { AuthAdapter, OAuthServerMetadata } from "@kitstackco/sdk/server";
 
 export function myAdapter(config: { issuer: string }): AuthAdapter {
   return {
@@ -189,5 +191,5 @@ OAuth metadata is constructed in-memory, not fetched from a remote `/.well-known
 ## Next steps
 
 - [Self-hosting guide](/docs/guides/self-hosting) — full serve() setup
-- [Auth adapters API](/docs/api/auth-adapters) — complete interface reference
-- [Authorization concept](/docs/concepts/authorization) — tool-level access control
+- [Auth adapters API](/docs/coming-soon/auth-adapters) — complete interface reference
+- [Authorization concept](/docs/guides/authorization) — tool-level access control

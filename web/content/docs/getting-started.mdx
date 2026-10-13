@@ -1,107 +1,198 @@
 ---
 title: Getting Started
-description: Build your first kit and connect it to any MCP-compatible LLM client in 5 minutes.
+description: Scaffold your first kit, run its tools from the command line, and connect it to Claude.
 ---
 
 # Getting Started
 
-You'll scaffold a kit, preview it locally with the DevKit, then connect it to your LLM client via the relay — the full development loop without touching any infrastructure.
+You'll scaffold a kit, run its tests, call its tools from the command line, and connect it to Claude Code or Claude Desktop. Everything on this page runs locally. No KitStack account is needed until you want the hosted relay or the hosted platform.
 
 ## Prerequisites
 
-- [Node.js](https://nodejs.org) 20 or later
-- A KitStack account (for the dev relay)
-- An MCP-compatible LLM client (Claude Desktop, Claude.ai, Cursor, etc.)
+- [Node.js](https://nodejs.org) 20 or later, with npm
+- An MCP client: [Claude Code](https://docs.claude.com/en/docs/claude-code) or Claude Desktop (any other MCP client that can launch a local process or reach a local HTTP URL works too)
 
 ## Step 1: Scaffold the kit
 
+There is no global install. Run the scaffolder from the published SDK package:
+
 ```bash filename="Terminal"
-npx kitstack init my-first-kit
-cd my-first-kit
+npx @kitstackco/sdk@latest init my-kit
+cd my-kit
 npm install
 ```
 
-This creates a complete, runnable kit with an example tool, a dashboard view, a database schema, and tests.
+The kit name must be kebab-case. `init` creates a new `my-kit/` directory and prints the next steps.
+
+<Note>
+Inside a kit project, after `npm install`, the CLI binary is `kitstack` (from the `@kitstackco/sdk` dependency), so `npx kitstack <command>` works. Outside a kit project, use `npx @kitstackco/sdk@latest <command>`. There is no unscoped `kitstack` package on npm.
+</Note>
 
 ## Step 2: Explore the project structure
 
 ```
-my-first-kit/
+my-kit/
   kit.config.ts          # Kit definition — tools, views, metadata
-  package.json           # Dependencies
+  package.json           # Pins @kitstackco/sdk to the SDK version that created it
   tsconfig.json          # TypeScript config
   tailwind.config.ts     # Tailwind for view styling
-  drizzle.config.ts      # Drizzle-kit migration config
-  migrations/            # SQL migration files (auto-generated)
+  drizzle.config.ts      # drizzle-kit config (schema → migrations/)
+  migrations/            # Generated SQL migrations (empty until the first run)
+  .gitignore             # Ignores .kitstack/, node_modules/, dist/
   src/
-    schema.ts            # Drizzle table definitions
-    instructions.ts      # System prompt for the LLM
+    schema.ts            # Drizzle table definitions (an `items` table)
+    instructions.ts      # Instructions for the LLM
     tools/
-      example.ts         # Example tool with load + handler
+      items.ts           # list_items (read) and add_item (write)
     views/
+      styles.css         # Tailwind entry for views
       dashboard/
         index.ts         # View definition
         loader.ts        # Server-side data fetching
-        View.tsx          # React component
+        View.tsx         # React component
   test/
-    tools.test.ts        # Test using createTestKit()
+    tools.test.ts        # Three tests using createTestKit()
 ```
 
 The key file is `kit.config.ts`. It ties everything together with [`defineKit()`](/docs/api/define-kit):
 
 ```ts filename="kit.config.ts"
 import { defineKit } from "@kitstackco/sdk";
-import { resolve } from "node:path";
-import { schema } from "./src/schema";
+import * as schema from "./src/schema";
 import { instructions } from "./src/instructions";
-import { exampleTool } from "./src/tools/example";
-import { dashboardView } from "./src/views/dashboard";
+import { addItem, listItems } from "./src/tools/items";
+import dashboard from "./src/views/dashboard";
 
 export default defineKit({
-  id: "my-first-kit",
+  id: "my-kit",
   version: "0.1.0",
-  name: "My First Kit",
-  description: "A starter kit to learn the SDK",
+  name: "My Kit",
+  description: "TODO: describe what this kit does",
   schema,
-  migrationsDir: resolve(import.meta.dirname, "migrations"),
+  migrationsDir: "./migrations",
   instructions,
-  tools: [exampleTool],
-  views: [dashboardView],
+  tools: [listItems, addItem],
+  views: [dashboard],
 });
 ```
 
-## Step 3: Run tests
+The `package.json` scripts:
+
+| Script | Runs |
+|--------|------|
+| `npm test` | `drizzle-kit generate && vitest run` |
+| `npm run dev` | `kitstack dev --local` (MCP over HTTP on `localhost:4567`) |
+| `npm run mcp` | `kitstack dev --stdio` (MCP over stdin/stdout) |
+| `npm run generate` | `drizzle-kit generate` |
+| `npm run build` | `kitstack build` |
+
+## Step 3: Run the tests
 
 ```bash filename="Terminal"
 npm test
 ```
 
-This uses [`createTestKit()`](/docs/api/create-test-kit) to spin up an in-memory database, run migrations, and exercise the example tool.
+This first generates the SQL migration for the `items` table from `src/schema.ts` into `migrations/`, then runs the three tests in `test/tools.test.ts`. They use [`createTestKit()`](/docs/api/create-test-kit) to spin up an in-memory database, apply the migrations, and call `list_items` and `add_item`.
 
-## Step 4: Preview with the DevKit
+Commit the `migrations/` directory. It is generated from `src/schema.ts`, but it is the input every runtime applies. See [Migrations](/docs/concepts/migrations).
 
-Before connecting an LLM client, use the DevKit to see your views immediately:
+## Step 4: Call the tools from the command line
+
+[`kitstack call`](/docs/cli/call) runs your tools without an MCP client, against a local database at `.kitstack/dev.db`:
 
 ```bash filename="Terminal"
-npx kitstack dev --views
+npx kitstack call kit my-kit add_item '{"name":"First item"}'
+# Added "First item" (`3f0c…`).
+
+npx kitstack call kit my-kit list_items '{}'
+# 1 item(s):
+#
+# | ID | Name | Description |
+# ...
 ```
 
-This opens a local server at `http://localhost:5174` — a purpose-built development environment for kit views:
+Leave off the JSON to see what a tool expects, or the tool name to list all of them:
+
+```bash filename="Terminal"
+npx kitstack call kit my-kit              # list actions
+npx kitstack call kit my-kit add_item     # describe add_item's parameters
+```
+
+Before running, `kitstack call` generates any missing migrations from `src/schema.ts` (reported as one line on stderr). Data persists across calls.
+
+## Step 5: Connect it to Claude
+
+Run this inside `my-kit/` to register the kit with Claude Code over stdio:
+
+```bash filename="Terminal"
+claude mcp add my-kit -- npm exec --prefix "$PWD" -- kitstack dev --stdio --config "$PWD/kit.config.ts"
+```
+
+Start `claude` and ask:
+
+> "Add an item called Groceries, then list my items."
+
+Claude calls your `add_item` and `list_items` tools through the `kit` MCP tool and answers with the result.
+
+For Claude Desktop, HTTP connections, and troubleshooting, see [Connect your kit to Claude](/docs/guides/connect-to-claude).
+
+## Step 6: Preview the view with the DevKit
+
+```bash filename="Terminal"
+npm run dev
+```
+
+This starts the local MCP server on `http://localhost:4567` and, because the kit has a view, the DevKit on `http://localhost:5174`:
 
 - **View sidebar** — lists every view in your kit. Click to preview.
 - **Data inspector** — see the data your loader returns. Edit the JSON and watch the component re-render instantly.
 - **Tool call logger** — see every `callTool` and `useTool` invocation from your components.
 - **Viewport controls** — resize the viewport to test responsive layouts.
 
-Edit `src/views/dashboard/View.tsx`, save, and the DevKit reflects your changes immediately via Vite HMR. This is the fastest way to build and iterate on view UI — no LLM client needed, no relay, no login.
+Edit `src/views/dashboard/View.tsx`, save, and the DevKit reflects your changes immediately via Vite HMR. The DevKit binds to `127.0.0.1` and needs `vite` and `@vitejs/plugin-react`, which the scaffold already lists. If they are missing, `kitstack dev` prints a warning and serves the tools without previews. Pass `--no-views` to skip it.
 
 <Note>
 The DevKit is not just a preview tool — it renders your views with the same architecture as production. What you see here is what users see inside their LLM client.
 </Note>
 
-## Step 5: Connect via the relay
+## Step 7: Edit a tool
 
-When you're ready to test the full loop — tool calls, views, and real LLM interaction — start the relay:
+Open `src/tools/items.ts`. Every tool follows this pattern:
+
+```ts filename="src/tools/items.ts"
+import { z } from "zod";
+import { defineTool, kit } from "@kitstackco/sdk";
+import { items } from "../schema";
+
+export const addItem = defineTool({
+  name: "add_item",
+  description: "Add an item",
+  mode: "act",
+  args: z.object({
+    name: z.string().min(1).describe("Item name"),
+    description: z.string().optional().describe("Optional details"),
+  }),
+  handler: async (ctx, args) => {
+    // ctx.db is a Drizzle database — use your schema for type-safe queries
+    // args is validated by Zod before reaching this function
+    const id = crypto.randomUUID();
+    await ctx.db.insert(items).values({ id, name: args.name, description: args.description });
+    return kit.text(`Added "${args.name}" (\`${id}\`).`);
+  },
+});
+```
+
+Change the response message and save. `kitstack call` loads your code fresh on every run. A long-running `kitstack dev` process (including the one Claude starts) needs a restart to pick up tool changes; in Claude Code, reconnect the server from `/mcp`.
+
+To change the data model, edit `src/schema.ts` and run `npm test` (or any `kitstack dev` / `kitstack call`). A new migration appears in `migrations/`.
+
+<Note>
+View changes are hot — edit `View.tsx` and the next render serves fresh code without restart. Tool handler changes require restarting `kitstack dev`.
+</Note>
+
+## Optional: the KitStack relay
+
+With a KitStack account you can expose the kit to web clients such as Claude.ai without hosting anything:
 
 ```bash filename="Terminal"
 npx kitstack login
@@ -111,102 +202,20 @@ npx kitstack dev
 The dev server connects to the KitStack relay and prints a public URL:
 
 ```
-  Relay connected. Session URL:
+  ● Connected
   https://mcp.kitstack.co/dev/a3f2b1c8
 
   Add this URL to your LLM client's MCP server list.
 ```
 
-Add the relay URL as an MCP server in your LLM client:
-
-- **Claude.ai** — Settings > MCP Servers > Add server > paste the URL
-- **Claude Desktop** — add to `claude_desktop_config.json`:
-  ```json filename="claude_desktop_config.json"
-  {
-    "mcpServers": {
-      "my-first-kit": {
-        "url": "https://mcp.kitstack.co/dev/a3f2b1c8"
-      }
-    }
-  }
-  ```
-- **Cursor / other MCP clients** — add the URL in the MCP server settings
-
-Your kit's tools now appear in the tool list. Try asking:
-
-> "Add an item called Groceries"
-
-The LLM calls your `add_item` tool, inserts a row into the database, and confirms the result.
-
-> "Show me the dashboard"
-
-The LLM renders your dashboard view as an interactive React component directly in the chat.
-
-## Step 6: Edit a view and see it live
-
-This is where the relay shines. Open `src/views/dashboard/View.tsx`, change some text, and save.
-
-Now refresh the page in your LLM client. The view re-renders with your updated code — **no rebuild, no redeploy, no need to ask the LLM to call the tool again**. The modules get hot-replaced on refresh, so you can have the LLM call `kit_view` once and iterate on the component by just refreshing.
-
-## Step 7: Edit a tool
-
-Open `src/tools/example.ts`. Change the tool's response message, save, and restart the dev server (`Ctrl+C`, then `npx kitstack dev`). The LLM picks up the change immediately.
-
-Every tool follows this pattern:
-
-```ts filename="src/tools/example.ts"
-import { defineTool, kit } from "@kitstackco/sdk";
-import { z } from "zod";
-
-export const exampleTool = defineTool({
-  name: "add_item",
-  description: "Add a new item to the list",
-  args: z.object({
-    name: z.string().describe("The item name"),
-  }),
-  handler: async (db, args, ctx) => {
-    // db is a Drizzle instance — use your schema for type-safe queries
-    // args is validated by Zod before reaching this function
-    // ctx has userId and kitId
-    return kit.text(`Item "${args.name}" added.`);
-  },
-});
-```
-
-<Note>
-View changes are hot — edit `View.tsx` and the next render serves fresh code without restart. Tool handler changes require restarting `kitstack dev`.
-</Note>
-
-## Using stdio mode (optional)
-
-If you prefer a direct connection without the relay (e.g., for offline development), use stdio mode:
-
-```bash filename="Terminal"
-npx kitstack dev --stdio
-```
-
-Then configure your LLM client to launch the process directly:
-
-```json filename="claude_desktop_config.json"
-{
-  "mcpServers": {
-    "my-first-kit": {
-      "command": "npx",
-      "args": ["kitstack", "dev", "--stdio"],
-      "cwd": "/absolute/path/to/my-first-kit"
-    }
-  }
-}
-```
-
-<Note>
-Stdio mode requires the client to support launching local processes. The relay works with any MCP client that supports HTTP endpoints — including web-based clients like Claude.ai.
-</Note>
+Add that URL as a remote MCP server (a custom connector in Claude.ai, or `claude mcp add --transport http my-kit <url>` in Claude Code). In relay mode, view changes are served live from your local Vite: have the LLM render the view once, edit `View.tsx`, and refresh the page. If you are not logged in, `kitstack dev` without flags falls back to local mode and says so.
 
 ## Next steps
 
+- [Connect your kit to Claude](/docs/guides/connect-to-claude) — Claude Code, Claude Desktop, stdio and HTTP
 - [How kits work](/docs/concepts/kits) — understand the architecture
-- [Database](/docs/concepts/database) — per-user databases, schema, and migrations
+- [Database](/docs/concepts/database) — schema, migrations, and `ctx.db`
 - [Defining tools](/docs/guides/defining-tools) — the load/handler pattern, arguments, and result helpers
 - [Defining views](/docs/guides/defining-views) — React views with server-side loaders
 - [Testing your kit](/docs/guides/testing) — the `createTestKit()` harness
+- [Self-hosting](/docs/guides/self-hosting) — run your kit as your own MCP server

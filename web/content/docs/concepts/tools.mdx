@@ -15,19 +15,19 @@ Every tool has three required fields: a `name`, a `description`, and an implemen
 import { defineTool, kit } from "@kitstackco/sdk";
 import { z } from "zod";
 import { contacts } from "../schema";
-import { nanoid } from "nanoid";
 
 export const addContact = defineTool({
   name: "add_contact",
   description: "Add a new contact to the CRM",
+  mode: "act",
   args: z.object({
     name: z.string().describe("Contact's full name"),
     company: z.string().optional().describe("Company name"),
     email: z.string().optional().describe("Email address"),
   }),
-  handler: async (db, args, ctx) => {
-    const id = nanoid();
-    await db.insert(contacts).values({
+  handler: async (ctx, args) => {
+    const id = crypto.randomUUID();
+    await ctx.db.insert(contacts).values({
       id,
       name: args.name,
       company: args.company ?? null,
@@ -38,15 +38,26 @@ export const addContact = defineTool({
 });
 ```
 
-The handler receives `db` (a Drizzle instance scoped to the user), `args` (validated by Zod), and `ctx` (userId, kitId). See [Database](/docs/concepts/database) for how these are provisioned.
+The handler receives `ctx` (the request context: `ctx.db` is a Drizzle instance for the kit's database, `ctx.identity.principal` is the caller) and `args` (validated by Zod). See [Database](/docs/concepts/database) for how the database is provisioned.
+
+## Mode and classification
+
+| Field | Values | Default | Effect |
+|-------|--------|---------|--------|
+| `mode` | `"assist"` \| `"act"` | `"assist"` | `"assist"` reads or prepares; `"act"` changes state or has external side effects. Sets the MCP `readOnlyHint` and maps to the `kit:use` / `kit:act` grants on the hosted platform. |
+| `classification` | `"public"`, `"internal"`, `"sensitive"`, `"destructive"`, or your own string | `"internal"` | Data sensitivity. `"destructive"` sets the MCP `destructiveHint`. |
+
+Mark every write tool `mode: "act"`, as the scaffolded `add_item` does.
 
 ## The load/handler split
 
 Many tools need the same data query in two places: the tool's text response and a view's React component. The `load` function extracts this shared query so both can reuse it.
 
 ```ts filename="src/tools/list-contacts.ts"
-async function loadContacts(db, args, ctx) {
-  return db.select().from(contacts).limit(args.limit);
+import type { KitContext } from "@kitstackco/sdk";
+
+async function loadContacts(ctx: KitContext, args: { limit: number }) {
+  return ctx.db.select().from(contacts).limit(args.limit);
 }
 
 export const listContacts = defineTool({
@@ -56,8 +67,8 @@ export const listContacts = defineTool({
     limit: z.number().optional().default(25).describe("Max results to return"),
   }),
   load: loadContacts,
-  handler: async (db, args, ctx) => {
-    const rows = await loadContacts(db, args, ctx);
+  handler: async (ctx, args) => {
+    const rows = await loadContacts(ctx, args);
     if (rows.length === 0) return kit.text("No contacts found.");
     const lines = rows.map((r) => `- ${r.name} (${r.company ?? "no company"})`);
     return kit.text(`**Contacts:**\n${lines.join("\n")}`);
@@ -65,7 +76,7 @@ export const listContacts = defineTool({
 });
 ```
 
-A view loader can then reuse the query: `listContacts.load(db, { limit: 100 }, ctx)`. If you define `load` without a `handler`, the SDK auto-wraps it with `kit.json()`.
+A view loader can then reuse the query: `listContacts.load(ctx, { limit: 100 })`. If you define `load` without a `handler`, the SDK auto-wraps it with `kit.json()`.
 
 ## Progressive discovery
 
@@ -90,11 +101,12 @@ This keeps one tool description in the system prompt instead of twelve. See [How
 ## Runtime limits
 
 <Warning>
-All tools in a kit share a single Lambda runtime with **128 MB memory** and a **10-second timeout**. Every tool invocation — including the loader for views — must complete within 10 seconds and stay under 128 MB.
+On the hosted KitStack platform, all tools in a kit share a single Lambda runtime with **128 MB memory** and a **10-second timeout**. Every tool invocation — including the loader for views — must complete within 10 seconds and stay under 128 MB.
 </Warning>
 
 ## Next steps
 
 - [Defining tools guide](/docs/guides/defining-tools) — practical patterns: result formatting, authorization, upserts
+- [Authorization](/docs/guides/authorization) — `authorize` hooks and where they are enforced
 - [`defineTool()` API reference](/docs/api/define-tool) — full parameter documentation
 - [Kit helpers API](/docs/api/kit-helpers) — `kit.text()`, `kit.json()`, `kit.error()`, and more

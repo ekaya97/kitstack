@@ -5,11 +5,22 @@ description: Drizzle-kit integration, migration files, raw SQL alternative, and 
 
 # Migrations
 
-This page covers the mechanics of migration generation and runtime behavior. For the broader data layer story — per-user databases, schema definition, and the `db`/`ctx` parameters — see [Database](/docs/concepts/database).
+This page covers the mechanics of migration generation and runtime behavior. For the broader data layer story — per-user databases, schema definition, and `ctx.db` — see [Database](/docs/concepts/database).
 
 ## Drizzle-kit integration
 
-When `drizzle.config.ts` exists in your kit root, `kitstack dev` and `kitstack build` both run `drizzle-kit generate` before proceeding. The typical config:
+Migrations are generated from `src/schema.ts` by drizzle-kit into `migrations/`. You never write them by hand, but you do commit them.
+
+When `drizzle.config.ts` exists in your kit root, these generate migrations automatically before running:
+
+- `kitstack dev` and `kitstack call` — the kit's own `drizzle-kit generate`; a new migration is reported as one line on stderr (never stdout, so `--stdio` is safe)
+- `kitstack build` and `kitstack deploy`
+- `npm test` — the scaffolded script is `drizzle-kit generate && vitest run`
+- `npm run generate` — just the generate step
+
+`kitstack serve` and `serve()` do not generate migrations. If drizzle-kit is not installed, `dev` and `call` print a notice and use the existing files.
+
+The scaffolded config:
 
 ```ts filename="drizzle.config.ts"
 import type { Config } from "drizzle-kit";
@@ -24,7 +35,7 @@ export default {
 } satisfies Config;
 ```
 
-Edit `src/schema.ts`, then run `kitstack dev` — new migration files appear in `migrations/`. The directory is committed to git.
+Edit `src/schema.ts`, then run `npm test` (or `kitstack dev` / `kitstack call`) — new migration files appear in `migrations/`. Commit the directory to git: it is what every runtime applies, including a self-hosted server.
 
 ## Raw SQL alternative
 
@@ -50,13 +61,15 @@ export default defineKit({
 
 | Context | What happens |
 |---------|-------------|
-| `kitstack dev` | Runs `drizzle-kit generate` if needed, then applies all migrations to `.kitstack/dev.db` |
+| `kitstack dev`, `kitstack call` | Run `drizzle-kit generate`, then apply all migrations to `.kitstack/dev.db` |
 | `kitstack build` | Same generate step, copies `migrations/` into build output, validates SQL |
 | `createTestKit()` | Runs all statements against an in-memory SQLite database |
-| Production | The platform applies pending migrations per-user (migration tracking is a platform concern) |
+| `kitstack serve` | Applies all existing migrations on start (`CREATE TABLE IF NOT EXISTS`) |
+| `serve()` | Applies nothing — see [Self-hosting: migrations](/docs/guides/self-hosting#migrations) |
+| Hosted platform | The platform applies pending migrations per-user (migration tracking is a platform concern) |
 
 <Note>
-The SDK does not track which migrations have been applied. In development and tests, the database is always fresh (local file or in-memory). In production, the platform handles migration state per-user.
+`kitstack dev` records which migration statements already ran against the local database, so each runs once. Tests always start from an in-memory database. To start over with an empty local database, use `kitstack dev --local --reset-db`. On the hosted platform, the platform handles migration state per-user.
 </Note>
 
 ## Gotchas

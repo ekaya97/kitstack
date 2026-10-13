@@ -528,6 +528,10 @@ async function runHttpTransport(protocol: ProtocolHandler, options: ServeOptions
               return;
             }
             userId = validated.userId ?? "default-user";
+          } else if (options.auth) {
+            // A configured auth adapter means every request must authenticate.
+            send(res, { status: 401, headers: { "www-authenticate": "Bearer" }, body: { error: "missing_token" } });
+            return;
           }
         }
 

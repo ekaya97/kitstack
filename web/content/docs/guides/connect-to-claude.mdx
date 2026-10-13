@@ -1,0 +1,126 @@
+---
+title: Connect Your Kit to Claude
+description: Register a local kit with Claude Code or Claude Desktop over stdio or HTTP.
+---
+
+# Connect Your Kit to Claude
+
+A kit is an MCP server. Claude can reach it in three ways:
+
+| Option | Command that serves the kit | Client |
+|--------|----------------------------|--------|
+| **stdio** (recommended for local work) | `kitstack dev --stdio`, started by the client | Claude Code, Claude Desktop |
+| **Local HTTP** | `kitstack serve --transport http` (or `kitstack dev --local`) | Claude Code |
+| **KitStack relay** | `kitstack dev` after `kitstack login` | Any client that accepts a remote URL, including Claude.ai |
+
+<Note>
+This guide assumes you have a kit from [Getting Started](/docs/getting-started), with `npm install` already run in it. The examples use a kit called `my-kit`.
+</Note>
+
+## Claude Code over stdio
+
+Run this **inside the kit directory**:
+
+```bash filename="Terminal"
+claude mcp add my-kit -- npm exec --prefix "$PWD" -- kitstack dev --stdio --config "$PWD/kit.config.ts"
+```
+
+What each part does:
+
+- `npm exec --prefix "$PWD" -- kitstack` runs the `kitstack` binary installed in this kit, whatever directory Claude starts the process in.
+- `--stdio` speaks MCP over stdin/stdout. stdout carries only JSON-RPC; logs go to stderr.
+- `--config "$PWD/kit.config.ts"` points at the kit absolutely. The database (`.kitstack/dev.db`) and `migrations/` resolve against the kit's directory, not the working directory.
+
+`$PWD` is expanded by your shell when you run `claude mcp add`, so the stored command contains absolute paths. Start `claude` and run `/mcp` to check that `my-kit` is connected.
+
+Claude sees two tools, `kit` and `kit_view`. Ask it to use your kit:
+
+> "Use my-kit to add an item called Groceries, then list my items."
+
+<Note>
+`claude mcp add` registers the server for the current project by default. Add `--scope user` to make it available in every project.
+</Note>
+
+## Claude Code over HTTP
+
+Start a self-hosted server in the kit directory and leave it running:
+
+```bash filename="Terminal"
+npx kitstack serve --transport http
+#   KitStack MCP Server (request)
+#   http://127.0.0.1:3001/mcp
+```
+
+Then, in another terminal:
+
+```bash filename="Terminal"
+claude mcp add --transport http my-kit http://127.0.0.1:3001/mcp
+```
+
+`kitstack serve` applies the migrations in `migrations/` but does not generate new ones, so run `npm test` (or `npm run generate`) after a schema change. Restart it after changing tool code. See [`kitstack serve`](/docs/cli/serve) for the port, path, and database flags.
+
+<Warning>
+`kitstack serve` is fail-closed for tools that declare an `authorize` hook: they are denied unless an authorization check is configured. The scaffolded kit has none, so this does not affect it. See [Authorization](/docs/guides/authorization).
+</Warning>
+
+`kitstack dev --local` also serves MCP over HTTP, on `http://localhost:4567` with JSON-RPC posted to `/`. It is meant for `kitstack call` and quick manual testing; prefer `kitstack serve` when connecting a client over HTTP.
+
+## Claude Desktop
+
+Claude Desktop launches local servers over stdio from `claude_desktop_config.json` (Settings → Developer → Edit Config). It does **not** support a `cwd` setting, so every path must be absolute:
+
+```json filename="claude_desktop_config.json"
+{
+  "mcpServers": {
+    "my-kit": {
+      "command": "npm",
+      "args": [
+        "exec", "--prefix", "/absolute/path/to/my-kit", "--",
+        "kitstack", "dev", "--stdio",
+        "--config", "/absolute/path/to/my-kit/kit.config.ts"
+      ]
+    }
+  }
+}
+```
+
+Replace both `/absolute/path/to/my-kit` occurrences with the output of `pwd` in your kit directory, then fully quit and reopen Claude Desktop.
+
+<Warning>
+Claude Desktop may not see your shell's `PATH` (for example when Node.js is installed through nvm). If the server fails to start, set `"command"` to the absolute path of npm — find it with `which npm` — such as `"/Users/you/.nvm/versions/node/v22.11.0/bin/npm"`.
+</Warning>
+
+Server logs are in Claude Desktop's MCP log files (`~/Library/Logs/Claude/mcp-server-my-kit.log` on macOS).
+
+## KitStack relay
+
+With a KitStack account, `kitstack dev` connects to the KitStack relay and prints a public HTTPS URL:
+
+```bash filename="Terminal"
+npx kitstack login
+npx kitstack dev
+```
+
+Add the printed `https://mcp.kitstack.co/dev/…` URL as a remote MCP server: a custom connector in Claude.ai, or `claude mcp add --transport http my-kit <url>` in Claude Code. The relay routes requests through KitStack's cloud to your machine; use stdio or local HTTP if your data must not leave your network.
+
+## Troubleshooting
+
+| Symptom | Fix |
+|---------|-----|
+| Server fails to start, "Failed to load kit config" | `--config` must point at `kit.config.ts` with an absolute path. |
+| `kitstack: command not found` or npm errors | Run `npm install` in the kit first. The `--prefix` path must be the kit directory. |
+| Tool changes do not show up | Restart the server: `/mcp` → reconnect in Claude Code, or restart Claude Desktop. |
+| A tool is "Forbidden" under `kitstack serve` | The tool declares `authorize`. See [Authorization](/docs/guides/authorization). |
+| Local data out of step with the schema | Recreate the local database with `npx kitstack dev --local --reset-db` (deletes local data). |
+
+To check the kit without any client, use [`kitstack call`](/docs/cli/call):
+
+```bash filename="Terminal"
+npx kitstack call kit my-kit list_items '{}'
+```
+
+## Next steps
+
+- [`kitstack dev`](/docs/cli/dev) — all dev modes and flags
+- [`kitstack serve`](/docs/cli/serve) — the self-hosted server
+- [Self-hosting](/docs/guides/self-hosting) — authentication, routes, and running in production
