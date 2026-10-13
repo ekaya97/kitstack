@@ -1,5 +1,6 @@
-import { existsSync, mkdirSync, writeFileSync } from "fs";
-import { resolve, join } from "path";
+import { existsSync, mkdirSync, readFileSync, writeFileSync } from "fs";
+import { dirname, resolve, join } from "path";
+import { fileURLToPath } from "url";
 
 /**
  * Scaffold a new KitStack kit project with the standard directory layout,
@@ -26,7 +27,7 @@ import { resolve, join } from "path";
  * //     drizzle.config.ts  — drizzle-kit config (schema + migrations path)
  * //     migrations/        — drizzle-kit generated SQL (committed to git)
  * //     src/instructions.ts
- * //     src/tools/example.ts
+ * //     src/tools/items.ts — list_items (read) and add_item (write)
  * //     src/views/dashboard/{index,loader,View}.tsx
  * //     test/tools.test.ts — vitest + createTestKit() example
  * //     .gitignore
@@ -77,13 +78,13 @@ export async function init(args: string[]) {
 
   const files: Record<string, string> = {
     "kit.config.ts": kitConfigTemplate(name, displayName),
-    "package.json": packageJsonTemplate(name),
+    "package.json": packageJsonTemplate(name, sdkVersion()),
     "tsconfig.json": tsconfigTemplate(),
     "tailwind.config.ts": tailwindConfigTemplate(),
     "src/schema.ts": schemaTemplate(),
     "src/instructions.ts": instructionsTemplate(displayName),
     "drizzle.config.ts": drizzleConfigTemplate(),
-    "src/tools/example.ts": exampleToolTemplate(),
+    "src/tools/items.ts": itemToolsTemplate(),
     "src/views/styles.css": viewStylesTemplate(),
     "src/views/dashboard/index.ts": viewIndexTemplate(),
     "src/views/dashboard/loader.ts": viewLoaderTemplate(),
@@ -101,8 +102,28 @@ export async function init(args: string[]) {
   Next steps:
     cd ${name}
     npm install
-    npx kitstack dev --stdio
+    npm test                                       # generate migrations, run the tests
+    npx kitstack call kit ${name} add_item '{"name":"First item"}'
+    npx kitstack call kit ${name} list_items '{}'
+
+  Connect it to Claude Code (from inside ${name}/):
+    claude mcp add ${name} -- npm exec --prefix "$PWD" -- kitstack dev --stdio --config "$PWD/kit.config.ts"
 `);
+}
+
+/** The running SDK's version, so a new kit depends on the SDK that made it. */
+function sdkVersion(): string {
+  let dir = dirname(fileURLToPath(import.meta.url));
+  for (;;) {
+    const manifest = join(dir, "package.json");
+    if (existsSync(manifest)) {
+      const pkg = JSON.parse(readFileSync(manifest, "utf-8"));
+      if (pkg.name === "@kitstackco/sdk") return pkg.version;
+    }
+    const parent = dirname(dir);
+    if (parent === dir) return "latest";
+    dir = parent;
+  }
 }
 
 // --- Templates ---
@@ -111,7 +132,7 @@ function kitConfigTemplate(id: string, displayName: string) {
   return `import { defineKit } from "@kitstackco/sdk";
 import * as schema from "./src/schema";
 import { instructions } from "./src/instructions";
-import { listItems } from "./src/tools/example";
+import { addItem, listItems } from "./src/tools/items";
 import dashboard from "./src/views/dashboard";
 
 export default defineKit({
@@ -122,20 +143,20 @@ export default defineKit({
   schema,
   migrationsDir: "./migrations",
   instructions,
-  tools: [listItems],
+  tools: [listItems, addItem],
   views: [dashboard],
 });
 `;
 }
 
-function packageJsonTemplate(name: string) {
+function packageJsonTemplate(name: string, sdk: string) {
   return `{
   "name": "${name}",
   "version": "0.1.0",
   "private": true,
   "type": "module",
   "dependencies": {
-    "@kitstackco/sdk": "*",
+    "@kitstackco/sdk": "${sdk === "latest" ? "latest" : `^${sdk}`}",
     "zod": "^3.22.0",
     "drizzle-orm": "^0.38.0"
   },
@@ -143,6 +164,8 @@ function packageJsonTemplate(name: string) {
     "typescript": "^5.0.0",
     "vitest": "^2.0.0",
     "drizzle-kit": "^0.30.0",
+    "vite": "^6.0.0",
+    "@vitejs/plugin-react": "^4.7.0",
     "@types/react": "^19.0.0",
     "react": "^19.0.0",
     "react-dom": "^19.0.0",
@@ -150,9 +173,11 @@ function packageJsonTemplate(name: string) {
     "@tailwindcss/postcss": "^4.0.0"
   },
   "scripts": {
-    "dev": "kitstack dev --stdio",
+    "dev": "kitstack dev --local",
+    "mcp": "kitstack dev --stdio",
+    "generate": "drizzle-kit generate",
     "build": "kitstack build",
-    "test": "vitest run"
+    "test": "drizzle-kit generate && vitest run"
   }
 }
 `;
@@ -225,7 +250,7 @@ You are connected to the user's ${displayName}. Use the available tools to help 
 `;
 }
 
-function exampleToolTemplate() {
+function itemToolsTemplate() {
   return `import { z } from "zod";
 import { desc } from "drizzle-orm";
 import { defineTool, kit } from "@kitstackco/sdk";
@@ -233,7 +258,7 @@ import type { KitContext } from "@kitstackco/sdk";
 import { items } from "../schema";
 
 const listItemsArgs = z.object({
-  limit: z.number().optional().default(25).describe("Maximum number of items to return"),
+  limit: z.number().int().min(1).max(100).optional().default(25).describe("Maximum number of items to return"),
 });
 
 async function loadItems(ctx: KitContext, args: z.infer<typeof listItemsArgs>) {
@@ -244,9 +269,11 @@ async function loadItems(ctx: KitContext, args: z.infer<typeof listItemsArgs>) {
     .limit(args.limit);
 }
 
+/** A read tool: \`load\` is shared with the dashboard View's loader. */
 export const listItems = defineTool({
   name: "list_items",
-  description: "List all items in the database",
+  description: "List the most recent items",
+  mode: "assist",
   args: listItemsArgs,
   load: loadItems,
 
@@ -259,6 +286,23 @@ export const listItems = defineTool({
       text += \`| \\\`\${item.id}\\\` | \${item.name} | \${item.description || "\\u2014"} |\\n\`;
     }
     return kit.text(text);
+  },
+});
+
+/** A write tool: \`mode: "act"\` marks it as changing data. */
+export const addItem = defineTool({
+  name: "add_item",
+  description: "Add an item",
+  mode: "act",
+  args: z.object({
+    name: z.string().min(1).describe("Item name"),
+    description: z.string().optional().describe("Optional details"),
+  }),
+
+  handler: async (ctx, args) => {
+    const id = crypto.randomUUID();
+    await ctx.db.insert(items).values({ id, name: args.name, description: args.description });
+    return kit.text(\`Added "\${args.name}" (\\\`\${id}\\\`).\`);
   },
 });
 `;
@@ -282,7 +326,7 @@ export default defineView({
 
 function viewLoaderTemplate() {
   return `import { defineLoader } from "@kitstackco/sdk";
-import { listItems } from "../../tools/example";
+import { listItems } from "../../tools/items";
 
 export const loader = defineLoader(async (ctx) => {
   return listItems.load(ctx, { limit: 100 });
@@ -324,12 +368,16 @@ export function DashboardView({ data }: { data: Data }) {
 }
 
 function testTemplate() {
-  return `import { describe, it, expect, afterEach } from "vitest";
-import { createTestKit } from "@kitstackco/sdk/testing";
+  return `import { describe, it, expect, beforeAll, afterEach } from "vitest";
+import { createTestKit, type TestKit } from "@kitstackco/sdk/testing";
 import kit from "../kit.config";
 
 describe("tools", () => {
-  const testKit = await createTestKit(kit);
+  let testKit: TestKit;
+
+  beforeAll(async () => {
+    testKit = await createTestKit(kit);
+  });
 
   afterEach(async () => {
     await testKit.reset();
@@ -337,8 +385,21 @@ describe("tools", () => {
 
   it("lists items (empty)", async () => {
     const result = await testKit.call("list_items", {});
-    expect(result.isError).toBeUndefined();
+    expect(result.isError).toBeFalsy();
     expect(result.content[0].text).toContain("No items yet");
+  });
+
+  it("adds an item and lists it", async () => {
+    const added = await testKit.call("add_item", { name: "First item" });
+    expect(added.isError).toBeFalsy();
+
+    const listed = await testKit.call("list_items", {});
+    expect(listed.content[0].text).toContain("First item");
+  });
+
+  it("rejects invalid arguments", async () => {
+    const result = await testKit.call("add_item", { name: "" });
+    expect(result.isError).toBe(true);
   });
 });
 `;

@@ -181,7 +181,7 @@ describe("MCP handler — authorize hook", () => {
     });
     const result = (res!.result as any);
     expect(result.isError).toBe(true);
-    expect((result.content[0] as any).text).toContain("no authorization check is configured");
+    expect((result.content[0] as any).text).toContain("this server has no authorization check");
   });
 
   it("still runs tools without authorize hooks when no checkAuthz is configured", async () => {

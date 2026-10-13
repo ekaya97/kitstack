@@ -1,10 +1,10 @@
 import { resolve, dirname } from "node:path";
-import { existsSync } from "node:fs";
 import { createInterface } from "node:readline";
 import { provisionDevDb } from "../../runtime/dev-db";
 import { createMcpHandler, type JsonRpcRequest } from "../../runtime/mcp-handler";
 import type { KitDefinition } from "../../types";
 import { warnAuthorizationSkipped } from "../kit-runtime";
+import { generateMigrations } from "../generate-migrations";
 
 import { createDevLogger } from "../dev-logger.js";
 
@@ -37,17 +37,19 @@ import { createDevLogger } from "../dev-logger.js";
  * before deployment.
  *
  * @param args - CLI arguments after `kitstack dev` (e.g., `["--stdio"]`).
- *   Supported flags: `--stdio`, `--no-views`, `--port <n>`, `--config <path>`,
- *   `--db <path>`, `--reset-db`.
+ *   Supported flags: `--stdio`, `--local`, `--no-views`, `--port <n>` (MCP port
+ *   with `--local`, View DevKit port otherwise), `--views-port <n>`,
+ *   `--config <path>`, `--db <path>` (relative to the kit), `--reset-db`.
  *
- * @example Connect the CRM kit to Claude Desktop via stdio (real config from kits/crm):
+ * @example Connect a kit to Claude Desktop via stdio. Desktop starts servers
+ * outside the kit directory, so both the binary and the config are addressed
+ * absolutely; the database lives next to kit.config.ts.
  * ```json
  * {
  *   "mcpServers": {
- *     "crm": {
- *       "command": "npx",
- *       "args": ["tsx", "packages/sdk/src/cli/index.ts", "dev", "--stdio"],
- *       "cwd": "/path/to/kitstack/kits/crm"
+ *     "my-kit": {
+ *       "command": "npm",
+ *       "args": ["exec", "--prefix", "/path/to/my-kit", "--", "kitstack", "dev", "--stdio", "--config", "/path/to/my-kit/kit.config.ts"]
  *     }
  *   }
  * }
@@ -93,6 +95,16 @@ export async function dev(args: string[]) {
   let noViews = false;
   let viewsPort = 5174;
   let localPort = 4567;
+  // Default mode is relay. Without a KitStack login there is no relay, so
+  // fall back to the local HTTP server.
+  let loggedOutFallback = false;
+  if (!args.includes("--stdio") && !args.includes("--local")) {
+    const { loadCredentials } = await import("../credentials.js");
+    loggedOutFallback = !loadCredentials();
+  }
+  // `--port` is the MCP port in local mode and the View DevKit port otherwise,
+  // wherever it appears relative to `--local`.
+  const localMode = args.includes("--local") || loggedOutFallback;
 
   for (let i = 0; i < args.length; i++) {
     switch (args[i]) {
@@ -106,11 +118,14 @@ export async function dev(args: string[]) {
         noViews = true;
         break;
       case "--port":
-        if (local) {
+        if (localMode) {
           localPort = parseInt(args[++i], 10);
         } else {
           viewsPort = parseInt(args[++i], 10);
         }
+        break;
+      case "--views-port":
+        viewsPort = parseInt(args[++i], 10);
         break;
       case "--config":
         configPath = args[++i];
@@ -127,7 +142,10 @@ export async function dev(args: string[]) {
     }
   }
 
-  // Default mode is relay (no flags = relay mode)
+  if (loggedOutFallback) {
+    console.error("[kitstack] Not logged in to KitStack, so starting a local server instead of the relay. Use --local or --stdio to choose explicitly.");
+    local = true;
+  }
   const relay = !stdio && !local;
 
   // Load kit definition
@@ -142,35 +160,34 @@ export async function dev(args: string[]) {
     process.exit(1);
   }
 
-  // Generate migrations from Drizzle schema if drizzle.config.ts exists
+  // Generate migrations from the Drizzle schema (output on stderr, never stdout)
   const kitDir = dirname(fullConfigPath);
-  const drizzleConfigPath = resolve(kitDir, "drizzle.config.ts");
-  if (existsSync(drizzleConfigPath) && !kit.migrationSql) {
-    const { execSync } = await import("node:child_process");
-    try {
-      execSync("npx drizzle-kit generate", { cwd: kitDir, stdio: "inherit" });
-    } catch {
-      console.warn("[kitstack] Warning: drizzle-kit generate failed. Continuing with existing migrations.");
-    }
-  }
+  if (!kit.migrationSql) generateMigrations(kitDir);
 
-  // Provision local SQLite
-  const { resolveMigrationSql } = await import("../../migrations.js");
-  const migrationSql = resolveMigrationSql(kit);
-  const fullDbPath = resolve(process.cwd(), dbPath);
+  // Provision local SQLite. Paths resolve against the kit, not the working
+  // directory: MCP clients such as Claude Desktop start servers elsewhere.
+  const { resolveMigrationSql, resolveMigrationsPath } = await import("../../migrations.js");
+  const migrationSql = resolveMigrationSql(kit.migrationsDir ? { ...kit, migrationsDir: resolveMigrationsPath(kit.migrationsDir, kitDir) } : kit);
+  const fullDbPath = resolve(kitDir, dbPath);
   const db = await provisionDevDb(fullDbPath, migrationSql, { reset: resetDb });
 
   // Start View DevKit (Vite + preview UI) unless --no-views or no views
   let vitePort = 5175;
+  let viewsStarted = false;
   if (kit.views?.length && !noViews) {
-    const { startDevKitServer } = await import("../../devkit/server.js");
-    const result = await startDevKitServer({ kit, db, port: viewsPort, kitRoot: kitDir });
-    vitePort = result.vitePort;
+    try {
+      const { startDevKitServer } = await import("../../devkit/server.js");
+      const result = await startDevKitServer({ kit, db, port: viewsPort, kitRoot: kitDir });
+      vitePort = result.vitePort;
+      viewsStarted = true;
+    } catch (err: any) {
+      console.error(`[kitstack] View preview not started: ${err.message}. Tools still work; install vite and @vitejs/plugin-react for View previews.`);
+    }
   }
 
   // Dev logger with channel multiplexing
   const logger = createDevLogger();
-  const uiUrl = (kit.views?.length && !noViews) ? `http://localhost:${viewsPort}` : undefined;
+  const uiUrl = viewsStarted ? `http://localhost:${viewsPort}` : undefined;
   logger.banner({
     name: kit.name,
     mode: local ? "local" : relay ? "relay" : "stdio",
@@ -193,9 +210,9 @@ export async function dev(args: string[]) {
     });
 
     // Write lock file so `kitstack call` can discover the running server
-    const lockPath = resolve(process.cwd(), ".kitstack/dev.json");
+    const lockPath = resolve(kitDir, ".kitstack/dev.json");
     const { writeFileSync, mkdirSync, unlinkSync } = await import("node:fs");
-    mkdirSync(resolve(process.cwd(), ".kitstack"), { recursive: true });
+    mkdirSync(resolve(kitDir, ".kitstack"), { recursive: true });
     writeFileSync(lockPath, JSON.stringify({ port: localPort, pid: process.pid }));
 
     const cleanup = () => {

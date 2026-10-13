@@ -210,7 +210,7 @@ export function localAdapter(options: LocalAdapterOptions): KitServerAdapter {
               ? { allowed: true }
               : {
                   allowed: false,
-                  reason: "Forbidden: this tool requires authorization, but no authorization check is configured for this server",
+                  reason: "Forbidden: this tool declares an authorize hook, but this server has no authorization check. Pass checkAuthz to serve(), or start `kitstack serve --unsafe-skip-authz` for local development",
                 },
         invoke: async (_request, _target, parsedArgs, ctx) => {
           if (!tool) throw new Error(`Unknown tool: "${toolName}"`);

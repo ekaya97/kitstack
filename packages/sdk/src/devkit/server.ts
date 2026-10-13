@@ -14,7 +14,7 @@
 
 import { createServer } from "node:http";
 import { readFileSync, writeFileSync, mkdirSync, existsSync } from "node:fs";
-import { resolve, relative } from "node:path";
+import { dirname, resolve, relative } from "node:path";
 import { spawn } from "node:child_process";
 import type { LibSQLDatabase } from "drizzle-orm/libsql";
 import type { KitDefinition, KitContext } from "../types";
@@ -143,7 +143,12 @@ module.exports = {
 
   // --- Start Vite dev server ---
 
-  const viteProcess = spawn("npx", ["vite", "--config", resolve(entryDir, "vite.config.ts")], {
+  // Previews need the kit's own vite; never let npx download one mid-session.
+  for (const dependency of ["vite", "@vitejs/plugin-react"]) {
+    if (!isInstalled(kitRoot, dependency)) throw new Error(`${dependency} is not installed in this kit`);
+  }
+
+  const viteProcess = spawn("npx", ["--no-install", "vite", "--config", resolve(entryDir, "vite.config.ts")], {
     cwd: entryDir,
     stdio: ["ignore", "pipe", "pipe"],
     env: { ...process.env, NODE_ENV: "development" },
@@ -301,7 +306,7 @@ module.exports = {
   process.on("SIGINT", () => { viteProcess.kill(); process.exit(0); });
 
   return new Promise((resolve) => {
-    httpServer.listen(port, () => {
+    httpServer.listen(port, "127.0.0.1", () => {
       // Banner handled by dev.ts — just log readiness
       resolve({ vitePort });
     });
@@ -444,4 +449,15 @@ init();
 </script>
 </body>
 </html>`;
+}
+
+/** Whether a package is installed for the kit (package exports may hide its package.json). */
+function isInstalled(kitRoot: string, name: string): boolean {
+  let dir = kitRoot;
+  for (;;) {
+    if (existsSync(resolve(dir, "node_modules", name, "package.json"))) return true;
+    const parent = dirname(dir);
+    if (parent === dir) return false;
+    dir = parent;
+  }
 }

@@ -10,6 +10,12 @@ import { resolve } from "path";
 import { existsSync } from "node:fs";
 import type { KitDefinition } from "../types";
 import type { KitServerAdapter, ProtocolHandler } from "../server/types";
+import { generateMigrations } from "./generate-migrations";
+
+/** The kit's local database, addressed absolutely so any working directory works. */
+export function defaultDbUrl(kitRoot: string): string {
+  return `file:${resolve(kitRoot, ".kitstack/dev.db")}`;
+}
 
 export interface LocalRuntimeOptions {
   /** Path to kit root directory. Default: process.cwd() */
@@ -20,6 +26,8 @@ export interface LocalRuntimeOptions {
   dbToken?: string;
   /** "skip" runs `authorize`-guarded tools unchecked (local development only). */
   authorization?: "enforce" | "skip";
+  /** Generate migrations from the Drizzle schema first (local development only). */
+  generateMigrations?: boolean;
 }
 
 export interface LocalRuntime {
@@ -34,7 +42,7 @@ export interface LocalRuntime {
  */
 export async function createLocalRuntime(options: LocalRuntimeOptions = {}): Promise<LocalRuntime> {
   const kitRoot = options.kitRoot ?? process.cwd();
-  const dbUrl = options.dbUrl ?? "file:.kitstack/dev.db";
+  const dbUrl = options.dbUrl ?? defaultDbUrl(kitRoot);
 
   // Load kit config
   const configPath = resolve(kitRoot, "kit.config.ts");
@@ -49,6 +57,8 @@ export async function createLocalRuntime(options: LocalRuntimeOptions = {}): Pro
   if (!kit?.id || !kit?.tools) {
     throw new Error("Invalid kit.config.ts — must export a defineKit() result as default.");
   }
+
+  if (options.generateMigrations) generateMigrations(kitRoot);
 
   // Ensure DB directory exists for file: URLs
   if (dbUrl.startsWith("file:")) {

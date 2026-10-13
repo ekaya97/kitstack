@@ -119,6 +119,13 @@ describe("MCP handler: two-tool split", () => {
       expect(result.capabilities.tools).toEqual({});
       expect(result.capabilities.extensions["io.modelcontextprotocol/ui"]).toEqual({});
     });
+
+    it("answers with the client's protocol version when it supports it", async () => {
+      const older = await rpc("initialize", { protocolVersion: "2025-06-18" });
+      expect((older!.result as any).protocolVersion).toBe("2025-06-18");
+      const unknown = await rpc("initialize", { protocolVersion: "1999-01-01" });
+      expect((unknown!.result as any).protocolVersion).toBe("2025-11-25");
+    });
   });
 
   describe("tools/list", () => {

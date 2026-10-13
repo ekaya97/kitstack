@@ -15,7 +15,7 @@
  * @module
  */
 
-import { resolve } from "path";
+import { dirname, resolve } from "path";
 import { readFileSync, existsSync } from "node:fs";
 import { createLocalRuntime } from "../kit-runtime";
 
@@ -51,7 +51,7 @@ export async function call(args: string[]) {
   for (let i = 0; i < args.length; i++) {
     const flag = args[i];
     if (flag === "--config" && args[i + 1]) {
-      kitRoot = resolve(args[++i]);
+      kitRoot = kitRootFrom(args[++i]);
     } else if (flag === "--db" && args[i + 1]) {
       dbUrl = args[++i];
     } else if (!flag.startsWith("--")) {
@@ -99,15 +99,24 @@ export async function call(args: string[]) {
   }
 
   // Fall back to in-process runtime
-  const runtime = await createLocalRuntime({ kitRoot, dbUrl, authorization: "skip" });
+  const runtime = await createLocalRuntime({ kitRoot, dbUrl, authorization: "skip", generateMigrations: true });
   try {
     const response = await runtime.protocol.handleRequest(request, "dev-user");
-    if (response) {
+    if (response && "error" in response && response.error) {
+      console.error(`Error: ${(response.error as { message?: string }).message ?? "request failed"}`);
+      process.exitCode = 1;
+    } else if (response) {
       printResult(response.result);
     }
   } finally {
     runtime.cleanup();
   }
+}
+
+/** `--config` accepts the kit directory or its kit.config.ts. */
+function kitRootFrom(path: string): string {
+  const full = resolve(path);
+  return full.endsWith(".ts") ? dirname(full) : full;
 }
 
 /**
@@ -142,13 +151,16 @@ async function tryDevServer(
   }
 }
 
+/** Print text blocks; a tool error goes to stderr and fails the command. */
 function printResult(result: unknown) {
   if (!result) return;
   const r = result as any;
   const content = r.content ?? [];
+  const write = r.isError ? console.error : console.log;
   for (const block of content) {
     if (block.type === "text") {
-      console.log(block.text);
+      write(block.text);
     }
   }
+  if (r.isError) process.exitCode = 1;
 }

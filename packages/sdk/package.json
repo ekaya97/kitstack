@@ -1,6 +1,6 @@
 {
   "name": "@kitstackco/sdk",
-  "version": "0.1.5",
+  "version": "0.2.0",
   "type": "module",
   "license": "SEE LICENSE IN LICENSE",
   "bin": {
@@ -58,9 +58,18 @@
     "test": "vitest run --config vitest.config.ts",
     "prepublishOnly": "npm run build"
   },
-  "peerDependencies": {
+  "dependencies": {
+    "@libsql/client": "^0.14.0",
     "drizzle-orm": "^0.38.0",
+    "esbuild": "^0.24.0",
+    "picocolors": "^1.1.0",
+    "tsx": "^4.0.0",
     "zod": "^3.22.0"
+  },
+  "peerDependencies": {
+    "vite": ">=5",
+    "@vitejs/plugin-react": ">=4",
+    "tailwindcss": ">=3"
   },
   "peerDependenciesMeta": {
     "vite": {
@@ -72,11 +81,6 @@
     "tailwindcss": {
       "optional": true
     }
-  },
-  "dependencies": {
-    "esbuild": "^0.24.0",
-    "picocolors": "^1.1.0",
-    "tsx": "^4.0.0"
   },
   "devDependencies": {
     "@tailwindcss/typography": "^0.5.19",

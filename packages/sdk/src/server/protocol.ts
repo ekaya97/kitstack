@@ -4,6 +4,8 @@ import { handleKitCall } from "./kit-router";
 import { handleKitViewCall } from "./view-router";
 
 const PROTOCOL_VERSION = "2025-11-25";
+/** Versions this server can speak; a client asking for one of them gets it back. */
+const SUPPORTED_PROTOCOL_VERSIONS = new Set(["2025-11-25", "2025-06-18", "2025-03-26"]);
 const APP_SHELL_URI = "ui://kitstack/app";
 
 function buildUiMeta(cdnUrl: string) {
@@ -76,7 +78,7 @@ export function createProtocolHandler(options: ProtocolHandlerOptions): Protocol
             const kits = await adapter.resolveUserKits(userId);
             const instructions = buildKitInstructions(kits);
             return rpcResult(id, {
-              protocolVersion: PROTOCOL_VERSION,
+              protocolVersion: negotiateProtocolVersion(params),
               serverInfo,
               capabilities: {
                 tools: {},
@@ -210,4 +212,9 @@ function rpcResult(id: unknown, result: unknown) {
 
 function rpcError(id: unknown, code: number, message: string) {
   return { jsonrpc: "2.0" as const, id: id ?? null, error: { code, message } };
+}
+
+function negotiateProtocolVersion(params: unknown): string {
+  const requested = (params as { protocolVersion?: unknown } | undefined)?.protocolVersion;
+  return typeof requested === "string" && SUPPORTED_PROTOCOL_VERSIONS.has(requested) ? requested : PROTOCOL_VERSION;
 }
