@@ -185,6 +185,19 @@ describe("PluginRegistry", () => {
     });
   });
 
+  it("does not record invocations the caller marks as unrecorded", async () => {
+    const store = await makeTelemetry();
+    const registry = new PluginRegistry({ orgId: "org-demo", telemetry: store });
+    await registry.register({ ...plugin("scheduler:test", "scheduler"), invoke: async (input) => (input as { due: unknown }).due });
+    const context = { orgId: "org-demo", sessionId: "scheduler", traceId: "scheduler", telemetry: store, unrecorded: (output: unknown) => output === null };
+
+    await registry.dispatch("scheduler:test", { due: null }, context);
+    await registry.dispatch("scheduler:test", { due: { id: "job-1" } }, context);
+
+    const invoked = (await store.query({ orgId: "org-demo" })).filter((event) => event.type === "plugin.invoked");
+    expect(invoked).toHaveLength(1);
+  });
+
   it("fails dispatch for an unknown plugin", async () => {
     const store = await makeTelemetry();
     const registry = new PluginRegistry({ orgId: "org-demo", telemetry: store });

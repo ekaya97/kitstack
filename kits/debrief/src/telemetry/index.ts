@@ -262,10 +262,12 @@ export class TelemetryStore {
     const { where, args } = buildWhere(query);
     const limit = normalizeLimit(query.limit);
     const result = await this.client.execute({
-      sql: `SELECT * FROM telemetry_events ${where} ORDER BY sequence ASC LIMIT ${limit}`,
+      // The newest events, returned oldest first: a capped read must show
+      // what happened recently, not the first events ever recorded.
+      sql: `SELECT * FROM telemetry_events ${where} ORDER BY sequence DESC LIMIT ${limit}`,
       args,
     });
-    return result.rows.map((row) => mapEvent(row as Row));
+    return result.rows.map((row) => mapEvent(row as Row)).reverse();
   }
 
   async aggregate(query: TelemetryQuery = {}): Promise<TelemetryAggregate> {

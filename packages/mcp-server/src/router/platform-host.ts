@@ -119,6 +119,8 @@ export function createRouterPlatformDataSource(options: PlatformHostOptions = {}
   });
 }
 
+const OBSERVABILITY_TIMEOUT_MS = 10_000;
+
 async function readObservability(input: {
   query: PlatformQuery;
   identity: string;
@@ -139,6 +141,8 @@ async function readObservability(input: {
       ...(input.secret.byteLength >= 32 ? { "x-kitstack-internal": "platform-reader" } : {}),
       "x-kitstack-principal": input.identity,
     },
+    // A slow reader must fail the View, not hold the router until its own timeout.
+    signal: AbortSignal.timeout(OBSERVABILITY_TIMEOUT_MS),
   });
   if (!response.ok) throw new Error(`Platform telemetry reader returned HTTP ${response.status}`);
   const body = await response.json() as ObservabilityResponse;

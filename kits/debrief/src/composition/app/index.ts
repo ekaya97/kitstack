@@ -249,7 +249,10 @@ export async function createDemoApp(options: CreateDemoAppOptions = {}): Promise
         return persist("scheduled_call.schedule", () => scheduledCallStore.schedule(request.input as ScheduleCallInput));
       }
       if (request.operation === "claim_due") {
-        return persist("scheduled_call.claim_due", () => scheduledCallStore.claimDue(request.input as ClaimDueInput));
+        return plugins.dispatch("persistence:libsql", {
+          operation: "scheduled_call.claim_due",
+          run: () => scheduledCallStore.claimDue(request.input as ClaimDueInput),
+        }, { ...contextToPluginInput(context, telemetry), unrecorded: nothingClaimed });
       }
       if (request.operation === "complete") {
         return persist("scheduled_call.complete", () => scheduledCallStore.complete(request.input as CompleteCallInput));
@@ -402,7 +405,7 @@ export async function createDemoApp(options: CreateDemoAppOptions = {}): Promise
   voice = new VoiceSimulator({ debrief, telemetry, orgId, appId });
   const scheduler: ScheduledCallOperations = {
     schedule: (input) => plugins.dispatch("scheduler:scheduled-calls", { operation: "schedule", input }, schedulerPluginContext(input.orgId, input.sessionId, appId, telemetry)),
-    claimDue: (input) => plugins.dispatch("scheduler:scheduled-calls", { operation: "claim_due", input }, schedulerPluginContext(input.orgId, "scheduler", appId, telemetry)),
+    claimDue: (input) => plugins.dispatch("scheduler:scheduled-calls", { operation: "claim_due", input }, { ...schedulerPluginContext(input.orgId, "scheduler", appId, telemetry), unrecorded: nothingClaimed }),
     complete: (input) => plugins.dispatch("scheduler:scheduled-calls", { operation: "complete", input }, schedulerPluginContext(input.orgId, input.scheduledCallId, appId, telemetry)),
     fail: (input) => plugins.dispatch("scheduler:scheduled-calls", { operation: "fail", input }, schedulerPluginContext(input.orgId, input.scheduledCallId, appId, telemetry)),
     get: (scopeOrgId, scheduledCallId) => scheduledCallStore.get(scopeOrgId, scheduledCallId),
@@ -433,6 +436,9 @@ export async function createDemoApp(options: CreateDemoAppOptions = {}): Promise
     },
   };
 }
+
+/** An empty scheduler poll: nothing was due. */
+const nothingClaimed = (output: unknown) => output === null;
 
 function schedulerPluginContext(
   orgId: string,

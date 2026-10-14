@@ -60,6 +60,11 @@ export interface PluginContextInput {
   traceId: string;
   parentId?: string | null;
   telemetry: TelemetryStore;
+  /**
+   * Successful invocations whose output this returns true for are not
+   * recorded. The scheduler polls every second; an empty poll is not an event.
+   */
+  unrecorded?: (output: unknown) => boolean;
 }
 
 export interface PluginRegistryOptions {
@@ -164,6 +169,7 @@ export class PluginRegistry {
           telemetry: context.telemetry,
         },
       });
+      if (context.unrecorded?.(output)) return output;
       await this.options.telemetry.append({
         id: this.options.createEventId(),
         timestamp: this.options.now(),
