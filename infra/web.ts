@@ -56,8 +56,9 @@ export const web = new sst.aws.Nextjs("Web", {
     NEXT_PUBLIC_BETTER_AUTH_URL: $app.stage != "production" ? "http://localhost:3000" : "https://kitstack.co",
     NEXT_PUBLIC_POSTHOG_KEY: process.env.NEXT_PUBLIC_POSTHOG_KEY || "",
     NEXT_PUBLIC_POSTHOG_HOST: "https://eu.i.posthog.com",
-    NEXT_PUBLIC_DEMO_API_URL: process.env.NEXT_PUBLIC_DEMO_API_URL || demoVoiceUrl,
-    NEXT_PUBLIC_DEMO_ADMIN_TOKEN: process.env.NEXT_PUBLIC_DEMO_ADMIN_TOKEN || secrets.demoAdminToken.value,
+    // Server-only: the /demo dashboard reaches the voice service through
+    // /api/demo-proxy, which adds the admin token for signed-in admins.
+    DEMO_API_URL: process.env.NEXT_PUBLIC_DEMO_API_URL || demoVoiceUrl,
   },
   domain: $app.stage != "production" ? undefined : {
     name: "kitstack.co",

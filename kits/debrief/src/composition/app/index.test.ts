@@ -11,6 +11,16 @@ afterEach(() => {
 });
 
 describe("DemoApp", () => {
+  it("does not record empty scheduler polls", async () => {
+    const app = await createDemoApp({ url: ":memory:" });
+    const before = (await app.telemetry.query({ orgId: app.orgId })).length;
+    const claimed = await app.scheduler.claimDue({ orgId: app.orgId, now: new Date().toISOString(), workerId: "test" });
+    expect(claimed).toBeNull();
+    const after = await app.telemetry.query({ orgId: app.orgId });
+    expect(after.slice(before).map((event) => `${event.pluginId}:${event.operation}`)).toEqual([]);
+    await app.close();
+  });
+
   it("dogfoods two runs and reset repeatability with real services", async () => {
     const app = await createDemoApp({ url: ":memory:" });
     const registered = app.apps.register({ name: "Claude demo", org: "org-demo" });

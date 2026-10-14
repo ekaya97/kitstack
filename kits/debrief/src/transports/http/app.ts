@@ -1,4 +1,5 @@
 import type { DemoApp } from "../../composition/app/index.js";
+import { authenticateDebriefMcp } from "../../composition/host.js";
 import type { McpAuthMode } from "../../adapters/auth/mcp.js";
 import type { DemoHttpRequest, DemoHttpResponse } from "./index.js";
 import type { VoiceChannel, VoiceChannelCapability } from "@kitstackco/voice";
@@ -69,10 +70,12 @@ export async function handleDemoAppRequest(
       path,
     }, pluginContext(app, request, bodySessionId(request.body)));
     if (request.method === "POST" && path === "/t/voice/start") {
+      if (!await readerAuthorized(app, request)) return json(401, { error: "unauthorized" });
       const sessionId = stringField(request.body, "session_id");
       return json(200, await app.plugins.dispatch("trigger:voice-http", { operation: "start", sessionId }, pluginContext(app, request, sessionId)));
     }
     if (request.method === "POST" && path === "/t/voice/status") {
+      if (!await readerAuthorized(app, request)) return json(401, { error: "unauthorized" });
       const sessionId = stringField(request.body, "session_id");
       const current = await app.plugins.dispatch<{ operation: string; sessionId: string }, VoiceStatusResult>("channel:voice", { operation: "status", sessionId }, pluginContext(app, request, sessionId));
       // The simulator's first poll represents completion of its scripted
@@ -124,10 +127,12 @@ export async function handleDemoAppRequest(
       return responseFromWeb(result.response);
     }
     if (request.method === "GET" && path === "/api/demo/observability") {
+      if (!await readerAuthorized(app, request)) return json(401, { error: "unauthorized" });
       return json(200, await observabilitySnapshot(app, query(request.query), voice));
     }
     const sessionMatch = path.match(/^\/api\/demo\/sessions\/([^/]+)$/);
     if (request.method === "GET" && sessionMatch) {
+      if (!await readerAuthorized(app, request)) return json(401, { error: "unauthorized" });
       const sessionId = decodeURIComponent(sessionMatch[1]);
       return json(200, { session: app.debrief.getSession(sessionId), events: await app.telemetry.query({ sessionId }) });
     }
@@ -305,6 +310,16 @@ function providerHealth(events: TelemetryEvent[]): DemoProviderHealth[] {
 }
 
 function json<T>(status: number, body: T): DemoHttpResponse<T> { return { status, headers: JSON_HEADERS, body }; }
+
+/**
+ * Telemetry, session and simulator routes carry customer data. They need the
+ * operator's admin token or the router's signed service token, never neither.
+ */
+async function readerAuthorized(app: DemoApp, request: DemoAppRouteRequest): Promise<boolean> {
+  if (adminAuthorized(app, request)) return true;
+  if (app.mcpAuthMode !== "internal-signed") return false;
+  return !("status" in await authenticateDebriefMcp(app, { headers: request.headers ?? {} }));
+}
 
 function adminAuthorized(app: DemoApp, request: DemoAppRouteRequest): boolean {
   if (app.mcpAuthMode === "none") return true;

@@ -9,6 +9,7 @@
  */
 
 import { eq } from "drizzle-orm";
+import { SignJWT } from "jose";
 import type { KitContext } from "../../../sdk/src/types";
 import {
   createPlatformDataSource,
@@ -136,9 +137,22 @@ async function readObservability(input: {
   for (const [key, value] of Object.entries(input.query)) {
     if (value !== undefined && value !== null) params.set(toQueryKey(key), String(value));
   }
+  if (input.secret.byteLength < 32) throw new Error("Platform telemetry source secret is not configured");
+  // The voice service only serves telemetry to the router's short-lived
+  // signed service token (the same contract as its MCP endpoint).
+  const token = await new SignJWT({
+    org: input.query.orgId,
+    kit: "debrief",
+    req: crypto.randomUUID(),
+    trace: crypto.randomUUID(),
+  })
+    .setProtectedHeader({ alg: "HS256" })
+    .setSubject(input.identity)
+    .setExpirationTime(Math.floor(Date.now() / 1000) + 60)
+    .sign(input.secret);
   const response = await input.fetcher(`${input.sourceUrl}/api/demo/observability?${params}`, {
     headers: {
-      ...(input.secret.byteLength >= 32 ? { "x-kitstack-internal": "platform-reader" } : {}),
+      authorization: `Bearer ${token}`,
       "x-kitstack-principal": input.identity,
     },
     // A slow reader must fail the View, not hold the router until its own timeout.

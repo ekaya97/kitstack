@@ -1,3 +1,4 @@
+import { SignJWT } from "jose";
 import { afterEach, describe, expect, it } from "vitest";
 import { createDemoApp, type DemoApp } from "../../composition/app/index.js";
 import { handleDemoAppRequest } from "./app.js";
@@ -310,8 +311,11 @@ describe("composed demo HTTP surface", () => {
     expect(apps.status).toBe(200);
     expect((apps.body as any).apps).toHaveLength(1);
 
+    const anonymous = await handleDemoAppRequest(app, { method: "GET", path: "/api/demo/observability" });
+    expect(anonymous.status).toBe(401);
     const observability = await handleDemoAppRequest(app, {
       method: "GET", path: "/api/demo/observability",
+      headers: { "x-demo-admin-token": "demo-admin-token" },
     });
     expect((observability.body as any).mcpAuthMode).toBe("app-token");
     expect((observability.body as any).apps).toEqual([expect.objectContaining({ name: "Claude" })]);
@@ -334,5 +338,33 @@ describe("composed demo HTTP surface", () => {
     expect(response.body).toEqual(expect.objectContaining({
       liveCall: capability,
     }));
+  });
+});
+
+describe("telemetry reads with router-signed tokens", () => {
+  it("serves observability to a signed router token and refuses a forged one", async () => {
+    const secret = "a-router-to-voice-internal-secret-of-32-bytes";
+    const previous = { secret: process.env.KITSTACK_DEMO_INTERNAL_SECRET, allow: process.env.KITSTACK_DEMO_INTERNAL_USER_ORG_ALLOWLIST };
+    process.env.KITSTACK_DEMO_INTERNAL_SECRET = secret;
+    process.env.KITSTACK_DEMO_INTERNAL_USER_ORG_ALLOWLIST = "*=org-demo";
+    const app = await createDemoApp({ url: ":memory:", mcpAuthMode: "internal-signed" });
+    try {
+      const sign = (key: string) => new SignJWT({ org: "org-demo", kit: "debrief", req: "r-1", trace: "t-1" })
+        .setProtectedHeader({ alg: "HS256" }).setSubject("user-1")
+        .setExpirationTime(Math.floor(Date.now() / 1000) + 60).sign(new TextEncoder().encode(key));
+      const read = async (token?: string) => handleDemoAppRequest(app, {
+        method: "GET", path: "/api/demo/observability",
+        headers: token ? { authorization: `Bearer ${token}` } : {},
+      });
+      expect((await read()).status).toBe(401);
+      expect((await read(await sign("a-forged-secret-that-is-also-32-bytes-long"))).status).toBe(401);
+      expect((await read(await sign(secret))).status).toBe(200);
+    } finally {
+      await app.close();
+      for (const [name, value] of [["KITSTACK_DEMO_INTERNAL_SECRET", previous.secret], ["KITSTACK_DEMO_INTERNAL_USER_ORG_ALLOWLIST", previous.allow]] as const) {
+        if (value === undefined) delete process.env[name];
+        else process.env[name] = value;
+      }
+    }
   });
 });

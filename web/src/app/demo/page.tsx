@@ -85,8 +85,9 @@ type ObservabilityResponse = {
  * volatile state, sent only to that protected endpoint, and then cleared.
  */
 
-const API = process.env.NEXT_PUBLIC_DEMO_API_URL || "http://localhost:3001";
-const ADMIN_TOKEN = process.env.NEXT_PUBLIC_DEMO_ADMIN_TOKEN || "demo-admin-token";
+// Every call goes through the admin-only server proxy, which holds the demo
+// admin token; the browser never sees it.
+const API = "/api/demo-proxy";
 const tabs: { id: Tab; label: string }[] = [
   { id: "runtime", label: "Runtime / Registry" },
   { id: "usage-finops", label: "Usage / Observability / FinOps" },
@@ -161,7 +162,7 @@ export default function DemoPage() {
     if (!window.confirm("Clear demo sessions, memory, and telemetry?")) return;
     setNotice("");
     try {
-      const response = await fetch(`${API}/api/demo/reset`, { method: "POST", headers: { "x-demo-reset-token": "demo-reset", "x-demo-admin-token": ADMIN_TOKEN } });
+      const response = await fetch(`${API}/api/demo/reset`, { method: "POST", headers: { "x-demo-reset-token": "demo-reset" } });
       if (!response.ok) throw new Error(`Reset failed (${response.status})`);
       setSelectedSession("");
       setNotice("Demo data cleared. App registrations and tokens were preserved.");
@@ -286,7 +287,7 @@ function LiveCallView({ capability, selectedSession }: { capability: LiveCallCap
     const masked = maskPhoneNumber(requestDestination);
     setDestination("");
     try {
-      const response = await fetch(`${API}${capability.startPath}`, { method: "POST", headers: { "content-type": "application/json", "x-demo-admin-token": ADMIN_TOKEN }, body: JSON.stringify({ session_id: selectedSession, to: requestDestination, confirmation: true }) });
+      const response = await fetch(`${API}${capability.startPath}`, { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ session_id: selectedSession, to: requestDestination, confirmation: true }) });
       if (!response.ok) throw new Error(`Live call request failed (${response.status})`);
       setMaskedDestination(masked);
       setConfirmed(false);
@@ -341,10 +342,10 @@ function AppsView({ apps, events, setApps, authLabel }: { apps: App[]; events: E
   async function register(event: FormEvent) {
     event.preventDefault(); setBusy(true); setError("");
     try {
-      const response = await fetch(`${API}/v1/apps/register`, { method: "POST", headers: { "content-type": "application/json", "x-demo-admin-token": ADMIN_TOKEN }, body: JSON.stringify({ name, org: "org-demo", scopes: scopes.split(",").map((scope) => scope.trim()).filter(Boolean) }) });
+      const response = await fetch(`${API}/v1/apps/register`, { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ name, org: "org-demo", scopes: scopes.split(",").map((scope) => scope.trim()).filter(Boolean) }) });
       if (!response.ok) throw new Error(`Registration failed (${response.status})`);
       const app = await response.json() as App;
-      const tokenResponse = await fetch(`${API}/v1/apps/${encodeURIComponent(app.id)}/token`, { method: "POST", headers: { "x-demo-admin-token": ADMIN_TOKEN } });
+      const tokenResponse = await fetch(`${API}/v1/apps/${encodeURIComponent(app.id)}/token`, { method: "POST", headers: {} });
       if (!tokenResponse.ok) throw new Error(`Token issuance failed (${tokenResponse.status})`);
       const token = await tokenResponse.json() as { token: string; expiresInSeconds: number };
       setApps([{ ...app, token: token.token, expiresAt: new Date(Date.now() + token.expiresInSeconds * 1000).toISOString() }, ...apps]);

@@ -93,7 +93,8 @@ describe("local demo HTTP server", () => {
       expect(calls[0].get("Record")).toBe("false");
       expect(calls[0].get("Twiml")).toContain("wss://demo.example/t/voice/media");
 
-      const observability = await request(base, "/api/demo/observability");
+      expect((await request(base, "/api/demo/observability")).status).toBe(401);
+      const observability = await request(base, "/api/demo/observability", { headers: { "x-demo-admin-token": app.adminToken } });
       expect(await observability.json()).toEqual(expect.objectContaining({
         liveCall: { enabled: true, provider: "twilio-openai-realtime", model: "gpt-realtime", startPath: "/t/voice/live/start" },
       }));
