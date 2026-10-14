@@ -16,6 +16,8 @@
   },
   "scripts": {
     "typecheck": "tsc -p tsconfig.json --noEmit",
-    "test": "vitest run"
+    "test": "vitest run",
+    "build": "kitstack build",
+    "publish:assets": "npm run build && sst shell -- npx tsx scripts/publish-assets.ts"
   }
 }

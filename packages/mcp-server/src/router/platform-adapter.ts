@@ -39,6 +39,8 @@ const DEBRIEF_KIT_ID = "debrief";
 const PLATFORM_KIT_ID = "platform";
 /** Published by kits/debrief/scripts/publish-assets.ts to KitAssets. */
 export const DEBRIEF_SHELL_S3_KEY = "apps/kits/debrief/shell.html";
+/** Published by kits/platform/scripts/publish-assets.ts to KitAssets. */
+export const PLATFORM_SHELL_S3_KEY = "apps/kits/platform/shell.html";
 const INTERNAL_TOKEN_TTL_SECONDS = 60;
 const VOICE_REQUEST_TIMEOUT_MS = 8_000;
 
@@ -290,7 +292,7 @@ export function platformAdapter(deps: PlatformAdapterDeps): KitServerAdapter {
 
     async getShellHtml(kitId: string): Promise<string> {
       if (kitId === PLATFORM_KIT_ID) {
-        const resource = await readAppResource(APP_SHELL_URI, "system", new Set([PLATFORM_KIT_ID]));
+        const resource = await readAppResource(APP_SHELL_URI, "system", new Set([PLATFORM_KIT_ID]), PLATFORM_SHELL_S3_KEY);
         return resource?.text || "";
       }
       if (kitId === DEBRIEF_KIT_ID) {
