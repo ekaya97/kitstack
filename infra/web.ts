@@ -8,8 +8,11 @@ export const web = new sst.aws.Nextjs("Web", {
   // Custom build: after OpenNext builds, fix the standalone path for monorepo.
   // outputFileTracingRoot points to monorepo root, so standalone output nests
   // under .next/standalone/web/ — OpenNext expects it at .next/standalone/.next/
+  // Next 15 left its two-year support window in October 2026 and OpenNext now
+  // refuses to build it without the flag. Drop it once web/ is on Next 16.
+  // The value is required: OpenNext's parser reads a bare trailing flag as unset.
   buildCommand: [
-    "npx --yes @opennextjs/aws@3.9.14 build",
+    "npx --yes @opennextjs/aws@3.9.14 build --dangerously-use-unsupported-next-version true",
     "&&",
     "if [ -d .next/standalone/web/.next ] && [ ! -d .next/standalone/.next ]; then",
     "ln -s web/.next .next/standalone/.next;",
