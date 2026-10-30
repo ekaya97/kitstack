@@ -19,6 +19,15 @@ vi.mock("../app-resources", () => ({
 
 const SECRET = new TextEncoder().encode("router-to-demo-secret-that-is-32-bytes");
 
+/** Grants for the debrief gate: `kit:use` on kit debrief, plus the operator grant when `operator`. */
+function debriefGrants(options: { use?: boolean; operator?: boolean } = {}) {
+  return vi.fn(async (_subject: string, relation: string, objectType: string, objectId: string) => {
+    if (relation === "kit:use" && objectType === "kit" && objectId === "debrief") return options.use ?? true;
+    if (relation === "kit:admin" && objectType === "organization" && objectId === "org-demo") return options.operator ?? false;
+    return false;
+  });
+}
+
 const existingTool: KitRegistryItem = {
   kitId: "crm",
   toolName: "list_contacts",
@@ -193,6 +202,7 @@ describe("platform debrief adapter", () => {
       voiceServiceUrl: "https://voice.example",
       voiceInternalSecret: SECRET,
       fetch: fetcher,
+      checkTuple: debriefGrants({ operator: true }),
       requestContext: {
         requestId: "http-request-1",
         sessionId: "session-1",
@@ -212,6 +222,73 @@ describe("platform debrief adapter", () => {
     expect(fetcher).toHaveBeenCalledOnce();
   });
 
+  it("refuses debrief tools and Views without kit:use and never calls the service", async () => {
+    const fetcher = vi.fn();
+    const checkTuple = debriefGrants({ use: false });
+    const adapter = platformAdapter({
+      getAllTools: vi.fn(async () => []),
+      getUserKitDbs: vi.fn(async () => []),
+      invokeKitLambda: vi.fn(),
+      voiceServiceUrl: "https://voice.example",
+      voiceInternalSecret: SECRET,
+      fetch: fetcher,
+      checkTuple,
+    });
+
+    const result = await adapter.executeTool("debrief", "start_voice_call", { session_id: "s1" }, "prospect-1");
+    expect(result).toEqual({
+      isError: true,
+      content: [{ type: "text", text: expect.stringContaining("Ask the KitStack team for access") }],
+    });
+    await expect(adapter.executeLoader("debrief", "prebrief", "prospect-1")).rejects.toThrow("Ask the KitStack team for access");
+    expect(fetcher).not.toHaveBeenCalled();
+    expect(checkTuple).toHaveBeenCalledWith("prospect-1", "kit:use", "kit", "debrief", "user");
+  });
+
+  it("fails closed when the grant store cannot be read", async () => {
+    const fetcher = vi.fn();
+    const adapter = platformAdapter({
+      getAllTools: vi.fn(async () => []),
+      getUserKitDbs: vi.fn(async () => []),
+      invokeKitLambda: vi.fn(),
+      voiceServiceUrl: "https://voice.example",
+      voiceInternalSecret: SECRET,
+      fetch: fetcher,
+      checkTuple: vi.fn(async () => { throw new Error("turso down"); }),
+    });
+    const result = await adapter.executeTool("debrief", "get_session", { session_id: "s1" }, "user-1");
+    expect(result.isError).toBe(true);
+    expect(fetcher).not.toHaveBeenCalled();
+  });
+
+  it("signs a personal organization for a granted non-operator and org-demo for an operator", async () => {
+    const orgs: unknown[] = [];
+    const fetcher = vi.fn(async (_input: RequestInfo | URL, init?: RequestInit) => {
+      const token = new Headers(init?.headers).get("authorization")!.replace(/^Bearer\s+/, "");
+      const { payload } = await jwtVerify(token, SECRET, { algorithms: ["HS256"] });
+      orgs.push([payload.sub, payload.org]);
+      return response({ jsonrpc: "2.0", id: "r", result: { content: [{ type: "text", text: JSON.stringify({ data: { ok: true } }) }] } });
+    });
+    const adapterFor = (operator: boolean) => platformAdapter({
+      getAllTools: vi.fn(async () => []),
+      getUserKitDbs: vi.fn(async () => []),
+      invokeKitLambda: vi.fn(),
+      voiceServiceUrl: "https://voice.example",
+      voiceInternalSecret: SECRET,
+      fetch: fetcher,
+      checkTuple: debriefGrants({ operator }),
+    });
+
+    await adapterFor(false).executeTool("debrief", "get_session", { session_id: "s1" }, "prospect-1");
+    await expect(adapterFor(false).executeLoader("debrief", "prebrief", "prospect-1")).resolves.toEqual({ ok: true });
+    await adapterFor(true).executeTool("debrief", "get_session", { session_id: "s1" }, "operator-1");
+    expect(orgs).toEqual([
+      ["prospect-1", "org-user-prospect-1"],
+      ["prospect-1", "org-user-prospect-1"],
+      ["operator-1", "org-demo"],
+    ]);
+  });
+
   it("maps an unavailable voice service to a useful tool error", async () => {
     const adapter = platformAdapter({
       getAllTools: vi.fn(async () => []),
@@ -220,6 +297,7 @@ describe("platform debrief adapter", () => {
       voiceServiceUrl: "https://voice.example",
       voiceInternalSecret: SECRET,
       fetch: vi.fn(async () => { throw new Error("connect refused"); }),
+      checkTuple: debriefGrants(),
     });
 
     const result = await adapter.executeTool("debrief", "get_session", { session_id: "s1" }, "user-1");

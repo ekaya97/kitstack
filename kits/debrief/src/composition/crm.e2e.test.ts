@@ -39,9 +39,11 @@ async function preparedAndCalled(crm: CrmClient) {
   return prepared;
 }
 
+const OPERATOR_FALLBACK = { destination: "+491234567890" };
+
 describe("debrief with a CRM", () => {
   it("briefs from the CRM and writes the call and follow-up task on confirmation", async () => {
-    app = await createDemoApp({ url: ":memory:" });
+    app = await createDemoApp({ url: ":memory:", operatorFallback: OPERATOR_FALLBACK });
     const crm = seededCrm();
     const prepared = await preparedAndCalled(crm);
     expect(prepared.crm_context).toEqual(expect.arrayContaining([
@@ -68,7 +70,7 @@ describe("debrief with a CRM", () => {
   });
 
   it("keeps the confirmation when the CRM fails, and lets the operator retry", async () => {
-    app = await createDemoApp({ url: ":memory:" });
+    app = await createDemoApp({ url: ":memory:", operatorFallback: OPERATOR_FALLBACK });
     const healthy = seededCrm();
     let down = true;
     const flaky: CrmClient = {

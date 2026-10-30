@@ -85,8 +85,18 @@ export interface VoicePhoneOptions {
   fromNumber: string;
   /** Public https base URL that reaches this server (Twilio webhooks and media). */
   publicUrl: string;
-  /** Only these E.164 numbers can be called. */
-  allowedDestinations: readonly string[];
+  /**
+   * Resolve a scheduled call's destination per session (e.g. the session
+   * owner's verified number). Preferred over the static `allowedDestinations`
+   * list; required when `allowedDestinations` is empty.
+   */
+  resolveDestination?: (sessionId: string) => Promise<string | null>;
+  /**
+   * Only these E.164 numbers can be called. Retained for backward
+   * compatibility (the manual start route still checks against it when set)
+   * and as a fallback when `resolveDestination` returns null.
+   */
+  allowedDestinations?: readonly string[];
   /** Guard for the start route, e.g. an operator token. Defaults to deny. */
   authorizeStart?: (request: HttpRouteRequest) => boolean;
   /** Test seam for the Twilio REST API. */
@@ -288,7 +298,11 @@ export function createVoiceChannel(options: VoiceChannelOptions): VoiceChannel {
   function composePhone(config: VoicePhoneOptions) {
     const publicUrl = requireUrl(config.publicUrl, "https:", "phone.publicUrl").replace(/\/$/, "");
     if (!E164.test(config.fromNumber)) throw new Error("phone.fromNumber must be E.164");
-    if (!config.allowedDestinations.length || config.allowedDestinations.some((number) => !E164.test(number))) {
+    const allowedDestinations = config.allowedDestinations ?? [];
+    if (!config.resolveDestination && !allowedDestinations.length) {
+      throw new Error("phone requires resolveDestination or a non-empty allowedDestinations list");
+    }
+    if (allowedDestinations.some((number) => !E164.test(number))) {
       throw new Error("phone.allowedDestinations must list E.164 numbers");
     }
     const mediaStreamUrl = `${publicUrl.replace(/^https:/, "wss:")}${VOICE_PATHS.phoneMedia}`;
@@ -306,7 +320,8 @@ export function createVoiceChannel(options: VoiceChannelOptions): VoiceChannel {
       sessionIdentity: (sessionId) => claims.get(sessionId),
       mediaStreamUrl,
       fromNumber: config.fromNumber,
-      allowedDestinations: config.allowedDestinations,
+      allowedDestinations,
+      ...(config.resolveDestination ? { resolveDestination: config.resolveDestination } : {}),
       requireConfirmation: true,
       statusCallbackUrl: statusUrl,
       statusCallback: { validator: createTwilioSignatureValidator(config.authToken), url: statusUrl },

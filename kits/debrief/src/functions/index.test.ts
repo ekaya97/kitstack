@@ -253,6 +253,61 @@ describe("DebriefService", () => {
     }
   });
 
+  it("refuses to schedule a callback for an owner with no verified number and no operator fallback", async () => {
+    const { service } = setup();
+    await expect(service.prepareDebrief({
+      goal: "Call the customer",
+      company: "Acme Corp",
+      contactName: "John Doe",
+      location: "Köln Café",
+      callbackAt: new Date(Date.now() + 3_600_000).toISOString(),
+      callbackTimezone: "Europe/Berlin",
+      ownerId: "user-1",
+    })).rejects.toThrow("No verified phone number is on file");
+  });
+
+  it("schedules a callback once the owner has a verified number", async () => {
+    const memories: any[] = [];
+    const memory: any = { writeCandidate: vi.fn(), approveCandidate: vi.fn(), publishCandidate: vi.fn(), readRelevant: vi.fn(async () => memories) };
+    const phoneDirectory = { hasVerifiedNumber: vi.fn(async (orgId: string, userId: string) => orgId === "o" && userId === "user-1") };
+    const service = new DebriefService(memory, { resolve: vi.fn(async () => instruction) } as any, { append: vi.fn(async () => undefined) } as any, { orgId: "o", appId: "a" }, undefined, { phoneDirectory });
+    const prepared = await service.prepareDebrief({
+      goal: "Call the customer",
+      company: "Acme Corp",
+      contactName: "John Doe",
+      location: "Köln Café",
+      callbackAt: new Date(Date.now() + 3_600_000).toISOString(),
+      callbackTimezone: "Europe/Berlin",
+      ownerId: "user-1",
+    });
+    expect(phoneDirectory.hasVerifiedNumber).toHaveBeenCalledWith("o", "user-1");
+    expect(service.getSession(prepared.sessionId).ownerId).toBe("user-1");
+  });
+
+  it("falls back to the operator destination for the operator org even without a verified number", async () => {
+    const memory: any = { writeCandidate: vi.fn(), approveCandidate: vi.fn(), publishCandidate: vi.fn(), readRelevant: vi.fn(async () => []) };
+    const phoneDirectory = { hasVerifiedNumber: vi.fn(async () => false) };
+    const service = new DebriefService(memory, { resolve: vi.fn(async () => instruction) } as any, { append: vi.fn(async () => undefined) } as any, { orgId: "org-demo", appId: "a" }, undefined, {
+      phoneDirectory,
+      operatorFallback: { orgId: "org-demo", destination: "+491234567890" },
+    });
+    const prepared = await service.prepareDebrief({
+      goal: "Call the customer",
+      company: "Acme Corp",
+      contactName: "John Doe",
+      location: "Köln Café",
+      callbackAt: new Date(Date.now() + 3_600_000).toISOString(),
+      callbackTimezone: "Europe/Berlin",
+      ownerId: "default-user",
+    });
+    expect(service.getSession(prepared.sessionId)).toMatchObject({ state: "prepared", ownerId: "default-user" });
+  });
+
+  it("never requires a phone number for a goal-only rehearsal, even with an ownerId", async () => {
+    const { service } = setup();
+    await expect(service.prepareDebrief({ goal: "Rehearse", ownerId: "user-1" })).resolves.toMatchObject({ state: "prepared" });
+  });
+
   it("keeps partial completion free of confirmed events", async () => {
     const { client, service } = await persistentSetup();
     try {

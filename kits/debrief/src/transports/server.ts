@@ -10,7 +10,7 @@ import { createDebriefKitServer } from "../composition/host.js";
 import { createDebriefVoiceChannel, type VoiceProviderOverrides } from "../composition/voice.js";
 import { bindDebriefCrm } from "../composition/crm.js";
 import { handleDemoAppRequest, type DemoAppRouteRequest } from "./http/app.js";
-import { createScheduledCallJob, ScheduledCallPoller, type ScheduledCallPoller as ScheduledCallPollerType } from "../scheduler/index.js";
+import { createScheduledCallJob, ScheduledCallPoller, type ScheduledCallPoller as ScheduledCallPollerType, type ScheduledCallPollerOptions } from "../scheduler/index.js";
 import { createScheduledTrigger } from "../triggers/index.js";
 
 const DEFAULT_PORT = 3001;
@@ -62,10 +62,20 @@ export interface DemoServerAddress {
 export async function createDemoServer(options: DemoServerOptions = {}): Promise<DemoServer> {
   const app = options.app ?? await createDemoApp({
     ...options.appOptions,
+    orgId: options.appOptions?.orgId ?? (process.env.KITSTACK_DEMO_ORG_ID?.trim() || undefined),
     url: options.appOptions?.url ?? readDatabaseUrl(),
     authToken: options.appOptions?.authToken ?? readDatabaseAuthToken(),
     mcpAuthMode: options.appOptions?.mcpAuthMode ?? readMcpAuthMode(process.env.KITSTACK_DEMO_MCP_AUTH),
     adminToken: options.appOptions?.adminToken ?? process.env.KITSTACK_DEMO_ADMIN_TOKEN,
+    operatorFallback: options.appOptions?.operatorFallback ?? {
+      orgId: process.env.KITSTACK_DEMO_ORG_ID,
+      destination: process.env.KITSTACK_DEMO_ALLOWED_DESTINATION,
+    },
+    twilioVerify: options.appOptions?.twilioVerify ?? {
+      accountSid: process.env.TWILIO_ACCOUNT_SID,
+      authToken: process.env.TWILIO_AUTH_TOKEN,
+      serviceSid: process.env.TWILIO_VERIFY_SERVICE_SID,
+    },
   });
   const ownsApp = options.app === undefined;
   const maxBodyBytes = options.maxBodyBytes ?? DEFAULT_MAX_BODY_BYTES;
@@ -138,50 +148,74 @@ function routeRequest(request: HttpRouteRequest): DemoAppRouteRequest {
 }
 
 function createLiveVoiceScheduler(app: DemoApp, voice: VoiceChannel): ScheduledCallPollerType {
+  // Organization resolution and session hydration already happened in
+  // createTenantScheduledCallPoller's job handler before this trigger runs.
   const scheduledTrigger = createScheduledTrigger(async (_context, payload) => {
-    const session = await app.debrief.hydrateSession(payload.sessionId);
-    if (session.orgId !== app.orgId) throw new Error("Scheduled call organization mismatch");
     const result = await voice.startCall(payload.sessionId, payload.purpose);
     return result.callId;
   });
-  return new ScheduledCallPoller({
-    operations: app.scheduler,
-    orgId: app.orgId,
+  return createTenantScheduledCallPoller(app, async (workspace, job) => {
+    const invoked = await dispatchTrigger(scheduledTrigger, {
+      kitId: "kit:debrief",
+      payload: { sessionId: job.sessionId, purpose: job.purpose },
+      method: "INTERNAL",
+      path: "/t/debrief/scheduler",
+      channel: { kind: "schedule", id: scheduledTrigger.id },
+      session: { id: job.sessionId, traceId: `schedule:${job.sessionId}` },
+    }, {
+      audit: async (event) => {
+        await workspace.telemetry.append({
+          id: crypto.randomUUID(), timestamp: new Date().toISOString(), orgId: workspace.orgId,
+          appId: workspace.appId, sessionId: job.sessionId, traceId: `schedule:${job.sessionId}`,
+          channel: "trigger", pluginId: event.triggerId, kitId: "kit:debrief",
+          type: "plugin.invoked", operation: "dispatch",
+          outcome: event.outcome === "success" ? "success" : "error",
+        });
+      },
+    });
+    if (invoked.result.isError) {
+      const block = invoked.result.content[0];
+      throw new Error(block?.type === "text" ? block.text : "Scheduled trigger failed");
+    }
+    return invoked.value ?? null;
+  }, {
     workerId: process.env.KITSTACK_DEMO_SCHEDULER_WORKER_ID?.trim() || `demo-voice-${process.pid}`,
     intervalMs: Number(process.env.KITSTACK_DEMO_SCHEDULER_INTERVAL_MS ?? 1_000),
+  });
+}
+
+/**
+ * The host's one scheduled-call poller for every organization. Each tick runs
+ * a single claim across organizations (no per-org loop, so read cost does not
+ * grow with tenants); a claimed call is dispatched in its own organization's
+ * workspace after its session is reloaded there.
+ */
+export function createTenantScheduledCallPoller(
+  app: DemoApp,
+  startCall: (workspace: DemoApp, job: Parameters<NonNullable<ScheduledCallPollerOptions["startCall"]>>[0]) => Promise<string | null>,
+  options: Pick<ScheduledCallPollerOptions, "workerId" | "intervalMs" | "leaseMs" | "now">,
+): ScheduledCallPollerType {
+  return new ScheduledCallPoller({
+    ...options,
+    // Claims, completions and failures are org-keyed by the claimed record.
+    operations: app.scheduler,
     // The declared job owns the scheduler dispatch boundary. Its provider
     // seam invokes the trigger contract, so both W5 contracts are exercised
     // by the live path without maintaining two competing callbacks.
     job: createScheduledCallJob(async (job) => {
-      const invoked = await dispatchTrigger(scheduledTrigger, {
-        kitId: "kit:debrief",
-        payload: { sessionId: job.sessionId, purpose: job.purpose },
-        method: "INTERNAL",
-        path: "/t/debrief/scheduler",
-        channel: { kind: "schedule", id: scheduledTrigger.id },
-        session: { id: job.sessionId, traceId: `schedule:${job.sessionId}` },
-      }, {
-        audit: async (event) => {
-          await app.telemetry.append({
-            id: crypto.randomUUID(), timestamp: new Date().toISOString(), orgId: app.orgId,
-            appId: app.appId, sessionId: job.sessionId, traceId: `schedule:${job.sessionId}`,
-            channel: "trigger", pluginId: event.triggerId, kitId: "kit:debrief",
-            type: "plugin.invoked", operation: "dispatch",
-            outcome: event.outcome === "success" ? "success" : "error",
-          });
-        },
-      });
-      if (invoked.result.isError) {
-        const block = invoked.result.content[0];
-        throw new Error(block?.type === "text" ? block.text : "Scheduled trigger failed");
-      }
-      return invoked.value ?? null;
+      const workspace = await app.tenants.forOrg(job.orgId);
+      const session = await workspace.debrief.hydrateSession(job.sessionId);
+      if (session.orgId !== job.orgId) throw new Error("Scheduled call organization mismatch");
+      return startCall(workspace, job);
     }),
     onProviderFailure: async (job, error) => {
       // A failed prebrief call must never cancel or fail the later debrief
       // call for the same session; only the primary debrief job fails the session.
       if (job.purpose === "prebrief") return;
-      try { await app.debrief.markFailed(job.sessionId, error); } catch { /* Keep the scheduler failure durable. */ }
+      try {
+        const workspace = await app.tenants.forOrg(job.orgId);
+        await workspace.debrief.markFailed(job.sessionId, error);
+      } catch { /* Keep the scheduler failure durable. */ }
     },
   });
 }

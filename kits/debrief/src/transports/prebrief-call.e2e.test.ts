@@ -4,7 +4,10 @@ import { createDemoServer, type DemoServer } from "./server.js";
 import type { OpenAIRealtimeSocket, OpenAIRealtimeSocketFactory } from "@kitstackco/voice";
 import { kitCall, kitView } from "./test-support.js";
 
-const LOCAL_ENV = { OPENAI_API_KEY: "sk-test" };
+// The self-service phone guard requires either a verified owner number or
+// the operator fallback destination; these tests use the latter, as the
+// live-voice phone tests do.
+const LOCAL_ENV = { OPENAI_API_KEY: "sk-test", KITSTACK_DEMO_ALLOWED_DESTINATION: "+4917600000000" };
 
 /** In-process stand-in for the OpenAI Realtime socket; the test drives its events. */
 class FakeRealtimeSocket implements OpenAIRealtimeSocket {

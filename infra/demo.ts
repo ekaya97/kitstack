@@ -5,6 +5,7 @@ import {
   twilioAccountSid,
   twilioAuthToken,
   twilioFromNumber,
+  twilioVerifyServiceSid,
   tursoAuthToken,
   tursoDbUrl,
   demoInternalSecret,
@@ -41,7 +42,13 @@ export const demoVoice = new sst.aws.Service("DemoVoice", {
     // short-lived internal-signed bridge. Local/direct fallback remains app-token.
     KITSTACK_DEMO_MCP_AUTH: "internal-signed",
     KITSTACK_DEMO_INTERNAL_SECRET: demoInternalSecret.value,
+    // Every user works in a personal org (org-user-<userId>), which the service
+    // always accepts. This allowlist only names who may also act in the shared
+    // operator org: "*=org-demo" trusts the router's operator grant (kit:admin
+    // on organization org-demo); "<userId>=org-demo,..." pins it to named users.
     KITSTACK_DEMO_INTERNAL_USER_ORG_ALLOWLIST: process.env.KITSTACK_DEMO_INTERNAL_USER_ORG_ALLOWLIST || "*=" + (process.env.KITSTACK_DEMO_ORG_ID || "org-demo"),
+    // The operator org the service's admin routes and existing demo data use.
+    KITSTACK_DEMO_ORG_ID: process.env.KITSTACK_DEMO_ORG_ID || "org-demo",
     KITSTACK_DEMO_DB_URL: tursoDbUrl.value,
     KITSTACK_DEMO_DB_AUTH_TOKEN: tursoAuthToken.value,
     KITSTACK_DEMO_PUBLIC_HTTPS_URL: voicePublicHttpsUrl,
@@ -51,6 +58,9 @@ export const demoVoice = new sst.aws.Service("DemoVoice", {
     TWILIO_ACCOUNT_SID: twilioAccountSid.value,
     TWILIO_AUTH_TOKEN: twilioAuthToken.value,
     TWILIO_FROM_NUMBER: twilioFromNumber.value,
+    // Self-service callback numbers (register_phone/verify_phone): empty
+    // disables the feature with a clear error at call time.
+    TWILIO_VERIFY_SERVICE_SID: twilioVerifyServiceSid.value,
     OPENAI_API_KEY: openAiApiKey.value,
     OPENAI_REALTIME_MODEL: process.env.OPENAI_REALTIME_MODEL?.trim() || "gpt-realtime",
     OPENAI_REALTIME_VOICE: process.env.OPENAI_REALTIME_VOICE?.trim() || "marin",

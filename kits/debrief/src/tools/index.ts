@@ -20,10 +20,14 @@ export type DebriefToolName =
   | "start_voice_call"
   | "get_voice_status"
   | "get_crm_context"
-  | "sync_debrief_to_crm";
+  | "sync_debrief_to_crm"
+  | "register_phone"
+  | "verify_phone"
+  | "get_phone"
+  | "remove_phone";
 
 const ASSIST_TOOLS: ReadonlySet<DebriefToolName> = new Set([
-  "get_session", "get_debrief", "get_debrief_draft", "get_debrief_for_confirmation", "get_voice_status", "get_crm_context",
+  "get_session", "get_debrief", "get_debrief_draft", "get_debrief_for_confirmation", "get_voice_status", "get_crm_context", "get_phone",
 ]);
 
 export type { DebriefToolHandler } from "../contracts";
@@ -188,6 +192,33 @@ export function createDebriefTools(
       "sync_debrief_to_crm",
       "Write a confirmed debrief to the CRM (call log and follow-up task). Runs automatically on confirmation; use it to retry after a failure. Idempotent.",
       z.object({ session_id: z.string().min(1).describe("The shared debrief session ID") }),
+      handlers,
+    ),
+    tool(
+      "register_phone",
+      "Register a callback phone number for this account and start SMS verification. Allowed countries: Germany (+49), Austria (+43), Switzerland (+41). Limited to 3 attempts per hour.",
+      z.object({ phone: z.string().min(1).describe("The callback number in E.164 format, for example +491701234567") }),
+      handlers,
+    ),
+    tool(
+      "verify_phone",
+      "Confirm the SMS code sent to a registered phone number, marking it verified for scheduled callbacks.",
+      z.object({
+        phone: z.string().min(1).describe("The same E.164 number passed to register_phone"),
+        code: z.string().min(1).describe("The one-time code received by SMS"),
+      }),
+      handlers,
+    ),
+    tool(
+      "get_phone",
+      "Read this account's registered callback number (masked) and whether it is verified.",
+      z.object({}),
+      handlers,
+    ),
+    tool(
+      "remove_phone",
+      "Remove this account's registered callback number.",
+      z.object({}),
       handlers,
     ),
   ];

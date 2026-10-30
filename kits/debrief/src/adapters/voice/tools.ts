@@ -1,5 +1,6 @@
 import { kitAgentTools, type AgentToolDefinition, type KitDefinition, type KitToolExecutor } from "@kitstackco/sdk";
 import type { RealtimeFunctionTool } from "@kitstackco/voice";
+import { VOICE_AGENT_PRINCIPAL } from "../../tenancy.js";
 
 /** Kit tools available on the primary, after-the-meeting debrief call. */
 const DEBRIEF_CALL_TOOLS = ["get_debrief_draft", "update_debrief_draft"] as const;
@@ -39,7 +40,7 @@ export function createDebriefVoiceTools(
       tools,
       boundArgs: (session) => ({ session_id: session.id }),
       boundArgNames: ["session_id"],
-      principal: () => "voice-agent",
+      principal: () => VOICE_AGENT_PRINCIPAL,
       descriptions,
     });
     return {

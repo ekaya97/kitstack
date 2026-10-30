@@ -19,8 +19,10 @@ const PHONE_ENV = [
   "TWILIO_AUTH_TOKEN",
   "TWILIO_FROM_NUMBER",
   "KITSTACK_DEMO_PUBLIC_HTTPS_URL",
-  "KITSTACK_DEMO_ALLOWED_DESTINATION",
 ] as const;
+
+/** Countries the self-service callback number may belong to: DE, AT, CH. */
+const ALLOWED_DESTINATION_COUNTRY_CODES = ["+49", "+43", "+41"] as const;
 
 /**
  * The debrief's voice channel: phone calls when Twilio is configured, and the
@@ -43,6 +45,7 @@ export async function createDebriefVoiceChannel(
   }
   const apiKey = value("OPENAI_API_KEY");
   if (!apiKey) return undefined;
+  const workspaceOf = (sessionId: string) => app.tenants.forSession(sessionId);
 
   const baseInstructions = readFileSync(new URL("../instructions/debrief-baseline.md", import.meta.url), "utf8");
   const baseVersion = `sha256:${createHash("sha256").update(baseInstructions, "utf8").digest("hex")}`;
@@ -74,7 +77,10 @@ export async function createDebriefVoiceChannel(
         authToken: value("TWILIO_AUTH_TOKEN"),
         fromNumber: value("TWILIO_FROM_NUMBER"),
         publicUrl: value("KITSTACK_DEMO_PUBLIC_HTTPS_URL"),
-        allowedDestinations: [value("KITSTACK_DEMO_ALLOWED_DESTINATION")],
+        // The session owner's verified number, preferred over the legacy
+        // single-destination allowlist below.
+        resolveDestination: async (sessionId: string) => resolveScheduledCallDestination(await workspaceOf(sessionId), sessionId, env),
+        ...(value("KITSTACK_DEMO_ALLOWED_DESTINATION") ? { allowedDestinations: [value("KITSTACK_DEMO_ALLOWED_DESTINATION")] } : {}),
         // Real phone calls always need the operator token, even in loopback auth-none mode.
         authorizeStart: (request) => Boolean(app.adminToken) && request.headers["x-demo-admin-token"] === app.adminToken,
         ...(providers.twilioFetch ? { fetch: providers.twilioFetch } : {}),
@@ -83,65 +89,71 @@ export async function createDebriefVoiceChannel(
     localHarness: true,
     bargeInMs: optionalNumber(value("KITSTACK_VOICE_BARGE_IN_MS")),
     tools: (call) => voiceTools.forPurpose(call.purpose),
-    briefing: (call) => call.purpose === "prebrief"
-      ? prebriefCallBriefing(app, call, prebriefCallInstructions, prebriefCallVersion, crm)
-      : debriefBriefing(app, call, baseInstructions, baseVersion, crm),
+    // One channel serves every organization: each callback resolves the
+    // workspace that owns the call's session.
+    briefing: async (call) => {
+      const workspace = await workspaceOf(call.sessionId);
+      const crmForWorkspace = workspace.orgId === app.tenants.operatorOrgId ? crm : undefined;
+      return call.purpose === "prebrief"
+        ? prebriefCallBriefing(workspace, call, prebriefCallInstructions, prebriefCallVersion, crmForWorkspace)
+        : debriefBriefing(workspace, call, baseInstructions, baseVersion, crmForWorkspace);
+    },
     sessions: {
       async startSession(sessionId, channel, purpose) {
-        const session = app.debrief.getSession(sessionId);
+        const workspace = await workspaceOf(sessionId);
+        const session = workspace.debrief.getSession(sessionId);
         if (channel === "local" && session.state !== "prepared") throw new Error(`Local voice session must be prepared, received ${session.state}`);
         // A prebrief call never moves the session out of "prepared": the
         // later debrief call must find it exactly as it was scheduled.
-        if (purpose !== "prebrief") await app.debrief.markCalling(sessionId);
-        return { orgId: session.orgId, appId: app.appId };
+        if (purpose !== "prebrief") await workspace.debrief.markCalling(sessionId);
+        return { orgId: session.orgId, appId: workspace.appId };
       },
-      onCallStarted: async (sessionId, callId) => { await app.debrief.setCallId(sessionId, callId); },
+      onCallStarted: async (sessionId, callId) => { await (await workspaceOf(sessionId)).debrief.setCallId(sessionId, callId); },
       onStartFailed: async (sessionId, error, purpose) => {
+        const workspace = await workspaceOf(sessionId);
         if (purpose === "prebrief") {
-          await emitPrebriefTelemetry(app, sessionId, "prebrief.start_failed", "error");
+          await emitPrebriefTelemetry(workspace, sessionId, "prebrief.start_failed", "error");
           return;
         }
-        await app.debrief.markFailed(sessionId, error);
+        await workspace.debrief.markFailed(sessionId, error);
       },
       onAgentFinished: async (sessionId, purpose) => {
         if (purpose === "prebrief") return;
-        await app.debrief.awaitConfirmation(sessionId);
+        await (await workspaceOf(sessionId)).debrief.awaitConfirmation(sessionId);
       },
-      onCallInterrupted: async (sessionId, reason) => { await app.debrief.endCallAfterInterruption(sessionId, reason); },
+      onCallInterrupted: async (sessionId, reason) => { await (await workspaceOf(sessionId)).debrief.endCallAfterInterruption(sessionId, reason); },
       onCallCompleted: async (call) => {
+        const workspace = await workspaceOf(call.sessionId);
         if (call.purpose === "prebrief") {
-          await emitPrebriefTelemetry(app, call.sessionId, "prebrief.call_completed", "success", call.provider, call.callId);
+          await emitPrebriefTelemetry(workspace, call.sessionId, "prebrief.call_completed", "success", call.provider, call.callId);
           return;
         }
-        const session = app.debrief.getSession(call.sessionId);
-        await app.debrief.recordCallCompleted(call);
-        await app.telemetry.append({
-          id: crypto.randomUUID(), timestamp: call.occurredAt, orgId: call.orgId, appId: app.appId,
+        const session = workspace.debrief.getSession(call.sessionId);
+        await workspace.debrief.recordCallCompleted(call);
+        await workspace.telemetry.append({
+          id: crypto.randomUUID(), timestamp: call.occurredAt, orgId: call.orgId, appId: workspace.appId,
           customerId: session.customerId, sessionId: call.sessionId, traceId: call.sessionId,
           channel: "voice", pluginId: "kit:debrief", kitId: session.kitId, type: "voice.call",
           operation: "call_completed", provider: call.provider, callId: call.callId, outcome: "success",
         });
       },
-      resolveSessionIdForCallId: async (callId) => {
-        const job = (await app.scheduler.list(app.orgId)).find((candidate) => candidate.providerCallId === callId);
-        return job?.sessionId ?? null;
-      },
+      resolveSessionIdForCallId: (callId) => app.tenants.sessionIdForProviderCall(callId),
     },
   });
 }
 
 /** Metadata-only telemetry for a prebrief call outcome; never changes session state. */
 async function emitPrebriefTelemetry(
-  app: DemoApp,
+  workspace: DemoApp,
   sessionId: string,
   operation: string,
   outcome: "success" | "error",
   provider?: string,
   callId?: string | null,
 ): Promise<void> {
-  const session = app.debrief.getSession(sessionId);
-  await app.telemetry.append({
-    id: crypto.randomUUID(), timestamp: new Date().toISOString(), orgId: session.orgId, appId: app.appId,
+  const session = workspace.debrief.getSession(sessionId);
+  await workspace.telemetry.append({
+    id: crypto.randomUUID(), timestamp: new Date().toISOString(), orgId: session.orgId, appId: workspace.appId,
     customerId: session.customerId, sessionId, traceId: sessionId,
     channel: "voice", pluginId: "kit:debrief", kitId: session.kitId, type: "voice.call",
     operation, outcome, ...(provider ? { provider } : {}), ...(callId ? { callId } : {}),
@@ -223,6 +235,31 @@ async function prebriefCallBriefing(app: DemoApp, call: VoiceCall, baseInstructi
     version: `${baseVersion}:${call.channel}:prebrief:${createHash("sha256").update(content, "utf8").digest("hex").slice(0, 16)}`,
     memoryIds: selected.map((record) => record.memoryId),
   };
+}
+
+/**
+ * Resolve a scheduled call's destination from the session owner's verified
+ * number, re-checking the country allowlist (defence in depth: register_phone
+ * already enforces it, but a destination is never dialed on trust alone).
+ * Falls back to the operator demo's single configured destination only for
+ * the operator org, so today's demo keeps working while numbers roll out.
+ */
+async function resolveScheduledCallDestination(
+  app: DemoApp,
+  sessionId: string,
+  env: NodeJS.ProcessEnv,
+): Promise<string | null> {
+  const session = app.debrief.getSession(sessionId);
+  let destination: string | null = session.ownerId
+    ? await app.phone.getVerifiedNumber(session.orgId, session.ownerId)
+    : null;
+  if (!destination) {
+    const operatorOrgId = env.KITSTACK_DEMO_ORG_ID?.trim() || "org-demo";
+    const fallback = env.KITSTACK_DEMO_ALLOWED_DESTINATION?.trim();
+    if (fallback && session.orgId === operatorOrgId) destination = fallback;
+  }
+  if (destination && !ALLOWED_DESTINATION_COUNTRY_CODES.some((code) => destination!.startsWith(code))) return null;
+  return destination;
 }
 
 function optionalNumber(value: string | undefined): number | undefined {

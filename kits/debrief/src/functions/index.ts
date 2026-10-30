@@ -44,6 +44,8 @@ export interface DebriefSession {
   createdAt: string;
   updatedAt: string;
   error?: string;
+  /** The MCP identity (user id) that prepared this session; used to resolve the callback destination. */
+  ownerId: string | null;
 }
 
 /** Internal host shape aligned with the debrief kit's T-0184 input. */
@@ -55,11 +57,22 @@ export interface DebriefPreparationInput extends CustomerIdentityInput {
   bufferMinutes?: number;
   /** Optional earlier call, before the sales meeting; must resolve before callbackAt. */
   prebriefCallAt?: string;
+  /** The MCP identity (user id) preparing this debrief. */
+  ownerId?: string;
+}
+
+/** Verified-phone lookup for the self-service callback guard; no raw numbers are returned. */
+export interface PhoneDirectory {
+  hasVerifiedNumber(orgId: string, userId: string): Promise<boolean>;
 }
 
 export interface DebriefServiceOptions {
   persistence?: DebriefPersistence;
   initialSessions?: readonly DebriefSession[];
+  /** Checked before scheduling a callback; omit to skip the self-service phone guard entirely. */
+  phoneDirectory?: PhoneDirectory;
+  /** Keeps the existing operator demo working while self-service numbers roll out. */
+  operatorFallback?: { orgId: string; destination: string } | null;
 }
 
 export interface DebriefSummary {
@@ -142,11 +155,15 @@ export class DebriefService {
       this.sessions.set(session.sessionId, cloneSession(session));
     }
     this.persistence = options.persistence;
+    this.phoneDirectory = options.phoneDirectory;
+    this.operatorFallback = options.operatorFallback ?? null;
   }
 
   private readonly persistence?: DebriefPersistence;
+  private readonly phoneDirectory?: PhoneDirectory;
+  private readonly operatorFallback: { orgId: string; destination: string } | null;
 
-  async prepareDebrief(input: string | DebriefPreparationInput): Promise<DebriefSession | PreparedDebriefResult> {
+  async prepareDebrief(input: string | (Partial<DebriefPreparationInput> & Pick<DebriefPreparationInput, "goal">)): Promise<DebriefSession | PreparedDebriefResult> {
     const preparation: Partial<DebriefPreparationInput> & Pick<DebriefPreparationInput, "goal"> = typeof input === "string" ? { goal: input } : input;
     if (!preparation.goal.trim()) throw new Error("Debrief goal must not be empty");
     const sessionId = this.id();
@@ -167,6 +184,8 @@ export class DebriefService {
         }, schedule.callback_at, new Date(this.now()));
       })()
       : undefined;
+    const ownerId = typeof preparation.ownerId === "string" && preparation.ownerId.trim() ? preparation.ownerId.trim() : null;
+    if (schedule && ownerId) await this.requireCallbackDestination(ownerId);
     const customer = hasCustomerIdentity(preparation)
       ? await this.persistence?.upsertCustomer(this.context.orgId, preparation, { sessionId, traceId: sessionId })
       : undefined;
@@ -196,6 +215,7 @@ export class DebriefService {
       memoryIds: memories.map((m) => m.memoryId),
       createdAt: timestamp,
       updatedAt: timestamp,
+      ownerId,
     };
     this.sessions.set(sessionId, session);
     await this.persist(session);
@@ -521,6 +541,19 @@ export class DebriefService {
       recording: false,
       retention: false,
     });
+  }
+
+  /**
+   * A callback requires a number the host can actually dial. The operator
+   * demo org falls back to its single configured destination; everyone else
+   * must register and verify their own number first.
+   */
+  private async requireCallbackDestination(ownerId: string): Promise<void> {
+    const hasVerifiedNumber = await this.phoneDirectory?.hasVerifiedNumber(this.context.orgId, ownerId) ?? false;
+    if (hasVerifiedNumber) return;
+    const fallbackAvailable = Boolean(this.operatorFallback?.destination) && this.context.orgId === this.operatorFallback?.orgId;
+    if (fallbackAvailable) return;
+    throw new Error("No verified phone number is on file for this account. Use register_phone and verify_phone before scheduling a callback.");
   }
 
   private get kitId(): string { return this.context.kitId ?? "kit:debrief"; }

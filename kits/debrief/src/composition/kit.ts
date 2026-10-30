@@ -11,6 +11,7 @@ import type { DebriefDraftUpdate } from "../confirmation-contracts.js";
 import type { VoiceStatusResult } from "../adapters/voice/index.js";
 import { CRM_CONNECTOR_KEY, type CrmClient } from "@kitstackco/crm";
 import { crmAccountFor, crmBriefingLines, syncDebriefToCrm } from "./crm.js";
+import { VOICE_AGENT_PRINCIPAL } from "../tenancy.js";
 
 const DRAFT_FIELDS = ["outcome", "next_step", "customer_update", "discovered_address", "follow_up_date"] as const;
 
@@ -18,23 +19,69 @@ const DRAFT_FIELDS = ["outcome", "next_step", "customer_update", "discovered_add
  * The debrief kit bound to a running host. Every surface (MCP over HTTP or
  * stdio, the platform router, voice agents) calls these tools through
  * KitStack dispatch; there is no second tool table.
+ *
+ * Each call runs in the caller's organization workspace (see
+ * {@link workspaceFor}); handlers are built once per workspace.
  */
-export function createBoundDebriefKit(app: DemoApp) {
-  const handlers = createDebriefToolHandlers(app);
+export function createBoundDebriefKit(host: DemoApp) {
+  const perWorkspace = new WeakMap<DemoApp, Record<DebriefToolName, DebriefToolHandler>>();
+  const handlersFor = (workspace: DemoApp) => {
+    let handlers = perWorkspace.get(workspace);
+    if (!handlers) {
+      handlers = createDebriefToolHandlers(workspace);
+      perWorkspace.set(workspace, handlers);
+    }
+    return handlers;
+  };
+  const toolNames = Object.keys(handlersFor(host)) as DebriefToolName[];
+  const handlers = Object.fromEntries(toolNames.map((name): [DebriefToolName, DebriefToolHandler] => [
+    name,
+    async (ctx, args) => handlersFor(await workspaceFor(host, ctx, args))[name](ctx, args),
+  ])) as Record<DebriefToolName, DebriefToolHandler>;
   const base = createDebriefKit(handlers);
+  const inWorkspace = (load: (app: DemoApp, ctx: KitContext) => Promise<unknown>) =>
+    async (ctx: KitContext) => load(await workspaceFor(host, ctx, ctx.params), ctx);
   return {
     ...base,
     views: [
-      bindLoader(prebriefView, async (ctx) => toPrebriefViewData(...await prebriefSnapshot(app, ctx))),
-      bindLoader(confirmationView, async (ctx) => {
+      bindLoader(prebriefView, inWorkspace(async (app, ctx) => toPrebriefViewData(...await prebriefSnapshot(app, ctx)))),
+      bindLoader(confirmationView, inWorkspace(async (app, ctx) => {
         const sessionId = stringParam(ctx, "session_id") ?? app.debrief.getLatestSession()?.sessionId;
         if (!sessionId) throw new Error("No debrief session is available for confirmation");
         const confirmation = await app.debrief.getDebriefForConfirmation(sessionId);
         return toConfirmationViewData(confirmation as unknown as ConfirmationLoaderSnapshot);
-      }),
-      bindLoader(customerTimelineView, async (ctx) => customerTimelineData(app, ctx)),
+      })),
+      bindLoader(customerTimelineView, inWorkspace((app, ctx) => customerTimelineData(app, ctx))),
     ],
   };
+}
+
+/**
+ * The organization workspace a kit call runs in. Authentication binds every
+ * MCP principal to its verified organization; the voice agent acts for the
+ * session it is bound to. Unbound principals (stdio, loopback without auth)
+ * use the host's own workspace; with auth on they are refused.
+ */
+export async function workspaceFor(host: DemoApp, ctx: KitContext, args?: Readonly<Record<string, unknown>>): Promise<DemoApp> {
+  const principal = ctx.identity.principal;
+  if (principal === VOICE_AGENT_PRINCIPAL) {
+    const sessionId = typeof args?.session_id === "string" ? args.session_id : undefined;
+    if (!sessionId) throw new Error("Voice agent kit calls must name their session");
+    return host.tenants.forSession(sessionId);
+  }
+  const orgId = host.tenants.orgForPrincipal(principal);
+  if (orgId) return host.tenants.forOrg(orgId);
+  if (host.mcpAuthMode !== "none") throw new Error("No organization is bound to this caller");
+  return host;
+}
+
+/**
+ * The signed-in user behind a kit call (the MCP principal, i.e. the router's
+ * `sub`), or null for the voice agent. Use it to record a session's owner.
+ */
+export function requestUserId(ctx: KitContext): string | null {
+  const principal = ctx.identity.principal;
+  return principal && principal !== VOICE_AGENT_PRINCIPAL ? principal : null;
 }
 
 function createDebriefToolHandlers(app: DemoApp): Record<DebriefToolName, DebriefToolHandler> {
@@ -60,12 +107,13 @@ function createDebriefToolHandlers(app: DemoApp): Record<DebriefToolName, Debrie
       callbackTimezone: String(args.callback_timezone),
       bufferMinutes: typeof args.buffer_minutes === "number" ? args.buffer_minutes : 0,
       ...(typeof args.prebrief_call_at === "string" && args.prebrief_call_at.trim() ? { prebriefCallAt: args.prebrief_call_at } : {}),
+      ownerId: ctx.identity.principal,
       }, pluginContext(app, ctx));
       const sessionId = typeof prepared.sessionId === "string" ? prepared.sessionId : undefined;
-      const account = sessionId ? await crmAccountFor(app, crm(ctx), sessionId) : null;
+      const account = sessionId ? await crmAccountFor(app, crm(app, ctx), sessionId) : null;
       return result.json({ ...prepared, crm_context: crmBriefingLines(account) });
     },
-    prepare_rehearsal: (ctx, args) => viaKit({ operation: "prepare", goal: String(args.goal) })(ctx, args),
+    prepare_rehearsal: (ctx, args) => viaKit({ operation: "prepare", goal: String(args.goal), ownerId: ctx.identity.principal })(ctx, args),
     get_session: (ctx, args) => viaKit({ operation: "get_session", sessionId: String(args.session_id) })(ctx, args),
     get_debrief: (ctx, args) => viaKit({ operation: "get_debrief", sessionId: String(args.session_id) })(ctx, args),
     get_debrief_draft: withSession(async (sessionId) => ({ fields: (await app.debrief.getDraft(sessionId))?.fields ?? {} })),
@@ -76,14 +124,14 @@ function createDebriefToolHandlers(app: DemoApp): Record<DebriefToolName, Debrie
       const confirmation = await app.debrief.confirmDebriefDraft(sessionId);
       // Confirmation is the act boundary for external writes; a CRM failure
       // is reported but never undoes the confirmed debrief.
-      return { ...confirmation, crm: await syncDebriefToCrm(app, crm(ctx), sessionId) };
+      return { ...confirmation, crm: await syncDebriefToCrm(app, crm(app, ctx), sessionId) };
     }),
     get_crm_context: withSession(async (sessionId, _args, ctx) => {
-      const client = crm(ctx);
+      const client = crm(app, ctx);
       if (!client) return { configured: false };
       return { configured: true, provider: client.provider, account: await crmAccountFor(app, client, sessionId) };
     }),
-    sync_debrief_to_crm: withSession((sessionId, _args, ctx) => syncDebriefToCrm(app, crm(ctx), sessionId)),
+    sync_debrief_to_crm: withSession((sessionId, _args, ctx) => syncDebriefToCrm(app, crm(app, ctx), sessionId)),
     teach_from_correction: (ctx, args) => viaKit({ operation: "teach", sessionId: String(args.session_id), correction: String(args.correction) })(ctx, args),
     approve_memory: (ctx, args) => viaKit({ operation: "approve", sessionId: String(args.session_id), memoryId: String(args.memory_id) })(ctx, args),
     publish_memory: (ctx, args) => viaKit({ operation: "publish", sessionId: String(args.session_id), memoryId: String(args.memory_id) })(ctx, args),
@@ -103,6 +151,18 @@ function createDebriefToolHandlers(app: DemoApp): Record<DebriefToolName, Debrie
         sessionId,
         outcome: args.outcome === "partial" ? "partial" : "confirmed",
       }, pluginContext(app, ctx, sessionId))),
+    register_phone: async (ctx, args) => result.json(await app.plugins.dispatch("kit:debrief", {
+      operation: "register_phone", ownerId: ctx.identity.principal, phone: String(args.phone),
+    }, pluginContext(app, ctx))),
+    verify_phone: async (ctx, args) => result.json(await app.plugins.dispatch("kit:debrief", {
+      operation: "verify_phone", ownerId: ctx.identity.principal, phone: String(args.phone), code: String(args.code),
+    }, pluginContext(app, ctx))),
+    get_phone: async (ctx) => result.json(await app.plugins.dispatch("kit:debrief", {
+      operation: "get_phone", ownerId: ctx.identity.principal,
+    }, pluginContext(app, ctx))),
+    remove_phone: async (ctx) => result.json(await app.plugins.dispatch("kit:debrief", {
+      operation: "remove_phone", ownerId: ctx.identity.principal,
+    }, pluginContext(app, ctx))),
   };
 }
 
@@ -112,7 +172,7 @@ async function prebriefSnapshot(app: DemoApp, ctx: KitContext): Promise<[{ sessi
   const customer = await app.debrief.getCustomer(session.customerId);
   if (!customer) throw new Error(`Customer "${session.customerId}" was not found`);
   const history = await app.debrief.recentDebriefSummaries(session.customerId);
-  const crmLines = crmBriefingLines(await crmAccountFor(app, crm(ctx), session.sessionId));
+  const crmLines = crmBriefingLines(await crmAccountFor(app, crm(app, ctx), session.sessionId));
   const providerStatus = session.state === "failed" ? "unavailable" : session.state === "confirmed" ? "completed" : session.state === "calling" ? "calling" : "scheduled";
   return [
     { session_id: session.sessionId, customer_id: customer.customerId },
@@ -184,8 +244,12 @@ function bindLoader<TView extends { loader?: unknown; loaders?: unknown }>(view:
   return { ...view, loader, loaders: [loader] };
 }
 
-/** The CRM bound for this request, if any (kits never see the provider). */
-function crm(ctx: KitContext): CrmClient | undefined {
+/**
+ * The CRM bound for this request, if any (kits never see the provider). The
+ * host's CRM belongs to the operator, so other organizations never reach it.
+ */
+function crm(app: DemoApp, ctx: KitContext): CrmClient | undefined {
+  if (app.orgId !== app.tenants.operatorOrgId) return undefined;
   return ctx.connectors.get<CrmClient>(CRM_CONNECTOR_KEY);
 }
 

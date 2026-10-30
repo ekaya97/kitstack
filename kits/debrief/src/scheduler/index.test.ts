@@ -193,6 +193,22 @@ describe("persisted scheduled calls", () => {
     expect(await store.list("org-demo")).toEqual([]);
   });
 
+  it("counts an owner's scheduled calls since a timestamp, scoped by org", async () => {
+    const clock = new FakeClock("2026-09-15T20:00:00.000Z");
+    const store = createScheduledCallStore(database(), { now: clock.now });
+    await store.schedule({ orgId: "org-demo", sessionId: "session-a", scheduledAt: clock.now(), ownerId: "user-1" });
+    clock.advance(60_000);
+    await store.schedule({ orgId: "org-demo", sessionId: "session-b", scheduledAt: clock.now(), ownerId: "user-1" });
+    await store.schedule({ orgId: "org-demo", sessionId: "session-c", scheduledAt: clock.now(), ownerId: "user-2" });
+    await store.schedule({ orgId: "org-other", sessionId: "session-d", scheduledAt: clock.now(), ownerId: "user-1" });
+
+    const since = "2026-09-15T19:00:00.000Z";
+    expect(await store.countForOwnerSince("org-demo", "user-1", since)).toBe(2);
+    expect(await store.countForOwnerSince("org-demo", "user-2", since)).toBe(1);
+    expect(await store.countForOwnerSince("org-other", "user-1", since)).toBe(1);
+    expect(await store.countForOwnerSince("org-demo", "user-1", "2026-09-15T20:00:30.000Z")).toBe(1);
+  });
+
   it("uses the trigger-backed invocation seam when a daemon host provides one", async () => {
     const clock = new FakeClock("2026-09-15T20:00:00.000Z");
     const store = createScheduledCallStore(database(), { now: clock.now, createScheduledCallId: () => "scheduled-1" });

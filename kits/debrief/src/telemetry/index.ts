@@ -308,10 +308,17 @@ export class TelemetryStore {
     };
   }
 
-  /** Clear this store's metadata while leaving other demo tables untouched. */
-  async reset(): Promise<void> {
+  /**
+   * Clear this store's metadata while leaving other demo tables untouched.
+   * With an organization, only that organization's events are removed.
+   */
+  async reset(orgId?: string): Promise<void> {
     await this.initialized;
-    await this.client.execute("DELETE FROM telemetry_events");
+    if (orgId === undefined) {
+      await this.client.execute("DELETE FROM telemetry_events");
+      return;
+    }
+    await this.client.execute({ sql: "DELETE FROM telemetry_events WHERE org_id = ?", args: [orgId] });
   }
 
   async close(): Promise<void> {

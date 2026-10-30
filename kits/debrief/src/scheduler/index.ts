@@ -9,6 +9,7 @@ export type ScheduledCallPurpose = "debrief" | "prebrief";
 export interface ScheduledCallRecord {
   scheduledCallId: string;
   orgId: string;
+  /** Always the real debrief session id, regardless of how this row is stored. */
   sessionId: string;
   purpose: ScheduledCallPurpose;
   scheduledAt: string;
@@ -20,6 +21,8 @@ export interface ScheduledCallRecord {
   error: string | null;
   createdAt: string;
   updatedAt: string;
+  /** The session owner (MCP user id) this call is placed for; used by the daily per-user cap. */
+  ownerId: string | null;
 }
 
 export interface ScheduleCallInput {
@@ -29,10 +32,15 @@ export interface ScheduleCallInput {
   /** Defaults to "debrief"; a session may have one scheduled call per purpose. */
   purpose?: ScheduledCallPurpose;
   scheduledCallId?: string;
+  ownerId?: string;
 }
 
 export interface ClaimDueInput {
-  orgId: string;
+  /**
+   * Restrict the claim to one organization. Omit it to claim the next due
+   * call of any organization: one shared poller serves every tenant.
+   */
+  orgId?: string;
   now: string;
   workerId: string;
   leaseMs?: number;
@@ -62,6 +70,8 @@ export interface ScheduledCallOperations {
   get(orgId: string, scheduledCallId: string): Promise<ScheduledCallRecord | null>;
   list(orgId: string): Promise<ScheduledCallRecord[]>;
   reset(orgId: string): Promise<void>;
+  /** Count calls scheduled for this owner since a timestamp; backs the daily per-user call cap. */
+  countForOwnerSince(orgId: string, ownerId: string, sinceIso: string): Promise<number>;
 }
 
 export interface CreateScheduledCallStoreOptions {
@@ -69,20 +79,19 @@ export interface CreateScheduledCallStoreOptions {
   createScheduledCallId?: () => string;
 }
 
-// `purpose` distinguishes the one-time prebrief call from the primary
-// debrief call; a session may have at most one scheduled call per purpose.
-// A database created before `purpose` existed still enforces the single
-// `session_id UNIQUE` constraint baked into its table definition (SQLite
-// cannot alter that away without recreating the table), so such a database
-// must be recreated before a second (prebrief) job can be scheduled for the
-// same session. Fresh databases, including every test run, get the
-// composite constraint directly.
+// The production table was created with `session_id TEXT NOT NULL UNIQUE`
+// and only the three original indexes; it already holds live rows, and
+// SQLite cannot drop or narrow that inline UNIQUE constraint without
+// rebuilding the table (which would need a forbidden DROP). This schema
+// stays byte-for-byte compatible with that table, including on a fresh
+// database, so every environment is exercised the same way; `purpose`,
+// `owner_id` and `target_session_id` are added by the idempotent migration
+// below, the same pattern already used for other compatibility columns.
 const CREATE_SCHEMA_SQL = `
   CREATE TABLE IF NOT EXISTS scheduled_calls (
     scheduled_call_id TEXT PRIMARY KEY,
     org_id TEXT NOT NULL,
-    session_id TEXT NOT NULL,
-    purpose TEXT NOT NULL DEFAULT 'debrief' CHECK (purpose IN ('debrief', 'prebrief')),
+    session_id TEXT NOT NULL UNIQUE,
     scheduled_at TEXT NOT NULL,
     status TEXT NOT NULL CHECK (status IN ('scheduled', 'starting', 'started', 'failed')),
     attempt_count INTEGER NOT NULL DEFAULT 0,
@@ -91,8 +100,7 @@ const CREATE_SCHEMA_SQL = `
     provider_call_id TEXT,
     error TEXT,
     created_at TEXT NOT NULL,
-    updated_at TEXT NOT NULL,
-    UNIQUE (session_id, purpose)
+    updated_at TEXT NOT NULL
   );
   CREATE INDEX IF NOT EXISTS scheduled_calls_due_idx
     ON scheduled_calls (org_id, status, scheduled_at, scheduled_call_id);
@@ -100,9 +108,27 @@ const CREATE_SCHEMA_SQL = `
     ON scheduled_calls (org_id, status, lease_expires_at, scheduled_call_id);
   CREATE INDEX IF NOT EXISTS scheduled_calls_session_idx
     ON scheduled_calls (org_id, session_id);
+  CREATE INDEX IF NOT EXISTS scheduled_calls_due_any_org_idx
+    ON scheduled_calls (status, scheduled_at, scheduled_call_id);
+  CREATE INDEX IF NOT EXISTS scheduled_calls_lease_any_org_idx
+    ON scheduled_calls (status, lease_expires_at);
+  CREATE INDEX IF NOT EXISTS scheduled_calls_provider_call_idx
+    ON scheduled_calls (provider_call_id);
 `;
 
 type Row = Record<string, unknown>;
+
+/**
+ * `session_id`'s one-row-per-value UNIQUE constraint cannot be loosened on
+ * the existing production table, so a prebrief job (a second row for the
+ * same session) is stored under this derived key instead of the real
+ * session id. `target_session_id` always carries the real id; every reader
+ * must resolve through it (or this function), never read `session_id`
+ * directly as "the" session id.
+ */
+function storageKey(sessionId: string, purpose: ScheduledCallPurpose): string {
+  return purpose === "prebrief" ? `${sessionId}\u0000prebrief` : sessionId;
+}
 
 /** Durable scheduled-call state. Claiming is one write transaction. */
 export class LibsqlScheduledCallStore implements ScheduledCallOperations {
@@ -117,14 +143,18 @@ export class LibsqlScheduledCallStore implements ScheduledCallOperations {
     this.now = options.now ?? (() => new Date().toISOString());
     this.createScheduledCallId = options.createScheduledCallId ?? (() => `scheduled-${crypto.randomUUID()}`);
     this.initialized = client.executeMultiple(CREATE_SCHEMA_SQL).then(async () => {
-      // Idempotent catch-up for a database created before `purpose` existed.
-      // Its `session_id` column keeps enforcing a single-row-per-session
-      // UNIQUE constraint from its original table definition; scheduling a
-      // second (prebrief) job for the same session there still fails until
-      // that database is recreated.
+      // Idempotent catch-up, same pattern as every other compatibility
+      // column in this codebase: add what is missing, touch nothing that
+      // already exists.
       const columns = await client.execute("PRAGMA table_info(scheduled_calls)");
-      const names = new Set(columns.rows.map((row) => String((row as Record<string, unknown>).name)));
+      const names = new Set(columns.rows.map((row) => String((row as Row).name)));
       if (!names.has("purpose")) await client.execute("ALTER TABLE scheduled_calls ADD COLUMN purpose TEXT NOT NULL DEFAULT 'debrief'");
+      if (!names.has("owner_id")) await client.execute("ALTER TABLE scheduled_calls ADD COLUMN owner_id TEXT");
+      if (!names.has("target_session_id")) await client.execute("ALTER TABLE scheduled_calls ADD COLUMN target_session_id TEXT");
+      await client.execute(`CREATE INDEX IF NOT EXISTS scheduled_calls_owner_idx
+        ON scheduled_calls (org_id, owner_id, created_at)`);
+      await client.execute(`CREATE INDEX IF NOT EXISTS scheduled_calls_target_session_idx
+        ON scheduled_calls (org_id, target_session_id)`);
     });
   }
 
@@ -134,17 +164,21 @@ export class LibsqlScheduledCallStore implements ScheduledCallOperations {
     assertTimestamp(input.scheduledAt);
     await this.initialized;
     const purpose = input.purpose ?? "debrief";
+    const key = storageKey(input.sessionId, purpose);
     const timestamp = this.now();
     await this.client.execute({
       sql: `INSERT INTO scheduled_calls
-        (scheduled_call_id, org_id, session_id, purpose, scheduled_at, status, attempt_count,
-         lease_owner, lease_expires_at, provider_call_id, error, created_at, updated_at)
-        VALUES (?, ?, ?, ?, ?, 'scheduled', 0, NULL, NULL, NULL, NULL, ?, ?)
-        ON CONFLICT(session_id, purpose) DO UPDATE SET
+        (scheduled_call_id, org_id, session_id, target_session_id, purpose, scheduled_at, status, attempt_count,
+         lease_owner, lease_expires_at, provider_call_id, error, created_at, updated_at, owner_id)
+        VALUES (?, ?, ?, ?, ?, ?, 'scheduled', 0, NULL, NULL, NULL, NULL, ?, ?, ?)
+        ON CONFLICT(session_id) DO UPDATE SET
           scheduled_at = excluded.scheduled_at,
           updated_at = excluded.updated_at
         WHERE scheduled_calls.status = 'scheduled'`,
-      args: [input.scheduledCallId ?? this.createScheduledCallId(), input.orgId, input.sessionId, purpose, input.scheduledAt, timestamp, timestamp] as InValue[],
+      args: [
+        input.scheduledCallId ?? this.createScheduledCallId(), input.orgId, key, input.sessionId, purpose, input.scheduledAt,
+        timestamp, timestamp, input.ownerId ?? null,
+      ] as InValue[],
     });
     const record = await this.findBySession(input.orgId, input.sessionId, purpose);
     if (!record) throw new Error(`Scheduled call for session "${input.sessionId}" (${purpose}) was not readable after schedule`);
@@ -152,20 +186,24 @@ export class LibsqlScheduledCallStore implements ScheduledCallOperations {
   }
 
   async claimDue(input: ClaimDueInput): Promise<ScheduledCallRecord | null> {
-    assertNonEmpty(input.orgId, "orgId");
+    if (input.orgId !== undefined) assertNonEmpty(input.orgId, "orgId");
     assertNonEmpty(input.workerId, "workerId");
     assertTimestamp(input.now);
     const leaseMs = input.leaseMs ?? 30_000;
     if (!Number.isInteger(leaseMs) || leaseMs <= 0) throw new Error("leaseMs must be a positive integer");
     await this.initialized;
     const leaseExpiresAt = new Date(Date.parse(input.now) + leaseMs).toISOString();
+    // Without an organization the same two statements run across all
+    // organizations, so the per-tick read cost does not grow with tenants.
+    const orgFilter = input.orgId === undefined ? "" : "org_id = ? AND ";
+    const orgArgs: InValue[] = input.orgId === undefined ? [] : [input.orgId];
     // A process restart must not retry an uncertain provider call. Surface it
     // as an operator-visible failure before considering new scheduled work.
     await this.client.execute({
       sql: `UPDATE scheduled_calls
         SET status = 'failed', error = ?, lease_owner = NULL, lease_expires_at = NULL, updated_at = ?
-        WHERE org_id = ? AND status = 'starting' AND lease_expires_at IS NOT NULL AND lease_expires_at <= ?`,
-      args: ["Lease expired while starting call; operator action required", input.now, input.orgId, input.now] as InValue[],
+        WHERE ${orgFilter}status = 'starting' AND lease_expires_at IS NOT NULL AND lease_expires_at <= ?`,
+      args: ["Lease expired while starting call; operator action required", input.now, ...orgArgs, input.now] as InValue[],
     });
     // The subquery and update are one SQLite write statement. This keeps the
     // claim idempotent when two tasks poll at the same time and works with
@@ -173,12 +211,12 @@ export class LibsqlScheduledCallStore implements ScheduledCallOperations {
     const result = await this.client.execute({
       sql: `UPDATE scheduled_calls SET status = 'starting', attempt_count = attempt_count + 1,
         lease_owner = ?, lease_expires_at = ?, updated_at = ?
-        WHERE org_id = ? AND status = 'scheduled' AND scheduled_call_id = (
+        WHERE ${orgFilter}status = 'scheduled' AND scheduled_call_id = (
           SELECT scheduled_call_id FROM scheduled_calls
-          WHERE org_id = ? AND status = 'scheduled' AND scheduled_at <= ?
+          WHERE ${orgFilter}status = 'scheduled' AND scheduled_at <= ?
           ORDER BY scheduled_at ASC, scheduled_call_id ASC LIMIT 1
         ) RETURNING *`,
-      args: [input.workerId, leaseExpiresAt, input.now, input.orgId, input.orgId, input.now] as InValue[],
+      args: [input.workerId, leaseExpiresAt, input.now, ...orgArgs, ...orgArgs, input.now] as InValue[],
     });
     return result.rows.length ? mapScheduledCall(result.rows[0] as Row) : null;
   }
@@ -240,10 +278,32 @@ export class LibsqlScheduledCallStore implements ScheduledCallOperations {
     await this.client.execute({ sql: "DELETE FROM scheduled_calls WHERE org_id = ?", args: [orgId] });
   }
 
+  /** The session a provider call belongs to, in any organization (webhook routing). */
+  async findSessionIdByProviderCallId(providerCallId: string): Promise<string | null> {
+    if (!providerCallId.trim()) return null;
+    await this.initialized;
+    const result = await this.client.execute({
+      sql: "SELECT session_id, target_session_id FROM scheduled_calls WHERE provider_call_id = ? LIMIT 1",
+      args: [providerCallId],
+    });
+    if (!result.rows.length) return null;
+    const row = result.rows[0] as Row;
+    return nullableString(row.target_session_id) ?? String(row.session_id);
+  }
+
+  async countForOwnerSince(orgId: string, ownerId: string, sinceIso: string): Promise<number> {
+    await this.initialized;
+    const result = await this.client.execute({
+      sql: "SELECT COUNT(*) AS count FROM scheduled_calls WHERE org_id = ? AND owner_id = ? AND created_at >= ?",
+      args: [orgId, ownerId, sinceIso],
+    });
+    return Number((result.rows[0] as Row | undefined)?.count ?? 0);
+  }
+
   private async findBySession(orgId: string, sessionId: string, purpose: ScheduledCallPurpose): Promise<ScheduledCallRecord | null> {
     const result = await this.client.execute({
-      sql: "SELECT * FROM scheduled_calls WHERE org_id = ? AND session_id = ? AND purpose = ? LIMIT 1",
-      args: [orgId, sessionId, purpose],
+      sql: "SELECT * FROM scheduled_calls WHERE org_id = ? AND session_id = ? LIMIT 1",
+      args: [orgId, storageKey(sessionId, purpose)],
     });
     return result.rows.length ? mapScheduledCall(result.rows[0] as Row) : null;
   }
@@ -258,7 +318,8 @@ export function createScheduledCallStore(
 
 export interface ScheduledCallPollerOptions {
   operations: ScheduledCallOperations;
-  orgId: string;
+  /** One organization, or omit it for a single poller that serves every organization. */
+  orgId?: string;
   workerId: string;
   now?: () => string;
   leaseMs?: number;
@@ -275,7 +336,11 @@ export interface ScheduledCallPollerOptions {
   onProviderFailure?: (job: ScheduledCallRecord, error: unknown) => Promise<void>;
 }
 
-/** Single-task poller; provider invocation is deliberately an injected seam. */
+/**
+ * Single-task poller; provider invocation is deliberately an injected seam.
+ * Each tick claims at most one due call with one claim query, whatever the
+ * number of organizations; claimed records carry their own `orgId`.
+ */
 export class ScheduledCallPoller {
   private readonly now: () => string;
   private readonly leaseMs: number;
@@ -293,7 +358,12 @@ export class ScheduledCallPoller {
   }
 
   async pollOnce(): Promise<ScheduledCallRecord | null> {
-    const job = await this.options.operations.claimDue({ orgId: this.options.orgId, workerId: this.options.workerId, now: this.now(), leaseMs: this.leaseMs });
+    const job = await this.options.operations.claimDue({
+      ...(this.options.orgId === undefined ? {} : { orgId: this.options.orgId }),
+      workerId: this.options.workerId,
+      now: this.now(),
+      leaseMs: this.leaseMs,
+    });
     if (!job) return null;
     try {
       const providerCallId = this.options.job
@@ -394,7 +464,7 @@ function mapScheduledCall(row: Row): ScheduledCallRecord {
   return {
     scheduledCallId: String(row.scheduled_call_id),
     orgId: String(row.org_id),
-    sessionId: String(row.session_id),
+    sessionId: nullableString(row.target_session_id) ?? String(row.session_id),
     purpose: (row.purpose === "prebrief" ? "prebrief" : "debrief"),
     scheduledAt: String(row.scheduled_at),
     status: String(row.status) as ScheduledCallStatus,
@@ -405,6 +475,7 @@ function mapScheduledCall(row: Row): ScheduledCallRecord {
     error: nullableString(row.error),
     createdAt: String(row.created_at),
     updatedAt: String(row.updated_at),
+    ownerId: nullableString(row.owner_id),
   };
 }
 

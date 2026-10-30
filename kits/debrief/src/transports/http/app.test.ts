@@ -61,7 +61,7 @@ describe("composed demo HTTP surface", () => {
   });
 
   it("generates a presenter-shaped customer prebrief with schedule and AI metadata", async () => {
-    app = await createDemoApp({ url: ":memory:" });
+    app = await createDemoApp({ url: ":memory:", operatorFallback: { destination: "+491234567890" } });
     const callbackAt = new Date(Date.now() + 30 * 60 * 1000).toISOString();
     const response = await mcpRequest(app, {
       body: {
@@ -127,7 +127,7 @@ describe("composed demo HTTP surface", () => {
   });
 
   it("runs the confirmation tools through HTTP and returns the confirmation View payload", async () => {
-    app = await createDemoApp({ url: ":memory:" });
+    app = await createDemoApp({ url: ":memory:", operatorFallback: { destination: "+491234567890" } });
     const preparedResponse = await mcpRequest(app, {
       body: {
         id: 21, method: "tools/call", params: kitCall("prepare_debrief", {

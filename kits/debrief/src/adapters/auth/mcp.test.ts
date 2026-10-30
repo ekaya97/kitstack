@@ -147,4 +147,42 @@ describe("demo MCP authentication boundary", () => {
       internalUserOrgAllowlist: { "user-1": "org-demo" },
     })).rejects.toMatchObject({ code: "invalid_token" });
   });
+  it("accepts a user's personal organization and rejects another user's", async () => {
+    const own = await signInternalSignedMcpToken({ userId: "user-2", org: "org-user-user-2", req: "r", trace: "t" }, { secret: SECRET });
+    await expect(authenticateMcpRequest(request(`Bearer ${own}`), {
+      mode: "internal-signed",
+      internalSecret: SECRET,
+      internalUserOrgAllowlist: { "user-1": "org-demo" },
+    })).resolves.toMatchObject({ org: "org-user-user-2", claims: { sub: "user-2" } });
+
+    const foreign = await signInternalSignedMcpToken({ userId: "user-2", org: "org-user-user-3", req: "r", trace: "t" }, { secret: SECRET });
+    await expect(authenticateMcpRequest(request(`Bearer ${foreign}`), {
+      mode: "internal-signed",
+      internalSecret: SECRET,
+      internalUserOrgAllowlist: { "*": "org-demo" },
+    })).rejects.toMatchObject({ code: "forbidden_identity" });
+  });
+
+  it("keeps the wildcard operator entry and lets an explicit entry win over it", async () => {
+    const operator = await signInternalSignedMcpToken({ userId: "operator-1", org: "org-demo", req: "r", trace: "t" }, { secret: SECRET });
+    await expect(authenticateMcpRequest(request(`Bearer ${operator}`), {
+      mode: "internal-signed",
+      internalSecret: SECRET,
+      internalUserOrgAllowlist: { "*": "org-demo" },
+    })).resolves.toMatchObject({ org: "org-demo" });
+    await expect(authenticateMcpRequest(request(`Bearer ${operator}`), {
+      mode: "internal-signed",
+      internalSecret: SECRET,
+      internalUserOrgAllowlist: { "*": "org-demo", "operator-1": "org-sales" },
+    })).rejects.toMatchObject({ code: "forbidden_identity" });
+  });
+
+  it("rejects the reserved voice agent principal", async () => {
+    const token = await signInternalSignedMcpToken({ userId: "voice-agent", org: "org-user-voice-agent", req: "r", trace: "t" }, { secret: SECRET });
+    await expect(authenticateMcpRequest(request(`Bearer ${token}`), {
+      mode: "internal-signed",
+      internalSecret: SECRET,
+      internalUserOrgAllowlist: { "*": "org-demo" },
+    })).rejects.toMatchObject({ code: "forbidden_identity" });
+  });
 });
