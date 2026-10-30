@@ -317,7 +317,19 @@ export interface RealtimeSessionOptions {
   deferInitialResponse?: boolean;
   /** Server VAD activation threshold (0-1); higher ignores more background noise. */
   vadThreshold?: number;
+  /** Silence after speech before the caller's turn ends and the agent answers. */
+  silenceDurationMs?: number;
+  /** Audio kept from before the detected start of speech. */
+  prefixPaddingMs?: number;
 }
+
+/**
+ * Turn-detection defaults for phone audio, tuned on live calls: 0.6/500 ms
+ * answered late and missed some interruptions; adjust in small steps.
+ */
+export const DEFAULT_VAD_THRESHOLD = 0.55;
+export const DEFAULT_SILENCE_DURATION_MS = 420;
+export const DEFAULT_PREFIX_PADDING_MS = 300;
 
 export interface OpenAIRealtimeSession {
   socket: OpenAIRealtimeSocket;
@@ -348,9 +360,9 @@ export async function createOpenAIRealtimeSession(options: RealtimeSessionOption
           noise_reduction: { type: "near_field" },
           turn_detection: {
             type: "server_vad",
-            threshold: options.vadThreshold ?? 0.6,
-            prefix_padding_ms: 300,
-            silence_duration_ms: 500,
+            threshold: options.vadThreshold ?? DEFAULT_VAD_THRESHOLD,
+            prefix_padding_ms: options.prefixPaddingMs ?? DEFAULT_PREFIX_PADDING_MS,
+            silence_duration_ms: options.silenceDurationMs ?? DEFAULT_SILENCE_DURATION_MS,
             create_response: false,
             interrupt_response: false,
           },
@@ -827,8 +839,11 @@ export interface TwilioOpenAIBridgeOptions {
   /** Upper bound between an agent hangup request and the call ending. */
   hangupTimeoutMs?: number;
   /**
-   * How long the caller must keep talking over the agent before it stops.
-   * Shorter sounds (noise, echo, "mhm") are ignored while the agent speaks.
+   * How long after the caller starts talking over the agent before it stops,
+   * unless the caller's turn ends first. Server VAD reports the end of a turn
+   * only after its silence duration, so this must exceed that duration: the
+   * default is the silence duration plus BARGE_IN_MIN_SPEECH_MS. Shorter
+   * sounds (noise, echo, "mhm") are ignored while the agent speaks.
    */
   bargeInMs?: number;
   now?: () => string;
@@ -853,7 +868,8 @@ export interface VoiceCallControl {
 }
 
 const HANGUP_MARK = "kitstack-hangup";
-const DEFAULT_BARGE_IN_MS = 600;
+// Speech shorter than this, over the agent, is treated as noise or a backchannel.
+const BARGE_IN_MIN_SPEECH_MS = 100;
 // μ-law at 8 kHz: one byte per sample, eight samples per millisecond.
 const PCMU_BYTES_PER_MS = 8;
 const DEFAULT_HANGUP_TIMEOUT_MS = 15_000;
@@ -887,6 +903,12 @@ export function bridgeTwilioToOpenAI(options: TwilioOpenAIBridgeOptions): Twilio
   let playbackEndsAt = 0;
   // The caller turn currently being heard: `bargeIn` while the agent speaks.
   let callerTurn: { bargeIn: boolean; confirmed: boolean; timer?: ReturnType<typeof setTimeout> } | undefined;
+  const bargeInMs = options.bargeInMs
+    ?? (options.openai.silenceDurationMs ?? DEFAULT_SILENCE_DURATION_MS) + BARGE_IN_MIN_SPEECH_MS;
+  // When server VAD reported the caller stopped speaking, until the agent's
+  // first audio of the answer: the delay the caller hears.
+  let speechStoppedAt: number | undefined;
+  let answerPendingSince: number | undefined;
   let hangupAfterResponse: number | undefined;
   // Name of the mark whose echo ends the call; cleared when an interruption
   // makes Twilio echo pending marks without playing the queued audio.
@@ -1048,12 +1070,13 @@ export function bridgeTwilioToOpenAI(options: TwilioOpenAIBridgeOptions): Twilio
           if (callerTurn !== turn || finished) return;
           turn.confirmed = true;
           openaiQueue = openaiQueue.then(() => interruptAgent(current)).catch((error) => finish("openai_error", asError(error)));
-        }, options.bargeInMs ?? DEFAULT_BARGE_IN_MS);
+        }, bargeInMs);
       }
       return;
     }
     if (translated.kind === "speech_stopped") {
       if (callerTurn?.timer) clearTimeout(callerTurn.timer);
+      speechStoppedAt = Date.now();
       return;
     }
     if (translated.kind === "speech_committed") {
@@ -1071,11 +1094,23 @@ export function bridgeTwilioToOpenAI(options: TwilioOpenAIBridgeOptions): Twilio
         });
         return;
       }
+      answerPendingSince = speechStoppedAt;
       realtime?.startResponse();
       return;
     }
     if (translated.kind === "audio_delta") {
       if (!streamSid) throw new Error("OpenAI audio delta arrived before stream start");
+      if (answerPendingSince !== undefined) {
+        // The caller also waited out the VAD silence before speech_stopped.
+        const silenceMs = options.openai.silenceDurationMs ?? DEFAULT_SILENCE_DURATION_MS;
+        const latencyMs = Date.now() - answerPendingSince + silenceMs;
+        answerPendingSince = undefined;
+        await appendVoiceTelemetry(options.telemetry, {
+          id: id(), timestamp: now(), orgId: current?.orgId ?? "unknown", appId: current?.appId ?? null,
+          sessionId: current?.sessionId ?? null, traceId: current?.sessionId ?? null, channel: "voice", kitId: options.kitId ?? DEFAULT_KIT_ID,
+          type: "voice.call", operation: "answer_latency", provider, callId: current?.callSid ?? null, latencyMs, outcome: "success",
+        });
+      }
       options.twilioSocket.send(JSON.stringify({ event: "media", streamSid, media: { payload: translated.payload } }));
       const bytes = Math.floor((translated.payload.length * 3) / 4);
       playbackEndsAt = Math.max(Date.now(), playbackEndsAt) + bytes / PCMU_BYTES_PER_MS;

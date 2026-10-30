@@ -81,8 +81,36 @@ export function ConfirmationView({ data: initialData, host }: ViewComponentProps
         {message && <div role="status" style={{ fontSize: 13, color: "#4b5563" }}>{message}</div>}
         {data.confirmedEventId && <div style={{ fontSize: 12, color: "#166534" }}>Saved event: {data.confirmedEventId}</div>}
       </div>
+
+      {data.previousDebriefs?.length ? (
+        <div style={{ ...card, display: "grid", gap: 10 }}>
+          <div style={{ fontSize: 12, color: "#6b7280", textTransform: "uppercase", letterSpacing: 1 }}>
+            Previous debriefs with this customer
+          </div>
+          {data.previousDebriefs.map((entry) => (
+            <div key={entry.sessionId} style={{ display: "grid", gap: 4, paddingTop: 10, borderTop: "1px solid #f3f4f6" }}>
+              <div style={{ fontSize: 13, fontWeight: 600 }}>Confirmed {formatDate(entry.confirmedAt)}</div>
+              {CONFIRMATION_FIELDS.filter((field) => entry.fields[field]).map((field) => (
+                <div key={field} style={{ fontSize: 13, color: "#374151" }}>
+                  <span style={{ color: "#6b7280" }}>{labels[field]}: </span>{entry.fields[field]}
+                </div>
+              ))}
+              {CONFIRMATION_FIELDS.every((field) => !entry.fields[field]) && (
+                <div style={{ fontSize: 13, color: "#6b7280" }}>No details recorded.</div>
+              )}
+            </div>
+          ))}
+        </div>
+      ) : null}
     </div>
   );
+}
+
+function formatDate(iso: string): string {
+  const date = new Date(iso);
+  return Number.isNaN(date.getTime())
+    ? iso
+    : date.toLocaleDateString(undefined, { year: "numeric", month: "short", day: "numeric" });
 }
 
 function emptyFields(data: ConfirmationViewData | undefined): Record<ConfirmationField, string> {

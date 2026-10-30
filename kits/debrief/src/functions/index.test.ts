@@ -141,6 +141,40 @@ describe("DebriefService", () => {
     }
   });
 
+  it("lists the customer's earlier confirmed debriefs with the draft, newest first", async () => {
+    const { client, service } = await persistentSetup();
+    try {
+      const customer = { company: "Acme Corp", contactName: "Mr John Doe", location: "Köln Café" };
+      const confirmOne = async (goal: string, fields: Record<string, string>) => {
+        const prepared = await service.prepareDebrief({ goal, ...customer });
+        await service.markCalling(prepared.sessionId);
+        await service.awaitConfirmation(prepared.sessionId);
+        await service.updateDebriefDraft(prepared.sessionId, fields);
+        await service.confirmDebriefDraft(prepared.sessionId);
+        return prepared.sessionId;
+      };
+      const first = await confirmOne("Open the account", { outcome: "Interested", next_step: "Send deck" });
+      const second = await confirmOne("Agree the pilot", { outcome: "Pilot agreed", follow_up_date: "2026-11-15" });
+
+      const current = await service.prepareDebrief({ goal: "Review the pilot", ...customer });
+      await service.markCalling(current.sessionId);
+      await service.awaitConfirmation(current.sessionId);
+      const result = await service.getDebriefForConfirmation(current.sessionId);
+
+      expect(result.previous_debriefs?.map((entry) => entry.session_id).sort()).toEqual([first, second].sort());
+      const byId = Object.fromEntries((result.previous_debriefs ?? []).map((entry) => [entry.session_id, entry.fields]));
+      expect(byId[first]).toEqual({ outcome: "Interested", next_step: "Send deck" });
+      expect(byId[second]).toEqual({ outcome: "Pilot agreed", follow_up_date: "2026-11-15" });
+      const times = (result.previous_debriefs ?? []).map((entry) => entry.confirmed_at);
+      expect([...times].sort().reverse()).toEqual(times);
+      // The session being confirmed is never listed as its own history.
+      const own = await service.confirmDebriefDraft(current.sessionId);
+      expect(own.previous_debriefs?.map((entry) => entry.session_id)).not.toContain(current.sessionId);
+    } finally {
+      client.close();
+    }
+  });
+
   it("hydrates a session created by another task before a scheduler operation", async () => {
     const first = await persistentSetup();
     try {

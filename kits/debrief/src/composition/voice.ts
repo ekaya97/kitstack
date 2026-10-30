@@ -60,6 +60,8 @@ export async function createDebriefVoiceChannel(
       voice: value("OPENAI_REALTIME_VOICE") || "marin",
       ...(value("OPENAI_REALTIME_URL") ? { url: value("OPENAI_REALTIME_URL") } : {}),
       ...(optionalNumber(value("OPENAI_REALTIME_VAD_THRESHOLD")) !== undefined ? { vadThreshold: optionalNumber(value("OPENAI_REALTIME_VAD_THRESHOLD")) } : {}),
+      ...(optionalNumber(value("OPENAI_REALTIME_SILENCE_MS")) !== undefined ? { silenceDurationMs: optionalNumber(value("OPENAI_REALTIME_SILENCE_MS")) } : {}),
+      ...(optionalNumber(value("OPENAI_REALTIME_PREFIX_PADDING_MS")) !== undefined ? { prefixPaddingMs: optionalNumber(value("OPENAI_REALTIME_PREFIX_PADDING_MS")) } : {}),
       routingReason: route.reason,
       ...(providers.openaiSocketFactory ? { socketFactory: providers.openaiSocketFactory } : {}),
     },
@@ -141,7 +143,7 @@ async function debriefBriefing(app: DemoApp, call: VoiceCall, baseInstructions: 
     selected.length ? `Approved workflow feedback:\n${selected.map((record) => `- ${record.correction}`).join("\n")}` : "Approved workflow feedback: none.",
     "Use this context during the call. Ask one useful question at a time and do not invent customer details.",
     "When the caller explicitly states or agrees an outcome, next step, customer update, address, or follow-up date, call update_debrief_draft with those facts. Never call a confirmation or publish action; the operator confirms the draft after the call.",
-    "When the debrief goals are covered, briefly summarise the saved facts, say goodbye, then call end_call. Also call end_call if the caller asks to end the call.",
+    "When the debrief goals are covered, briefly summarise the saved facts. Then tell the caller that nothing is saved yet: they should open Claude and ask it to show the debrief for confirmation, check or correct the fields there, and confirm it. Say goodbye, then call end_call. Also call end_call if the caller asks to end the call, after the same one-sentence reminder to confirm in Claude.",
   ].join("\n");
   return {
     content,

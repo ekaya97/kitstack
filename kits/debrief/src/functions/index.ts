@@ -3,6 +3,7 @@ import type { InstructionPlugin, ResolvedInstruction } from "../instructions/plu
 import type { TelemetryEventInput, TelemetryStore } from "../telemetry/index.js";
 import type {
   DebriefConfirmationResult,
+  PreviousDebrief,
   DebriefDraftUpdate,
 } from "../confirmation-contracts.js";
 import type {
@@ -359,7 +360,7 @@ export class DebriefService {
     return this.confirmationResult(session, draft, {
       confirmedEventId: confirmed?.eventId,
       addressEventId: address?.eventId,
-    });
+    }, events);
   }
 
   async updateDebriefDraft(sessionId: string, update: DebriefDraftUpdate): Promise<DebriefConfirmationResult> {
@@ -372,7 +373,8 @@ export class DebriefService {
     );
     if (Object.keys(fields).length === 0) throw new Error("At least one debrief draft field is required");
     const draft = await this.saveDraft(sessionId, fields, session.state === "partial" ? "partial" : "draft");
-    return this.confirmationResult(session, draft);
+    const events = session.customerId ? await this.listCustomerEvents(session.customerId) : [];
+    return this.confirmationResult(session, draft, {}, events);
   }
 
   async confirmDebriefDraft(sessionId: string): Promise<DebriefConfirmationResult> {
@@ -388,7 +390,7 @@ export class DebriefService {
       return this.confirmationResult(session, { ...draft, status: "confirmed" }, {
         confirmedEventId: existingConfirmed.eventId,
         addressEventId: existingAddress?.eventId,
-      });
+      }, events);
     }
 
     const confirmedEventId = `debrief-confirmed-${sessionId}`;
@@ -422,7 +424,7 @@ export class DebriefService {
       addressEventId: session.customerId && typeof draft.fields.discovered_address === "string" && draft.fields.discovered_address.trim()
         ? `address-discovered-${sessionId}`
         : undefined,
-    });
+    }, events);
   }
 
   async saveDraft(
@@ -495,7 +497,13 @@ export class DebriefService {
   private async persist(session: DebriefSession): Promise<void> { await this.persistence?.saveSession(cloneSession(session)); }
   private async persistDraft(draft: DebriefDraftRecord): Promise<void> { await this.persistence?.saveDraft(draft); }
   private async appendCustomerEvent(session: DebriefSession, type: CustomerEventRecord["type"], payload: Record<string, unknown>, eventId = `event-${this.id()}`): Promise<void> { if (!session.customerId || !this.persistence) return; await this.persistence.appendCustomerEvent({ eventId, orgId: session.orgId, customerId: session.customerId, sessionId: session.sessionId, kitId: session.kitId, type, occurredAt: this.now(), payload }); }
-  private confirmationResult(session: DebriefSession, draft: DebriefDraftRecord, ids: { confirmedEventId?: string; addressEventId?: string } = {}): DebriefConfirmationResult {
+  private confirmationResult(
+    session: DebriefSession,
+    draft: DebriefDraftRecord,
+    ids: { confirmedEventId?: string; addressEventId?: string } = {},
+    events: readonly CustomerEventRecord[] = [],
+  ): DebriefConfirmationResult {
+    const previous = previousDebriefs(events, session.sessionId);
     return {
       session_id: session.sessionId,
       customer_id: session.customerId,
@@ -509,6 +517,7 @@ export class DebriefService {
       },
       ...(ids.confirmedEventId ? { confirmed_event_id: ids.confirmedEventId } : {}),
       ...(ids.addressEventId ? { address_event_id: ids.addressEventId } : {}),
+      ...(previous.length ? { previous_debriefs: previous } : {}),
       kit_view: { kit_id: "debrief", view: "confirmation", reason: "Review and confirm the structured debrief" },
     };
   }
@@ -549,6 +558,24 @@ const DEBRIEF_FACT_LABELS: ReadonlyArray<readonly [string, string]> = [
   ["customer_update", "customer update"],
   ["discovered_address", "address"],
 ];
+
+const PREVIOUS_DEBRIEF_LIMIT = 10;
+
+/** The customer's other confirmed debriefs, newest first, with only the debrief fields. */
+function previousDebriefs(events: readonly CustomerEventRecord[], sessionId: string): PreviousDebrief[] {
+  return events
+    .filter((event) => event.type === "debrief_confirmed" && event.sessionId !== sessionId)
+    .sort((a, b) => b.occurredAt.localeCompare(a.occurredAt))
+    .slice(0, PREVIOUS_DEBRIEF_LIMIT)
+    .map((event) => {
+      const payload = event.payload as Record<string, unknown>;
+      const fields = Object.fromEntries(DEBRIEF_FACT_LABELS.flatMap(([key]) => {
+        const value = payload[key];
+        return typeof value === "string" && value.trim() && !(key === "outcome" && value === "confirmed") ? [[key, value.trim()]] : [];
+      }));
+      return { session_id: event.sessionId, confirmed_at: event.occurredAt, fields };
+    });
+}
 
 function summarizeEvent(event: CustomerEventRecord): string {
   if (event.type === "debrief_confirmed") {

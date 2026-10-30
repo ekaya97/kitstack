@@ -30,6 +30,23 @@ describe("debrief confirmation View", () => {
     });
   });
 
+  it("passes earlier confirmed debriefs through with only the debrief fields", () => {
+    const data = toConfirmationViewData({
+      ...snapshot,
+      previous_debriefs: [{
+        session_id: "session-0",
+        confirmed_at: "2026-09-01T16:30:00.000Z",
+        fields: { outcome: "Interested", next_step: "Send deck", transcript: "never shown" },
+      }],
+    });
+    expect(data.previousDebriefs).toEqual([{
+      sessionId: "session-0",
+      confirmedAt: "2026-09-01T16:30:00.000Z",
+      fields: { outcome: "Interested", next_step: "Send deck", customer_update: "", discovered_address: "", follow_up_date: "" },
+    }]);
+    expect(toConfirmationViewData(snapshot).previousDebriefs).toEqual([]);
+  });
+
   it("rejects a draft for another session", () => {
     expect(() => toConfirmationViewData({ ...snapshot, session_id: "other-session" })).toThrow("does not match");
   });

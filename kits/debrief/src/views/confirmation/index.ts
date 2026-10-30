@@ -32,5 +32,16 @@ export default defineView({
     },
     confirmedEventId: null,
     addressEventId: null,
+    previousDebriefs: [{
+      sessionId: "session-earlier",
+      confirmedAt: "2026-09-01T16:30:00.000Z",
+      fields: {
+        outcome: "Interested in a pilot",
+        next_step: "Send the pilot proposal",
+        customer_update: "",
+        discovered_address: "",
+        follow_up_date: "2026-09-15",
+      },
+    }],
   },
 });

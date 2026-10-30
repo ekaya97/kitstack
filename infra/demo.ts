@@ -54,6 +54,10 @@ export const demoVoice = new sst.aws.Service("DemoVoice", {
     OPENAI_API_KEY: openAiApiKey.value,
     OPENAI_REALTIME_MODEL: process.env.OPENAI_REALTIME_MODEL?.trim() || "gpt-realtime",
     OPENAI_REALTIME_VOICE: process.env.OPENAI_REALTIME_VOICE?.trim() || "marin",
+    // Turn-taking overrides for tuning on live calls; unset uses the code
+    // defaults in packages/voice (threshold 0.55, silence 420 ms, padding
+    // 300 ms, barge-in = silence + 100 ms).
+    ...voiceTuning(),
   },
   loadBalancer: voiceDomain
     ? {
@@ -96,6 +100,11 @@ export const demoVoice = new sst.aws.Service("DemoVoice", {
     autostart: false,
   },
 });
+
+function voiceTuning(): Record<string, string> {
+  const keys = ["OPENAI_REALTIME_VAD_THRESHOLD", "OPENAI_REALTIME_SILENCE_MS", "OPENAI_REALTIME_PREFIX_PADDING_MS", "KITSTACK_VOICE_BARGE_IN_MS"];
+  return Object.fromEntries(keys.flatMap((key) => process.env[key]?.trim() ? [[key, process.env[key]!.trim()]] : []));
+}
 
 // The dashboard appends route paths itself; avoid producing `//api/...` when
 // the SST service URL is a custom-domain HTTPS URL with a trailing slash.

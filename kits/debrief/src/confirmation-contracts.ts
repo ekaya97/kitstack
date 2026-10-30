@@ -6,6 +6,12 @@ export interface DebriefDraftUpdate {
   readonly follow_up_date?: string;
 }
 
+export interface PreviousDebrief {
+  readonly session_id: string;
+  readonly confirmed_at: string;
+  readonly fields: Readonly<Record<string, string>>;
+}
+
 export interface DebriefConfirmationResult {
   readonly session_id: string;
   readonly customer_id: string | null;
@@ -19,6 +25,8 @@ export interface DebriefConfirmationResult {
   };
   readonly confirmed_event_id?: string;
   readonly address_event_id?: string;
+  /** This customer's earlier confirmed debriefs, newest first (read-only). */
+  readonly previous_debriefs?: readonly PreviousDebrief[];
   readonly kit_view: {
     readonly kit_id: "debrief";
     readonly view: string;

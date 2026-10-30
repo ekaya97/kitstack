@@ -161,7 +161,7 @@ export interface CustomerEvent {
 
 export type { NormalizedDebriefSchedule } from "./timing.js";
 export { normalizeDebriefSchedule } from "./timing.js";
-export type { DebriefConfirmationResult, DebriefDraftUpdate } from "./confirmation-contracts.js";
+export type { DebriefConfirmationResult, DebriefDraftUpdate, PreviousDebrief } from "./confirmation-contracts.js";
 
 export interface DebriefCapabilities {
   readonly persistence: DebriefPersistencePlugin;

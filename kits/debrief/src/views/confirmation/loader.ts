@@ -1,6 +1,6 @@
 import { defineLoader, type KitContext } from "@kitstackco/sdk";
 
-import { CONFIRMATION_FIELDS } from "./fields";
+import { CONFIRMATION_FIELDS, type ConfirmationField } from "./fields";
 
 export { CONFIRMATION_FIELDS, type ConfirmationField } from "./fields";
 
@@ -12,6 +12,18 @@ export interface ConfirmationDraftSnapshot {
   updated_at: string;
 }
 
+export interface PreviousDebriefSnapshot {
+  session_id: string;
+  confirmed_at: string;
+  fields: Readonly<Record<string, unknown>>;
+}
+
+export interface PreviousDebriefView {
+  sessionId: string;
+  confirmedAt: string;
+  fields: Record<ConfirmationField, string>;
+}
+
 export interface ConfirmationLoaderSnapshot {
   session_id: string;
   customer_id: string | null;
@@ -19,6 +31,7 @@ export interface ConfirmationLoaderSnapshot {
   draft: ConfirmationDraftSnapshot;
   confirmed_event_id?: string;
   address_event_id?: string;
+  previous_debriefs?: readonly PreviousDebriefSnapshot[];
   kit_view?: { kit_id: "debrief"; view: "confirmation"; reason?: string };
 }
 
@@ -29,6 +42,8 @@ export interface ConfirmationViewData {
   draft: ConfirmationDraftSnapshot;
   confirmedEventId: string | null;
   addressEventId: string | null;
+  /** The customer's earlier confirmed debriefs, newest first. */
+  previousDebriefs: PreviousDebriefView[];
 }
 
 export const loader = defineLoader(async (ctx): Promise<ConfirmationViewData> => {
@@ -57,6 +72,12 @@ export function toConfirmationViewData(snapshot: ConfirmationLoaderSnapshot): Co
     },
     confirmedEventId: snapshot.confirmed_event_id ?? null,
     addressEventId: snapshot.address_event_id ?? null,
+    // Only the listed fields reach the View, as for the draft.
+    previousDebriefs: (snapshot.previous_debriefs ?? []).map((entry) => ({
+      sessionId: entry.session_id,
+      confirmedAt: entry.confirmed_at,
+      fields: Object.fromEntries(CONFIRMATION_FIELDS.map((field) => [field, stringValue(entry.fields[field])])) as Record<ConfirmationField, string>,
+    })),
   };
 }
 

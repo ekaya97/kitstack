@@ -197,6 +197,64 @@ describe("Twilio and OpenAI Realtime boundary", () => {
     expect(JSON.parse(socket.sent[2])).toEqual({ type: "input_audio_buffer.append", audio: "AQID" });
   });
 
+  it("uses the tuned turn-detection defaults and accepts overrides", async () => {
+    const defaults = new FakeSocket();
+    await createOpenAIRealtimeSession({ socketFactory: { connect: vi.fn(async () => defaults) }, url: "wss://x", apiKey: "k", model: "m" });
+    expect(JSON.parse(defaults.sent[0]).session.audio.input.turn_detection).toMatchObject({
+      type: "server_vad", threshold: 0.55, prefix_padding_ms: 300, silence_duration_ms: 420, create_response: false, interrupt_response: false,
+    });
+    const tuned = new FakeSocket();
+    await createOpenAIRealtimeSession({
+      socketFactory: { connect: vi.fn(async () => tuned) }, url: "wss://x", apiKey: "k", model: "m",
+      vadThreshold: 0.5, silenceDurationMs: 380, prefixPaddingMs: 250,
+    });
+    expect(JSON.parse(tuned.sent[0]).session.audio.input.turn_detection).toMatchObject({ threshold: 0.5, prefix_padding_ms: 250, silence_duration_ms: 380 });
+  });
+
+  it("waits the VAD silence plus a short margin before a barge-in, and reports answer latency", async () => {
+    vi.useFakeTimers();
+    try {
+      const twilio = new FakeSocket();
+      const openai = new FakeSocket();
+      const store = telemetry();
+      const bridge = bridgeTwilioToOpenAI({
+        twilioSocket: twilio,
+        openai: { socketFactory: { connect: vi.fn(async () => openai) }, url: "wss://x", apiKey: "k", model: "m", silenceDurationMs: 400 },
+        verifier: { verify: vi.fn(async () => ({ sessionId: "session-1", orgId: "org-demo", appId: "app-sales" })) },
+        bindings: createSessionBindingStore(), telemetry: store,
+      });
+      twilio.emit("message", JSON.stringify({ event: "start", streamSid: "MZ1", start: { streamSid: "MZ1", callSid: "CA1", customParameters: { kitstack_session_token: "t" } } }));
+      await bridge.binding;
+      const cancelled = () => openai.sent.some((value) => JSON.parse(value).type === "response.cancel");
+
+      // The agent is speaking; the caller talks over it.
+      openai.emit("message", JSON.stringify({ type: "response.created" }));
+      openai.emit("message", JSON.stringify({ type: "input_audio_buffer.speech_started" }));
+      await vi.advanceTimersByTimeAsync(499);
+      expect(cancelled()).toBe(false);
+      await vi.advanceTimersByTimeAsync(1);
+      expect(cancelled()).toBe(true);
+
+      // The caller's next turn ends; the answer's first audio is timed.
+      openai.emit("message", JSON.stringify({ type: "response.done", response: { usage: {} } }));
+      await vi.advanceTimersByTimeAsync(0);
+      openai.emit("message", JSON.stringify({ type: "input_audio_buffer.speech_started" }));
+      openai.emit("message", JSON.stringify({ type: "input_audio_buffer.speech_stopped" }));
+      openai.emit("message", JSON.stringify({ type: "input_audio_buffer.committed", item_id: "item-1" }));
+      await vi.advanceTimersByTimeAsync(300);
+      openai.emit("message", JSON.stringify({ type: "response.audio.delta", delta: "BAUG" }));
+      await vi.advanceTimersByTimeAsync(0);
+      expect(store.append).toHaveBeenCalledWith(expect.objectContaining({ type: "voice.call", operation: "answer_latency", latencyMs: 700 }));
+      expect(store.append.mock.calls.filter(([event]) => event.operation === "answer_latency")).toHaveLength(1);
+
+      twilio.emit("message", JSON.stringify({ event: "stop", streamSid: "MZ1" }));
+      await vi.advanceTimersByTimeAsync(0);
+      await bridge.done;
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
   it("binds the signed session and forwards media in both directions", async () => {
     const twilio = new FakeSocket();
     const openai = new FakeSocket();

@@ -93,6 +93,10 @@ export interface VoiceRealtimeOptions {
   url?: string;
   /** Server VAD threshold (0-1). */
   vadThreshold?: number;
+  /** Silence after speech before the agent answers. */
+  silenceDurationMs?: number;
+  /** Audio kept from before the detected start of speech. */
+  prefixPaddingMs?: number;
   /** Why this model was chosen, for telemetry. */
   routingReason?: string | null;
   /** Test seam for the OpenAI Realtime socket. */
@@ -118,7 +122,7 @@ export interface VoiceChannelOptions {
   /** Kit tools for the agent (e.g. from kitAgentTools); end_call is added by the channel. */
   tools: { realtime: readonly RealtimeFunctionTool[]; agent: readonly AgentToolDefinition[] };
   sessions: VoiceSessionHooks;
-  /** How long the caller must talk over the agent before it stops. */
+  /** How long the caller must talk over the agent before it stops; defaults to the VAD silence duration plus 100 ms. */
   bargeInMs?: number;
   /** Upper bound between the agent's hang-up request and the line dropping. */
   hangupTimeoutMs?: number;
@@ -182,6 +186,8 @@ export function createVoiceChannel(options: VoiceChannelOptions): VoiceChannel {
     model,
     ...(options.realtime.voice ? { voice: options.realtime.voice } : {}),
     ...(options.realtime.vadThreshold !== undefined ? { vadThreshold: options.realtime.vadThreshold } : {}),
+    ...(options.realtime.silenceDurationMs !== undefined ? { silenceDurationMs: options.realtime.silenceDurationMs } : {}),
+    ...(options.realtime.prefixPaddingMs !== undefined ? { prefixPaddingMs: options.realtime.prefixPaddingMs } : {}),
     tools: [...options.tools.realtime, END_CALL_TOOL],
   };
   const sockets = new WebSocketServer({ noServer: true });

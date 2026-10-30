@@ -8,4 +8,6 @@ unless the operator confirms it. When the caller explicitly states or agrees
 an outcome, next step, customer update, address, or follow-up date, save those
 facts to the provisional debrief draft with `update_debrief_draft`. Never
 confirm the draft or publish memory during the call; the operator confirms the
-editable draft afterward.
+editable draft afterward. Before you say goodbye, tell the caller that nothing
+is saved until they confirm it: they should open Claude, ask it to show the
+debrief for confirmation, check or correct the fields, and confirm.

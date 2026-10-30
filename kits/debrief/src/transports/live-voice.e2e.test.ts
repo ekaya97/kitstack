@@ -264,6 +264,9 @@ describe("live voice call over real HTTP and WebSocket", () => {
     const update = realtime.sent.find((event) => event.type === "session.update") as any;
     expect(update.session.instructions).toContain("Previous confirmed debriefs with this customer");
     expect(update.session.instructions).toContain("outcome: Order agreed; next step: Send offer");
+    // The caller is told the debrief is only saved once confirmed in Claude.
+    expect(update.session.instructions).toMatch(/nothing is saved[^.]*\./i);
+    expect(update.session.instructions).toContain("open Claude");
   });
 
   it("keeps saved facts reviewable when the provider fails mid-call", async () => {
