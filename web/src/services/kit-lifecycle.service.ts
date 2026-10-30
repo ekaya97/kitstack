@@ -82,11 +82,20 @@ export interface LifecycleResult {
  * 3. Write DynamoDB UserKitDbs — source of truth
  * 4. Write SQLite kit_activations — UI projection
  */
+const OPERATOR_GRANTED_KITS: ReadonlySet<string> = new Set(["debrief", "platform"]);
+
 export async function activateKit(
   userId: string,
   kitSlug: string
 ): Promise<LifecycleResult> {
   const kitId = slugToKitId(kitSlug);
+
+  // Router-hosted kits are granted by the KitStack team, never self-activated:
+  // `kit:use` on them unlocks phone calls (debrief) or platform data.
+  if (OPERATOR_GRANTED_KITS.has(kitSlug)) {
+    trackKitActivationFailed(userId, kitSlug, "Operator-granted kit", "unknown_kit");
+    return { ok: false, status: 403, error: `Access to ${kitSlug} is granted by the KitStack team.` };
+  }
 
   // Validate kit exists in registry
   const exists = await kitExistsInRegistry(kitId);
