@@ -43,6 +43,7 @@ export async function createDebriefVoiceChannel(
   }
   const apiKey = value("OPENAI_API_KEY");
   if (!apiKey) return undefined;
+  const workspaceOf = (sessionId: string) => app.tenants.forSession(sessionId);
 
   const baseInstructions = readFileSync(new URL("../instructions/debrief-baseline.md", import.meta.url), "utf8");
   const baseVersion = `sha256:${createHash("sha256").update(baseInstructions, "utf8").digest("hex")}`;
@@ -80,32 +81,36 @@ export async function createDebriefVoiceChannel(
     localHarness: true,
     bargeInMs: optionalNumber(value("KITSTACK_VOICE_BARGE_IN_MS")),
     tools: createDebriefVoiceTools(kit, executor),
-    briefing: (call) => debriefBriefing(app, call, baseInstructions, baseVersion, crm),
+    // One channel serves every organization: each callback resolves the
+    // workspace that owns the call's session.
+    briefing: async (call) => {
+      const workspace = await workspaceOf(call.sessionId);
+      return debriefBriefing(workspace, call, baseInstructions, baseVersion, workspace.orgId === app.tenants.operatorOrgId ? crm : undefined);
+    },
     sessions: {
       async startSession(sessionId, channel) {
-        const session = app.debrief.getSession(sessionId);
+        const workspace = await workspaceOf(sessionId);
+        const session = workspace.debrief.getSession(sessionId);
         if (channel === "local" && session.state !== "prepared") throw new Error(`Local voice session must be prepared, received ${session.state}`);
-        await app.debrief.markCalling(sessionId);
-        return { orgId: session.orgId, appId: app.appId };
+        await workspace.debrief.markCalling(sessionId);
+        return { orgId: session.orgId, appId: workspace.appId };
       },
-      onCallStarted: async (sessionId, callId) => { await app.debrief.setCallId(sessionId, callId); },
-      onStartFailed: async (sessionId, error) => { await app.debrief.markFailed(sessionId, error); },
-      onAgentFinished: async (sessionId) => { await app.debrief.awaitConfirmation(sessionId); },
-      onCallInterrupted: async (sessionId, reason) => { await app.debrief.endCallAfterInterruption(sessionId, reason); },
+      onCallStarted: async (sessionId, callId) => { await (await workspaceOf(sessionId)).debrief.setCallId(sessionId, callId); },
+      onStartFailed: async (sessionId, error) => { await (await workspaceOf(sessionId)).debrief.markFailed(sessionId, error); },
+      onAgentFinished: async (sessionId) => { await (await workspaceOf(sessionId)).debrief.awaitConfirmation(sessionId); },
+      onCallInterrupted: async (sessionId, reason) => { await (await workspaceOf(sessionId)).debrief.endCallAfterInterruption(sessionId, reason); },
       onCallCompleted: async (call) => {
-        const session = app.debrief.getSession(call.sessionId);
-        await app.debrief.recordCallCompleted(call);
-        await app.telemetry.append({
-          id: crypto.randomUUID(), timestamp: call.occurredAt, orgId: call.orgId, appId: app.appId,
+        const workspace = await workspaceOf(call.sessionId);
+        const session = workspace.debrief.getSession(call.sessionId);
+        await workspace.debrief.recordCallCompleted(call);
+        await workspace.telemetry.append({
+          id: crypto.randomUUID(), timestamp: call.occurredAt, orgId: call.orgId, appId: workspace.appId,
           customerId: session.customerId, sessionId: call.sessionId, traceId: call.sessionId,
           channel: "voice", pluginId: "kit:debrief", kitId: session.kitId, type: "voice.call",
           operation: "call_completed", provider: call.provider, callId: call.callId, outcome: "success",
         });
       },
-      resolveSessionIdForCallId: async (callId) => {
-        const job = (await app.scheduler.list(app.orgId)).find((candidate) => candidate.providerCallId === callId);
-        return job?.sessionId ?? null;
-      },
+      resolveSessionIdForCallId: (callId) => app.tenants.sessionIdForProviderCall(callId),
     },
   });
 }

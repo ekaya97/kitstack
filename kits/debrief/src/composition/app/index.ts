@@ -2,13 +2,13 @@ import { createClient, type Client } from "@libsql/client";
 import { createAppRegistry, type AppRegistry } from "../../adapters/auth/index.js";
 import type { McpAuthMode } from "../../adapters/auth/mcp.js";
 import { DebriefService, type DebriefSession, type MemoryStoreLike, type TextInference } from "../../functions/index.js";
-import { createDebriefPersistence, type DebriefPersistence } from "../../functions/persistence.js";
+import { createDebriefPersistence, type DebriefPersistence, type LibsqlDebriefPersistence } from "../../functions/persistence.js";
 import { createInstructionPlugin, type InstructionPlugin } from "../../instructions/plugin.js";
 import { createMemoryStore, type MemoryContext, type MemoryReadQuery, type MemoryStore, type MemoryWriteInput } from "../../memory/plugin.js";
 import { createDemoPluginRegistry, type DemoPluginContext, type PluginContextInput, type PluginRegistry } from "../../plugins/registry/index.js";
 import { handleProxyRequest } from "../../adapters/proxy/index.js";
 import type { ClaimDueInput, CompleteCallInput, FailCallInput, ScheduleCallInput, ScheduledCallOperations } from "../../scheduler/index.js";
-import { createScheduledCallStore } from "../../scheduler/index.js";
+import { createScheduledCallStore, type LibsqlScheduledCallStore } from "../../scheduler/index.js";
 import { createTelemetryStore, type TelemetryStore } from "../../telemetry/index.js";
 import { VoiceSimulator } from "../../adapters/voice/index.js";
 import { createLibsqlStorageAdapter } from "../../storage/libsql.js";
@@ -32,8 +32,38 @@ export interface DemoApp {
   readonly plugins: PluginRegistry;
   readonly mcpAuthMode: McpAuthMode;
   readonly adminToken: string;
+  /**
+   * Every organization's workspace on the same database, telemetry and
+   * scheduler store. This app is the operator organization's workspace.
+   */
+  readonly tenants: DebriefTenants;
+  /** Clears this organization's sessions, memory, scheduled calls and telemetry. */
   reset(): Promise<void>;
+  /** Closes the shared database and telemetry for every workspace. */
   close(): Promise<void>;
+}
+
+/**
+ * Per-organization workspaces of one debrief host. Workspaces are created on
+ * first use and cached; they share the libSQL client, the telemetry store,
+ * the app registry and the scheduled-call store, so a new tenant adds no
+ * connections and no polling.
+ */
+export interface DebriefTenants {
+  /** The operator organization (`org-demo` by default); admin routes use it. */
+  readonly operatorOrgId: string;
+  /** The workspace of one organization. */
+  forOrg(orgId: string): Promise<DemoApp>;
+  /** The workspace that owns a session (voice callbacks carry only the session). */
+  forSession(sessionId: string): Promise<DemoApp>;
+  /** Remember the organization an authenticated MCP principal acts in. */
+  bindPrincipal(principal: string, orgId: string): void;
+  /** The organization bound to a principal by authentication, if any. */
+  orgForPrincipal(principal: string): string | undefined;
+  /** The session of a provider call, in any organization. */
+  sessionIdForProviderCall(providerCallId: string): Promise<string | null>;
+  /** Organizations with a workspace in this process. */
+  loadedOrgIds(): string[];
 }
 
 export interface CreateDemoAppOptions {
@@ -55,8 +85,30 @@ export interface CreateDemoAppOptions {
   models?: { conversation?: string; extraction?: string; fallback?: string };
 }
 
+const KIT_ID = "kit:debrief";
+const MAX_ORG_ID_LENGTH = 200;
+
+interface SharedResources {
+  readonly client: Client;
+  readonly appId: string | null;
+  readonly telemetry: TelemetryStore;
+  readonly modelRouter: ReturnType<typeof createDeclarativeModelRouter>;
+  readonly apps: AppRegistry;
+  readonly memory: MemoryStore;
+  readonly debriefStore: LibsqlDebriefPersistence;
+  readonly scheduledCallStore: LibsqlScheduledCallStore;
+  readonly mcpAuthMode: McpAuthMode;
+  readonly adminToken: string;
+  readonly tenants: DebriefTenants;
+  close(): Promise<void>;
+}
+
+/**
+ * The debrief host's operator workspace. Other organizations' workspaces are
+ * reached through `app.tenants`; they all share one client and telemetry store.
+ */
 export async function createDemoApp(options: CreateDemoAppOptions = {}): Promise<DemoApp> {
-  const orgId = options.orgId ?? "org-demo";
+  const operatorOrgId = options.orgId ?? "org-demo";
   const appId = options.appId ?? null;
   const mcpAuthMode = options.mcpAuthMode ?? "none";
   const adminToken = options.adminToken ?? "demo-admin-token";
@@ -82,12 +134,73 @@ export async function createDemoApp(options: CreateDemoAppOptions = {}): Promise
     },
     telemetry,
   });
-  const storage = createLibsqlStorageAdapter(client, { scope: { orgId, kitId: "kit:debrief" } });
   const apps = createAppRegistry({ secret: options.secret ?? "demo-secret-at-least-32-characters-long" });
   const memory = createMemoryStore(client, telemetry);
-  const debriefStore = createDebriefPersistence(client, { storage });
+  // Session, customer and draft rows are org-keyed; the scoped storage
+  // adapter passes SQL through, so one store serves every workspace.
+  const debriefStore = createDebriefPersistence(client, {
+    storage: createLibsqlStorageAdapter(client, { scope: { orgId: operatorOrgId, kitId: KIT_ID } }),
+  });
   const scheduledCallStore = createScheduledCallStore(client);
-  const initialSessions = await debriefStore.loadSessions(orgId, "kit:debrief");
+
+  const workspaces = new Map<string, Promise<DemoApp>>();
+  const ready = new Map<string, DemoApp>();
+  const principals = new Map<string, string>();
+  let closed = false;
+
+  const tenants: DebriefTenants = {
+    operatorOrgId,
+    forOrg(orgId) {
+      const normalized = normalizeOrgId(orgId);
+      let workspace = workspaces.get(normalized);
+      if (!workspace) {
+        workspace = createWorkspace(shared, normalized).then((created) => {
+          ready.set(normalized, created);
+          return created;
+        }, (error: unknown) => {
+          workspaces.delete(normalized);
+          throw error;
+        });
+        workspaces.set(normalized, workspace);
+      }
+      return workspace;
+    },
+    async forSession(sessionId) {
+      for (const workspace of ready.values()) {
+        if (hasSession(workspace, sessionId)) return workspace;
+      }
+      const orgId = await debriefStore.findSessionOrgId(sessionId, KIT_ID);
+      if (!orgId) throw new Error(`Debrief session "${sessionId}" was not found`);
+      const workspace = await tenants.forOrg(orgId);
+      await workspace.debrief.hydrateSession(sessionId);
+      return workspace;
+    },
+    bindPrincipal(principal, orgId) {
+      principals.set(principal, normalizeOrgId(orgId));
+    },
+    orgForPrincipal: (principal) => principals.get(principal),
+    sessionIdForProviderCall: (providerCallId) => scheduledCallStore.findSessionIdByProviderCallId(providerCallId),
+    loadedOrgIds: () => [...ready.keys()],
+  };
+
+  const shared: SharedResources = {
+    client, appId, telemetry, modelRouter, apps, memory, debriefStore, scheduledCallStore, mcpAuthMode, adminToken, tenants,
+    async close() {
+      if (closed) return;
+      closed = true;
+      await telemetry.close();
+      client.close();
+    },
+  };
+
+  return tenants.forOrg(operatorOrgId);
+}
+
+/** One organization's debrief workspace on the shared resources. */
+async function createWorkspace(shared: SharedResources, orgId: string): Promise<DemoApp> {
+  const { client, appId, telemetry, modelRouter, apps, memory, debriefStore, scheduledCallStore, mcpAuthMode, adminToken, tenants } = shared;
+  const storage = createLibsqlStorageAdapter(client, { scope: { orgId, kitId: KIT_ID } });
+  const initialSessions = await debriefStore.loadSessions(orgId, KIT_ID);
   const instructions = createInstructionPlugin({ kitId: "kit:debrief", context: "prebrief" });
   let plugins!: PluginRegistry;
   let debrief!: DebriefService;
@@ -405,7 +518,8 @@ export async function createDemoApp(options: CreateDemoAppOptions = {}): Promise
   voice = new VoiceSimulator({ debrief, telemetry, orgId, appId });
   const scheduler: ScheduledCallOperations = {
     schedule: (input) => plugins.dispatch("scheduler:scheduled-calls", { operation: "schedule", input }, schedulerPluginContext(input.orgId, input.sessionId, appId, telemetry)),
-    claimDue: (input) => plugins.dispatch("scheduler:scheduled-calls", { operation: "claim_due", input }, { ...schedulerPluginContext(input.orgId, "scheduler", appId, telemetry), unrecorded: nothingClaimed }),
+    // Without an orgId the claim spans every organization (the shared poller).
+    claimDue: (input) => plugins.dispatch("scheduler:scheduled-calls", { operation: "claim_due", input }, { ...schedulerPluginContext(input.orgId ?? orgId, "scheduler", appId, telemetry), unrecorded: nothingClaimed }),
     complete: (input) => plugins.dispatch("scheduler:scheduled-calls", { operation: "complete", input }, schedulerPluginContext(input.orgId, input.scheduledCallId, appId, telemetry)),
     fail: (input) => plugins.dispatch("scheduler:scheduled-calls", { operation: "fail", input }, schedulerPluginContext(input.orgId, input.scheduledCallId, appId, telemetry)),
     get: (scopeOrgId, scheduledCallId) => scheduledCallStore.get(scopeOrgId, scheduledCallId),
@@ -416,7 +530,7 @@ export async function createDemoApp(options: CreateDemoAppOptions = {}): Promise
   };
 
   return {
-    client, orgId, appId, telemetry, modelRouter, apps, memory, instructions, debrief, voice, scheduler, storage, plugins, mcpAuthMode, adminToken,
+    client, orgId, appId, telemetry, modelRouter, apps, memory, instructions, debrief, voice, scheduler, storage, plugins, mcpAuthMode, adminToken, tenants,
     async reset() {
       debrief.clearSessions();
       await plugins.dispatch("memory:default", {
@@ -428,13 +542,25 @@ export async function createDemoApp(options: CreateDemoAppOptions = {}): Promise
         run: () => debriefStore.reset(orgId, "kit:debrief"),
       }, { orgId, appId, sessionId: "demo-reset", traceId: "demo-reset", telemetry });
       await scheduler.reset(orgId);
-      await telemetry.reset();
+      await telemetry.reset(orgId);
     },
-    async close() {
-      await telemetry.close();
-      client.close();
-    },
+    close: () => shared.close(),
   };
+}
+
+function normalizeOrgId(orgId: string): string {
+  const normalized = orgId.trim();
+  if (!normalized || normalized.length > MAX_ORG_ID_LENGTH) throw new Error("A valid organization id is required");
+  return normalized;
+}
+
+function hasSession(workspace: DemoApp, sessionId: string): boolean {
+  try {
+    workspace.debrief.getSession(sessionId);
+    return true;
+  } catch {
+    return false;
+  }
 }
 
 /** An empty scheduler poll: nothing was due. */

@@ -308,6 +308,19 @@ export class LibsqlDebriefPersistence implements DebriefPersistence {
     });
   }
 
+  /**
+   * The organization that owns a session. Only the host's tenant registry
+   * uses this, to route provider callbacks that carry a bare session id.
+   */
+  async findSessionOrgId(sessionId: string, kitId: string): Promise<string | null> {
+    await this.initialized;
+    const result = await this.sql.execute({
+      sql: "SELECT org_id FROM demo_debrief_sessions WHERE session_id = ? AND kit_id = ? LIMIT 1",
+      args: [sessionId, kitId],
+    });
+    return result.rows.length ? String((result.rows[0] as Row).org_id) : null;
+  }
+
   async reset(orgId: string, kitId: string): Promise<void> {
     await this.initialized;
     // The demo owns these tables for one org. Delete dependent rows first so

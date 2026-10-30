@@ -20,6 +20,7 @@ import { getKitApps, getKitShellS3Key, readAppResource } from "./app-resources";
 import { kitCdnUrl, demoInternalSecret, demoOrgId, demoVoiceServiceUrl } from "../config";
 import { SignJWT } from "jose";
 import { createDebriefTools } from "../../../../kits/debrief/src/tools";
+import { personalOrgId } from "../../../../kits/debrief/src/tenancy";
 import platformKit from "../../../../kits/platform/kit.config";
 import {
   createPlatformDataSource,
@@ -27,7 +28,13 @@ import {
 } from "../../../../kits/platform/src/plugins/platform-data";
 import { zodToJsonSchema } from "../../../sdk/src/runtime/zod-to-json-schema";
 import { parseTraceparent, traceparentFromIds } from "./trace-context";
-import { interactiveIdentity, type McpRequestIdentity } from "./authz";
+import {
+  authorizeToolInvocation,
+  interactiveIdentity,
+  mcpCheckTuple,
+  type McpRequestIdentity,
+  type TupleChecker,
+} from "./authz";
 import { createRouterPlatformDataSource } from "./platform-host";
 import { createKitContext } from "../../../sdk/src/context";
 import { createDispatchEnvelope, dispatch } from "../../../sdk/src/server/dispatch";
@@ -42,6 +49,9 @@ export const DEBRIEF_SHELL_S3_KEY = "apps/kits/debrief/shell.html";
 /** Published by kits/platform/scripts/publish-assets.ts to KitAssets. */
 export const PLATFORM_SHELL_S3_KEY = "apps/kits/platform/shell.html";
 const INTERNAL_TOKEN_TTL_SECONDS = 60;
+/** Shown to signed-in users without a debrief grant. */
+export const DEBRIEF_ACCESS_DENIED_MESSAGE =
+  "Sales debrief is not enabled for your account. Ask the KitStack team for access.";
 const VOICE_REQUEST_TIMEOUT_MS = 8_000;
 
 /**
@@ -116,6 +126,8 @@ export interface PlatformAdapterDeps {
   platformDb?: KitContext["db"];
   /** Host-resolved bring-your-own MCP servers registered for this request. */
   mcpServers?: readonly McpServerRegistration[];
+  /** Authz tuple checker for debrief gating and org resolution. Defaults to the platform grants DB. */
+  checkTuple?: TupleChecker;
 }
 
 /**
@@ -142,6 +154,7 @@ export function platformAdapter(deps: PlatformAdapterDeps): KitServerAdapter {
     ...DEBRIEF_KIT,
     views: [...(debriefViews ?? DEBRIEF_VIEW_METADATA)],
   };
+  const checkTuple = deps.checkTuple ?? mcpCheckTuple;
 
   const adapter: KitServerAdapter = {
     async resolveUserKits(userId: string): Promise<ResolvedKit[]> {
@@ -217,6 +230,8 @@ export function platformAdapter(deps: PlatformAdapterDeps): KitServerAdapter {
         return executePlatformTool(platformDataSource, platformKit.tools, toolName, args, userId, deps.platformDb, requestContext);
       }
       if (kitId === DEBRIEF_KIT_ID) {
+        const access = await resolveDebriefAccess(requestContext?.identity ?? interactiveIdentity(userId), checkTuple);
+        if (!access.allowed) return voiceError(access.message);
         return callDebriefVoiceService({
           operation: "tool",
           name: toolName,
@@ -224,7 +239,7 @@ export function platformAdapter(deps: PlatformAdapterDeps): KitServerAdapter {
           userId,
           voiceServiceUrl: resolveString(deps.voiceServiceUrl, demoVoiceServiceUrl),
           voiceInternalSecret: resolveSecret(deps.voiceInternalSecret, demoInternalSecret),
-          orgId: demoOrgId(),
+          orgId: access.orgId,
           fetcher,
           requestContext,
         });
@@ -254,6 +269,8 @@ export function platformAdapter(deps: PlatformAdapterDeps): KitServerAdapter {
         return view.loader(platformContext(platformDataSource, userId, deps.platformDb, effectiveContext, { orgId: demoOrgId() }));
       }
       if (kitId === DEBRIEF_KIT_ID) {
+        const access = await resolveDebriefAccess(effectiveContext?.identity ?? interactiveIdentity(userId), checkTuple);
+        if (!access.allowed) throw new Error(access.message);
         const result = await callDebriefVoiceService({
           operation: "view",
           name: "kit_view",
@@ -261,7 +278,7 @@ export function platformAdapter(deps: PlatformAdapterDeps): KitServerAdapter {
           userId,
           voiceServiceUrl: resolveString(deps.voiceServiceUrl, demoVoiceServiceUrl),
           voiceInternalSecret: resolveSecret(deps.voiceInternalSecret, demoInternalSecret),
-          orgId: demoOrgId(),
+          orgId: access.orgId,
           fetcher,
           requestContext: effectiveContext,
         });
@@ -323,6 +340,40 @@ export function platformAdapter(deps: PlatformAdapterDeps): KitServerAdapter {
   };
 
   return withMcpServers(adapter, deps.mcpServers ?? []);
+}
+
+export type DebriefAccess =
+  | { allowed: true; orgId: string }
+  | { allowed: false; message: string };
+
+/**
+ * Gate one debrief tool call or View load and pick its organization.
+ *
+ * Access: the user needs `kit:use` on kit `debrief` (the same tuple check as
+ * every other kit call, including delegated-identity rules). Without it the
+ * voice service is never called.
+ *
+ * Organization: operators work in the shared operator organization
+ * (`KITSTACK_DEMO_ORG_ID`, default `org-demo`). A user is an operator when
+ * they hold `kit:admin` on that organization, directly or through a team or
+ * role membership. Every other user works in a personal organization,
+ * `org-user-<userId>`, so prospects never see each other's or the
+ * operator's customers.
+ */
+export async function resolveDebriefAccess(
+  identity: McpRequestIdentity,
+  checkTuple: TupleChecker,
+  operatorOrgId: string = demoOrgId(),
+): Promise<DebriefAccess> {
+  try {
+    const authorization = await authorizeToolInvocation({ identity, mode: "assist", kitSlug: DEBRIEF_KIT_ID }, checkTuple);
+    if (!authorization.allowed) return { allowed: false, message: DEBRIEF_ACCESS_DENIED_MESSAGE };
+    const operator = await checkTuple(identity.principal, "kit:admin", "organization", operatorOrgId, "user");
+    return { allowed: true, orgId: operator ? operatorOrgId : personalOrgId(identity.principal) };
+  } catch {
+    // Fail closed: an unreadable grant store never opens the debrief.
+    return { allowed: false, message: "Sales debrief access could not be verified. Try again in a moment." };
+  }
 }
 
 function resolvedPlatformKit(): ResolvedKit {

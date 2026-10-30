@@ -26,18 +26,44 @@ export function createDebriefKitServer(
   });
 }
 
-/** MCP auth for the debrief host: none (loopback), app tokens, or router-signed service tokens. */
+/** An authenticated debrief caller: the user (MCP principal) and the organization it acts in. */
+export interface DebriefTenantAuthentication {
+  userId: string;
+  orgId: string;
+}
+
+/**
+ * MCP auth for the debrief host: none (loopback), app tokens, or router-signed
+ * service tokens. The verified organization is bound to the principal, so the
+ * kit's tools and Views run in that organization's workspace.
+ */
 export async function authenticateDebriefMcp(
   app: DemoApp,
   request: Pick<HttpRouteRequest, "headers">,
 ): Promise<RequestAuthentication> {
+  const result = await authenticateDebriefTenant(app, request);
+  return "status" in result ? result : { userId: result.userId };
+}
+
+/**
+ * Authenticate a request and resolve its organization: the signed `org`
+ * claim, the app token's organization, or the operator organization when
+ * auth is off (loopback development).
+ */
+export async function authenticateDebriefTenant(
+  app: DemoApp,
+  request: Pick<HttpRouteRequest, "headers">,
+): Promise<DebriefTenantAuthentication | Exclude<RequestAuthentication, { userId: string }>> {
   try {
     const context = await authenticateMcpRequest(new Request("http://demo.local/mcp", {
       method: "POST",
       headers: Object.entries(request.headers).flatMap(([name, value]) => value === undefined ? [] : [[name, value] as [string, string]]),
     }), { mode: app.mcpAuthMode, registry: app.apps });
     const subject = (context as { claims?: { sub?: unknown } }).claims?.sub;
-    return { userId: typeof subject === "string" && subject ? subject : context.appId ?? "default-user" };
+    const userId = typeof subject === "string" && subject ? subject : context.appId ?? "default-user";
+    const orgId = context.org ?? app.tenants.operatorOrgId;
+    if (context.org) app.tenants.bindPrincipal(userId, context.org);
+    return { userId, orgId };
   } catch (error) {
     if (!(error instanceof McpAuthError)) return { status: 401, body: { error: "mcp_auth_misconfigured" } };
     const status = error.code === "insufficient_scope" || error.code === "forbidden_identity" ? 403 : 401;
