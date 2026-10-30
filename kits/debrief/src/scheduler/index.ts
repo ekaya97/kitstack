@@ -155,6 +155,13 @@ export class LibsqlScheduledCallStore implements ScheduledCallOperations {
         ON scheduled_calls (org_id, owner_id, created_at)`);
       await client.execute(`CREATE INDEX IF NOT EXISTS scheduled_calls_target_session_idx
         ON scheduled_calls (org_id, target_session_id)`);
+      // The shared poller claims across organizations without an org_id
+      // filter; without these, every tick would scan the whole table, and
+      // Turso bills every row read.
+      await client.execute(`CREATE INDEX IF NOT EXISTS scheduled_calls_due_any_org_idx
+        ON scheduled_calls (status, scheduled_at, scheduled_call_id)`);
+      await client.execute(`CREATE INDEX IF NOT EXISTS scheduled_calls_lease_any_org_idx
+        ON scheduled_calls (status, lease_expires_at)`);
     });
   }
 

@@ -227,4 +227,16 @@ describe("persisted scheduled calls", () => {
     expect(result).toMatchObject({ status: "started", providerCallId: "CA-trigger-1" });
     expect(calls).toEqual(["session-1"]);
   });
+
+  it("claims across organizations through an index, not a table scan", async () => {
+    const client = createClient({ url: ":memory:" });
+    const store = createScheduledCallStore(client);
+    await store.list("org-demo");
+    const plan = async (sql: string) => (await client.execute(`EXPLAIN QUERY PLAN ${sql}`)).rows.map((row) => String((row as Record<string, unknown>).detail)).join(" | ");
+    expect(await plan("SELECT scheduled_call_id FROM scheduled_calls WHERE status = 'scheduled' AND scheduled_at <= '2026-01-01' ORDER BY scheduled_at ASC, scheduled_call_id ASC LIMIT 1"))
+      .toMatch(/USING (COVERING )?INDEX scheduled_calls_due_any_org_idx/);
+    expect(await plan("SELECT scheduled_call_id FROM scheduled_calls WHERE status = 'starting' AND lease_expires_at IS NOT NULL AND lease_expires_at <= '2026-01-01'"))
+      .toMatch(/USING (COVERING )?INDEX scheduled_calls_lease_any_org_idx/);
+    client.close();
+  });
 });
