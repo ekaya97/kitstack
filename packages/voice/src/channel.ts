@@ -46,6 +46,13 @@ export interface VoiceCall {
   appId: string | null;
   callId: string | null;
   channel: "phone" | "local";
+  /** Caller-defined call purpose (e.g. a kit's "prebrief" vs its primary call), opaque to the channel. */
+  purpose?: string;
+}
+
+export interface VoiceToolSet {
+  realtime: readonly RealtimeFunctionTool[];
+  agent: readonly AgentToolDefinition[];
 }
 
 /** Per-call instructions for the model. The content is never persisted. */
@@ -58,11 +65,11 @@ export interface VoiceCallBriefing {
 /** The kit's session state machine; the channel calls these at each step of a call. */
 export interface VoiceSessionHooks {
   /** Move the session into "calling" and return its identity for the media token. Throw to refuse. */
-  startSession(sessionId: string, channel: VoiceCall["channel"]): Promise<{ orgId: string; appId: string | null }>;
+  startSession(sessionId: string, channel: VoiceCall["channel"], purpose?: string): Promise<{ orgId: string; appId: string | null }>;
   onCallStarted?(sessionId: string, callId: string): Promise<void>;
-  onStartFailed?(sessionId: string, error: unknown): Promise<void>;
+  onStartFailed?(sessionId: string, error: unknown, purpose?: string): Promise<void>;
   /** The agent finished normally: it hung up, or the caller did. */
-  onAgentFinished(sessionId: string): Promise<void>;
+  onAgentFinished(sessionId: string, purpose?: string): Promise<void>;
   /** The call ended by error, or without a clean end of the media stream. */
   onCallInterrupted(sessionId: string, reason: unknown): Promise<void>;
   /** Provider-neutral completion metadata, once per media stream. */
@@ -119,8 +126,12 @@ export interface VoiceChannelOptions {
   localHarness?: boolean;
   /** Build the model's per-call instructions. */
   briefing(call: VoiceCall): Promise<VoiceCallBriefing>;
-  /** Kit tools for the agent (e.g. from kitAgentTools); end_call is added by the channel. */
-  tools: { realtime: readonly RealtimeFunctionTool[]; agent: readonly AgentToolDefinition[] };
+  /**
+   * Kit tools for the agent (e.g. from kitAgentTools); end_call is added by
+   * the channel. A function lets the kit vary the tool set by call purpose
+   * (e.g. a prebrief call only sees its own tools).
+   */
+  tools: VoiceToolSet | ((call: VoiceCall) => VoiceToolSet);
   sessions: VoiceSessionHooks;
   /** How long the caller must talk over the agent before it stops; defaults to the VAD silence duration plus 100 ms. */
   bargeInMs?: number;
@@ -145,7 +156,7 @@ export interface VoiceChannel extends ServerPlugin {
   /** Media-stream upgrade handler. */
   onUpgrade(upgrade: DaemonUpgrade): Promise<boolean>;
   /** Place a phone call to the first allowed destination (schedulers). */
-  startCall(sessionId: string): Promise<{ callId: string }>;
+  startCall(sessionId: string, purpose?: string): Promise<{ callId: string }>;
   /** End live media streams and wait until ended calls are persisted. */
   onShutdown(): Promise<void>;
   readonly capabilities: { phone?: VoiceChannelCapability; local?: VoiceChannelCapability };
@@ -188,7 +199,6 @@ export function createVoiceChannel(options: VoiceChannelOptions): VoiceChannel {
     ...(options.realtime.vadThreshold !== undefined ? { vadThreshold: options.realtime.vadThreshold } : {}),
     ...(options.realtime.silenceDurationMs !== undefined ? { silenceDurationMs: options.realtime.silenceDurationMs } : {}),
     ...(options.realtime.prefixPaddingMs !== undefined ? { prefixPaddingMs: options.realtime.prefixPaddingMs } : {}),
-    tools: [...options.tools.realtime, END_CALL_TOOL],
   };
   const sockets = new WebSocketServer({ noServer: true });
   const activeCalls = new Set<Promise<void>>();
@@ -199,12 +209,18 @@ export function createVoiceChannel(options: VoiceChannelOptions): VoiceChannel {
     ...event,
   } as never);
 
+  /** Resolve the kit's tool set for this call; a static set is reused for every call. */
+  const resolveTools = (call: VoiceCall): VoiceToolSet =>
+    typeof options.tools === "function" ? options.tools(call) : options.tools;
+  const callFrom = (binding: SessionBinding, channel: VoiceCall["channel"]): VoiceCall =>
+    ({ sessionId: binding.sessionId, orgId: binding.orgId, appId: binding.appId, callId: binding.callSid ?? null, channel, ...(binding.purpose ? { purpose: binding.purpose } : {}) });
+
   /** Briefings are built once per call and shared by session setup and the agent loop. */
   const briefings = new Map<string, Promise<VoiceCallBriefing>>();
   const briefingFor = (binding: SessionBinding, channel: VoiceCall["channel"]) => {
     let briefing = briefings.get(binding.sessionId);
     if (!briefing) {
-      briefing = options.briefing({ sessionId: binding.sessionId, orgId: binding.orgId, appId: binding.appId, callId: binding.callSid ?? null, channel });
+      briefing = options.briefing(callFrom(binding, channel));
       briefings.set(binding.sessionId, briefing);
     }
     return briefing;
@@ -218,6 +234,7 @@ export function createVoiceChannel(options: VoiceChannelOptions): VoiceChannel {
       kitId: options.kitId,
       verifier: tokenCodec,
       openai: realtime,
+      toolsFor: (binding) => [...resolveTools(callFrom(binding, channel)).realtime, END_CALL_TOOL],
       provider,
       ...(channel === "local" ? { stopReason: "local_stop" } : {}),
       routingReason: options.realtime.routingReason ?? null,
@@ -245,9 +262,12 @@ export function createVoiceChannel(options: VoiceChannelOptions): VoiceChannel {
           routingReason: options.realtime.routingReason ?? null,
           callId: binding.callSid ?? null,
           memoryIds: briefing.memoryIds ?? [],
-          tools: [...options.tools.agent, createEndCallTool(() => call.hangup())],
+          tools: [...resolveTools(callFrom(binding, channel)).agent, createEndCallTool(() => call.hangup())],
           sendToolResult: session.sendToolResult,
-          onStop: async () => { await options.sessions.onAgentFinished(binding.sessionId); },
+          onStop: async () => {
+            if (binding.purpose === undefined) await options.sessions.onAgentFinished(binding.sessionId);
+            else await options.sessions.onAgentFinished(binding.sessionId, binding.purpose);
+          },
           onError: async (error) => {
             console.error(`[voice] ${channel} call ${binding.sessionId} failed: ${error.message}`);
             await options.sessions.onCallInterrupted(binding.sessionId, error);
@@ -274,7 +294,7 @@ export function createVoiceChannel(options: VoiceChannelOptions): VoiceChannel {
     const mediaStreamUrl = `${publicUrl.replace(/^https:/, "wss:")}${VOICE_PATHS.phoneMedia}`;
     const statusUrl = `${publicUrl}${VOICE_PATHS.phoneStatus}`;
     const finalizeGraceMs = options.finalizeGraceMs ?? DEFAULT_FINALIZE_GRACE_MS;
-    const claims = new Map<string, { orgId: string; appId: string | null }>();
+    const claims = new Map<string, { orgId: string; appId: string | null; purpose?: string }>();
     // Calls this channel placed, so status callbacks resolve without the kit's help.
     const callSessions = new Map<string, string>();
     const http: LiveVoiceHttpOptions = {
@@ -292,18 +312,28 @@ export function createVoiceChannel(options: VoiceChannelOptions): VoiceChannel {
       statusCallback: { validator: createTwilioSignatureValidator(config.authToken), url: statusUrl },
       resolveSessionIdForCallId: async (callId) =>
         callSessions.get(callId) ?? await options.sessions.resolveSessionIdForCallId?.(callId) ?? null,
-      beforeStart: async (sessionId) => { claims.set(sessionId, await options.sessions.startSession(sessionId, "phone")); },
+      beforeStart: async (sessionId, purpose) => {
+        const identity = purpose === undefined
+          ? await options.sessions.startSession(sessionId, "phone")
+          : await options.sessions.startSession(sessionId, "phone", purpose);
+        claims.set(sessionId, { ...identity, ...(purpose ? { purpose } : {}) });
+      },
       sessionTokenFor: async (sessionId) => {
         const identity = claims.get(sessionId);
         if (!identity) throw new Error("Voice session was not started");
-        return tokenCodec.sign({ sessionId, ...identity });
+        return tokenCodec.sign({ sessionId, orgId: identity.orgId, appId: identity.appId, ...(identity.purpose ? { purpose: identity.purpose } : {}) });
       },
       onProviderStart: async (sessionId, callId) => {
         claims.delete(sessionId);
         callSessions.set(callId, sessionId);
         await options.sessions.onCallStarted?.(sessionId, callId);
       },
-      onFailure: async (sessionId, error) => { claims.delete(sessionId); await options.sessions.onStartFailed?.(sessionId, error); },
+      onFailure: async (sessionId, error) => {
+        const purpose = claims.get(sessionId)?.purpose;
+        claims.delete(sessionId);
+        if (purpose === undefined) await options.sessions.onStartFailed?.(sessionId, error);
+        else await options.sessions.onStartFailed?.(sessionId, error, purpose);
+      },
       onProviderStatus: async (status) => {
         await telemetry({
           orgId: options.orgId ?? "unknown", sessionId: status.sessionId, traceId: status.sessionId,
@@ -360,7 +390,13 @@ export function createVoiceChannel(options: VoiceChannelOptions): VoiceChannel {
           const sessionId = typeof request.body?.session_id === "string" ? request.body.session_id : "";
           if (!sessionId) return { status: 400, body: { error: "session_id is required" } };
           if (request.body?.confirmation !== true) return { status: 400, body: { error: "confirmation_required" } };
-          const identity = await options.sessions.startSession(sessionId, "local");
+          // Test/harness-only seam: a kit's own tests can drive the local
+          // browser-mic path for a non-default call purpose (e.g. a prebrief
+          // call) without a real phone call.
+          const purpose = typeof request.body?.purpose === "string" ? request.body.purpose : undefined;
+          const identity = purpose === undefined
+            ? await options.sessions.startSession(sessionId, "local")
+            : await options.sessions.startSession(sessionId, "local", purpose);
           const callId = `local-${crypto.randomUUID()}`;
           await options.sessions.onCallStarted?.(sessionId, callId);
           return {
@@ -370,7 +406,7 @@ export function createVoiceChannel(options: VoiceChannelOptions): VoiceChannel {
               callId,
               status: "connecting",
               provider: LOCAL_PROVIDER,
-              sessionToken: await tokenCodec.sign({ sessionId, ...identity }),
+              sessionToken: await tokenCodec.sign({ sessionId, ...identity, ...(purpose ? { purpose } : {}) }),
               mediaPath: VOICE_PATHS.localMedia,
               recording: false,
               retention: false,
@@ -403,9 +439,9 @@ export function createVoiceChannel(options: VoiceChannelOptions): VoiceChannel {
       });
       return true;
     },
-    async startCall(sessionId) {
+    async startCall(sessionId, purpose) {
       if (!phone) throw new Error("Phone calls are not configured");
-      const result = await startScheduledLiveVoiceCall(sessionId, phone.http);
+      const result = await startScheduledLiveVoiceCall(sessionId, phone.http, purpose);
       return { callId: result.callId };
     },
     async onShutdown() {

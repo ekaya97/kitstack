@@ -8,7 +8,8 @@ export type CustomerEventType =
   | "call_completed"
   | "note"
   | "address_discovered"
-  | "debrief_confirmed";
+  | "debrief_confirmed"
+  | "meeting_plan";
 
 export interface CustomerIdentityInput {
   company: string;
@@ -92,7 +93,7 @@ const CREATE_SCHEMA_SQL = `
     customer_id TEXT NOT NULL,
     session_id TEXT NOT NULL,
     kit_id TEXT NOT NULL,
-    type TEXT NOT NULL CHECK (type IN ('prebrief', 'call_completed', 'note', 'address_discovered', 'debrief_confirmed')),
+    type TEXT NOT NULL CHECK (type IN ('prebrief', 'call_completed', 'note', 'address_discovered', 'debrief_confirmed', 'meeting_plan')),
     occurred_at TEXT NOT NULL,
     payload_json TEXT NOT NULL
   );

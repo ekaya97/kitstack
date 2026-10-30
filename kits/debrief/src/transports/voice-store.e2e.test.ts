@@ -210,7 +210,7 @@ describe("integrated voice persistence boundary", () => {
     const twilio = new FakeSocket();
     const openai = new FakeSocket();
     const kit = createBoundDebriefKit(app);
-    const voiceTools = createDebriefVoiceTools(kit, createDebriefKitServer(app, { transport: "http" }, kit));
+    const voiceTools = createDebriefVoiceTools(kit, createDebriefKitServer(app, { transport: "http" }, kit)).forPurpose(undefined);
     const bridge = attachVoiceMediaBridge({
       socket: twilio,
       verifier: codec,

@@ -28,6 +28,8 @@ export function createManualTrigger(
 
 export interface ScheduledDebriefPayload {
   readonly sessionId: string;
+  /** Distinguishes the one-time prebrief call from the primary debrief call; defaults to "debrief". */
+  readonly purpose?: "debrief" | "prebrief";
 }
 
 /** Internal scheduler invocation of the same trigger boundary. */

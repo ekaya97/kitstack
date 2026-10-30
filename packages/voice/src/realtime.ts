@@ -207,6 +207,8 @@ export interface SignedSessionClaims {
   sessionId: string;
   orgId: string;
   appId: string | null;
+  /** Caller-defined call purpose (e.g. a kit's "prebrief" vs "debrief"), carried opaquely. */
+  purpose?: string;
 }
 
 /** Verification is injected so the demo can use its existing signed-session implementation. */
@@ -224,7 +226,7 @@ export function createSignedSessionTokenCodec(secret: Uint8Array | string, now: 
   if (key.byteLength < 32) throw new Error("Signed session token secret must be at least 32 bytes");
   return {
     sign(claims) {
-      return new SignJWT({ orgId: claims.orgId, appId: claims.appId })
+      return new SignJWT({ orgId: claims.orgId, appId: claims.appId, ...(claims.purpose ? { purpose: claims.purpose } : {}) })
         .setProtectedHeader({ alg: "HS256" })
         .setSubject(claims.sessionId)
         .setExpirationTime(Math.floor(now() / 1000) + 10 * 60)
@@ -235,7 +237,10 @@ export function createSignedSessionTokenCodec(secret: Uint8Array | string, now: 
       if (typeof payload.sub !== "string" || typeof payload.orgId !== "string" || (typeof payload.appId !== "string" && payload.appId !== null)) {
         throw new Error("Invalid signed session token claims");
       }
-      return { sessionId: payload.sub, orgId: payload.orgId, appId: payload.appId };
+      if (payload.purpose !== undefined && typeof payload.purpose !== "string") {
+        throw new Error("Invalid signed session token claims");
+      }
+      return { sessionId: payload.sub, orgId: payload.orgId, appId: payload.appId, ...(typeof payload.purpose === "string" ? { purpose: payload.purpose } : {}) };
     },
   };
 }
@@ -796,6 +801,7 @@ export interface SessionBinding {
   sessionId: string;
   orgId: string;
   appId: string | null;
+  purpose?: string;
 }
 
 export interface SessionBindingStore {
@@ -822,6 +828,8 @@ export interface VoiceWebSocket {
 export interface TwilioOpenAIBridgeOptions {
   twilioSocket: VoiceWebSocket;
   openai: RealtimeSessionOptions;
+  /** Per-call function tools for the model, computed once the session binding is known; overrides `openai.tools`. */
+  toolsFor?: (binding: SessionBinding) => readonly RealtimeFunctionTool[];
   /** Kit the call belongs to, for telemetry (e.g. "kit:debrief"). */
   kitId?: string;
   provider?: string;
@@ -834,7 +842,7 @@ export interface TwilioOpenAIBridgeOptions {
   /** Resolve prepared-session context before opening the provider model session. */
   instructionsFor?: (binding: SessionBinding) => Promise<string>;
   /** Finalize metadata-only call state once, after the provider stream stops. */
-  onCallCompleted?: (call: { sessionId: string; orgId: string; appId: string | null; callId: string | null; reason: string; occurredAt: string; provider: string }) => Promise<void>;
+  onCallCompleted?: (call: { sessionId: string; orgId: string; appId: string | null; callId: string | null; reason: string; occurredAt: string; provider: string; purpose?: string }) => Promise<void>;
   stopReason?: string;
   /** Upper bound between an agent hangup request and the call ending. */
   hangupTimeoutMs?: number;
@@ -959,6 +967,7 @@ export function bridgeTwilioToOpenAI(options: TwilioOpenAIBridgeOptions): Twilio
           reason,
           occurredAt: now(),
           provider,
+          ...(current.purpose ? { purpose: current.purpose } : {}),
         });
       } catch {
         // Provider shutdown must remain successful even if metadata finalization is unavailable.
@@ -967,7 +976,7 @@ export function bridgeTwilioToOpenAI(options: TwilioOpenAIBridgeOptions): Twilio
     await appendVoiceTelemetry(options.telemetry, {
       id: id(), timestamp: now(), orgId: current?.orgId ?? "unknown", appId: current?.appId ?? null, sessionId: current?.sessionId ?? null,
       traceId: current?.sessionId ?? streamSid ?? null, channel: "voice", kitId: options.kitId ?? DEFAULT_KIT_ID, type: "voice.call",
-      operation: error ? "media_stream_error" : "media_stream_stopped", provider, callId: current?.callSid ?? null, outcome: error ? "error" : "success",
+      operation: purposeTag(error ? "media_stream_error" : "media_stream_stopped", current?.purpose), provider, callId: current?.callSid ?? null, outcome: error ? "error" : "success",
     });
     // Without a working model the caller would hear silence; end the call.
     // Closing an already-closed provider stream is a no-op.
@@ -989,7 +998,8 @@ export function bridgeTwilioToOpenAI(options: TwilioOpenAIBridgeOptions): Twilio
       streamSid = start.streamSid;
       bindings.bind(sessionBinding);
       const instructions = await options.instructionsFor?.(sessionBinding);
-      realtime = await createOpenAIRealtimeSession({ ...options.openai, deferInitialResponse: true, ...(instructions ? { instructions } : {}) });
+      const tools = options.toolsFor?.(sessionBinding);
+      realtime = await createOpenAIRealtimeSession({ ...options.openai, deferInitialResponse: true, ...(instructions ? { instructions } : {}), ...(tools ? { tools } : {}) });
       agent = typeof options.agent === "function" ? await options.agent(sessionBinding, realtime, callControl) : options.agent;
       realtime.socket.on("message", (data: unknown) => {
         openaiQueue = openaiQueue.then(() => handleOpenAI(data)).catch((error) => finish("openai_error", asError(error)));
@@ -999,7 +1009,7 @@ export function bridgeTwilioToOpenAI(options: TwilioOpenAIBridgeOptions): Twilio
       await appendVoiceTelemetry(options.telemetry, {
         id: id(), timestamp: now(), orgId: claims.orgId, appId: claims.appId, sessionId: claims.sessionId,
         traceId: claims.sessionId, channel: "voice", kitId: options.kitId ?? DEFAULT_KIT_ID, type: "voice.call",
-        operation: "media_stream_bound:recording-off:retention-off", provider, callId: start.callSid ?? null, outcome: "started",
+        operation: purposeTag("media_stream_bound:recording-off:retention-off", claims.purpose), provider, callId: start.callSid ?? null, outcome: "started",
       });
       realtime.startResponse();
       resolveBinding(sessionBinding);
@@ -1165,6 +1175,11 @@ export function bridgeTwilioToOpenAI(options: TwilioOpenAIBridgeOptions): Twilio
 
 async function appendVoiceTelemetry(telemetry: VoiceTelemetrySink, event: TelemetryEventInput): Promise<void> {
   await telemetry.append(event);
+}
+
+/** Suffix an operation name with the call purpose, e.g. for a kit's "prebrief" vs "debrief" calls. */
+function purposeTag(operation: string, purpose: string | undefined): string {
+  return purpose ? `${operation}:${purpose}` : operation;
 }
 
 function parseTwilioStart(event: Record<string, unknown>): TwilioMediaStart {

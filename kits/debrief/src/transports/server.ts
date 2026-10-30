@@ -141,7 +141,7 @@ function createLiveVoiceScheduler(app: DemoApp, voice: VoiceChannel): ScheduledC
   const scheduledTrigger = createScheduledTrigger(async (_context, payload) => {
     const session = await app.debrief.hydrateSession(payload.sessionId);
     if (session.orgId !== app.orgId) throw new Error("Scheduled call organization mismatch");
-    const result = await voice.startCall(payload.sessionId);
+    const result = await voice.startCall(payload.sessionId, payload.purpose);
     return result.callId;
   });
   return new ScheduledCallPoller({
@@ -155,7 +155,7 @@ function createLiveVoiceScheduler(app: DemoApp, voice: VoiceChannel): ScheduledC
     job: createScheduledCallJob(async (job) => {
       const invoked = await dispatchTrigger(scheduledTrigger, {
         kitId: "kit:debrief",
-        payload: { sessionId: job.sessionId },
+        payload: { sessionId: job.sessionId, purpose: job.purpose },
         method: "INTERNAL",
         path: "/t/debrief/scheduler",
         channel: { kind: "schedule", id: scheduledTrigger.id },
@@ -178,6 +178,9 @@ function createLiveVoiceScheduler(app: DemoApp, voice: VoiceChannel): ScheduledC
       return invoked.value ?? null;
     }),
     onProviderFailure: async (job, error) => {
+      // A failed prebrief call must never cancel or fail the later debrief
+      // call for the same session; only the primary debrief job fails the session.
+      if (job.purpose === "prebrief") return;
       try { await app.debrief.markFailed(job.sessionId, error); } catch { /* Keep the scheduler failure durable. */ }
     },
   });

@@ -38,6 +38,36 @@ export function normalizeDebriefSchedule(
   };
 }
 
+/**
+ * Resolve and validate an optional prebrief call time against the already
+ * normalized callback time. Accepts the same ISO/HH:mm forms as
+ * `callback_at`, in the same timezone.
+ */
+export function normalizePrebriefCallAt(
+  input: { prebrief_call_at: string; callback_timezone: string },
+  callbackAtIso: string,
+  now: Date = new Date(),
+): string {
+  const timezone = input.callback_timezone?.trim();
+  if (!timezone) throw new Error("callback_timezone is required (use an IANA timezone such as Europe/Berlin)");
+  try {
+    new Intl.DateTimeFormat("en-US", { timeZone: timezone }).format(now);
+  } catch {
+    throw new Error(`callback_timezone must be a valid IANA timezone: ${timezone}`);
+  }
+
+  const prebriefMs = resolveCallbackAt(input.prebrief_call_at, timezone, now);
+  const delta = prebriefMs - now.getTime();
+  if (delta < 0) throw new Error("prebrief_call_at must be in the future");
+  if (delta > 24 * 60 * 60 * 1000) throw new Error("prebrief_call_at must be within the next 24 hours");
+
+  const callbackMs = Date.parse(callbackAtIso);
+  if (!Number.isFinite(callbackMs)) throw new Error("callback_at must be resolved before prebrief_call_at");
+  if (prebriefMs >= callbackMs) throw new Error("prebrief_call_at must be before callback_at");
+
+  return new Date(prebriefMs).toISOString();
+}
+
 function resolveCallbackAt(value: string, timezone: string, now: Date): number {
   const raw = value?.trim();
   if (!raw) throw new Error("callback_at is required");

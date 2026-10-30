@@ -202,6 +202,57 @@ describe("DebriefService", () => {
     }
   });
 
+  it("schedules a prebrief call before the callback and rejects one on or after it", async () => {
+    const { client, service } = await persistentSetup();
+    try {
+      const callbackAt = new Date(Date.now() + 2 * 3600_000).toISOString();
+      const prebriefCallAt = new Date(Date.now() + 3600_000).toISOString();
+      const prepared = await service.prepareDebrief({
+        goal: "Close the renewal", company: "Acme Corp", contactName: "John Doe", location: "Köln Café",
+        callbackAt, callbackTimezone: "Europe/Berlin", prebriefCallAt,
+      });
+      expect("prebrief_call_at" in prepared && prepared.prebrief_call_at).toBe(prebriefCallAt);
+
+      const afterCallback = new Date(Date.now() + 2.5 * 3600_000).toISOString();
+      await expect(service.prepareDebrief({
+        goal: "Close the renewal", company: "Acme Corp", contactName: "John Doe", location: "Köln Café",
+        callbackAt, callbackTimezone: "Europe/Berlin", prebriefCallAt: afterCallback,
+      })).rejects.toThrow("prebrief_call_at must be before callback_at");
+
+      await expect(service.prepareDebrief({
+        goal: "Close the renewal", company: "Acme Corp", contactName: "John Doe", location: "Köln Café",
+        prebriefCallAt,
+      })).rejects.toThrow("prebrief_call_at requires callback_at and callback_timezone");
+    } finally {
+      client.close();
+    }
+  });
+
+  it("saves a prebrief call's meeting plan without touching session state, then surfaces it for the debrief call", async () => {
+    const { client, service } = await persistentSetup();
+    try {
+      const prepared = await service.prepareDebrief({ goal: "Close the renewal", company: "Acme Corp", contactName: "John Doe", location: "Köln Café" });
+      expect(await service.getMeetingPlan(prepared.sessionId)).toBeNull();
+
+      const saved = await service.saveMeetingPlan(prepared.sessionId, "  Push for a 2-year contract and address the support SLA concern.  ");
+      expect(saved.plan).toBe("Push for a 2-year contract and address the support SLA concern.");
+      expect(await service.getMeetingPlan(prepared.sessionId)).toBe("Push for a 2-year contract and address the support SLA concern.");
+
+      // Saving the plan is draft-independent: the session is untouched.
+      expect(service.getSession(prepared.sessionId).state).toBe("prepared");
+      await expect(service.getDraft(prepared.sessionId)).resolves.toBeNull();
+
+      const events = (await service.listCustomerEvents(prepared.customerId!)).filter((event) => event.sessionId === prepared.sessionId);
+      expect(events).toEqual(expect.arrayContaining([
+        expect.objectContaining({ type: "meeting_plan", payload: { plan: "Push for a 2-year contract and address the support SLA concern." } }),
+      ]));
+
+      await expect(service.saveMeetingPlan(prepared.sessionId, "   ")).rejects.toThrow("Meeting plan must not be empty");
+    } finally {
+      client.close();
+    }
+  });
+
   it("keeps partial completion free of confirmed events", async () => {
     const { client, service } = await persistentSetup();
     try {

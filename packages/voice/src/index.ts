@@ -11,6 +11,7 @@ export {
   type VoicePhoneOptions,
   type VoiceRealtimeOptions,
   type VoiceSessionHooks,
+  type VoiceToolSet,
 } from "./channel.js";
 export * from "./realtime.js";
 export * from "./http.js";

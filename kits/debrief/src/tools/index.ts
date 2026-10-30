@@ -11,6 +11,7 @@ export type DebriefToolName =
   | "get_debrief_draft"
   | "get_debrief_for_confirmation"
   | "update_debrief_draft"
+  | "save_meeting_plan"
   | "confirm_debrief_draft"
   | "confirm_debrief"
   | "teach_from_correction"
@@ -67,6 +68,7 @@ export function createDebriefTools(
         callback_at: z.string().min(1).describe("When the phone should ring: ISO timestamp or HH:mm"),
         callback_timezone: z.string().min(1).describe("IANA timezone for callback_at, for example Europe/Berlin"),
         buffer_minutes: z.number().int().min(0).max(1440).optional().default(0).describe("Optional scheduling buffer after callback_at"),
+        prebrief_call_at: z.string().min(1).optional().describe("Optional ISO timestamp or HH:mm (in callback_timezone) for an earlier prep call; must be before callback_at"),
       }),
       handlers,
     ),
@@ -110,6 +112,15 @@ export function createDebriefTools(
         customer_update: z.string().optional().describe("What changed for the customer"),
         discovered_address: z.string().optional().describe("A new customer address learned on the call"),
         follow_up_date: z.string().optional().describe("The agreed follow-up date, as YYYY-MM-DD when a date was named"),
+      }),
+      handlers,
+    ),
+    tool(
+      "save_meeting_plan",
+      "Save the rep's stated plan for an upcoming sales meeting, captured on an optional prebrief call. Never writes debrief draft fields.",
+      z.object({
+        session_id: z.string().min(1).describe("The shared debrief session ID"),
+        plan: z.string().min(1).describe("What the rep wants to achieve and any concerns, as stated on the prebrief call"),
       }),
       handlers,
     ),

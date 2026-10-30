@@ -3,10 +3,14 @@ import { defineJob, dispatchJob, type JobDefinition, type KitContext } from "@ki
 
 export type ScheduledCallStatus = "scheduled" | "starting" | "started" | "failed";
 
+/** The debrief call happens after the meeting; the prebrief call happens before it. */
+export type ScheduledCallPurpose = "debrief" | "prebrief";
+
 export interface ScheduledCallRecord {
   scheduledCallId: string;
   orgId: string;
   sessionId: string;
+  purpose: ScheduledCallPurpose;
   scheduledAt: string;
   status: ScheduledCallStatus;
   attemptCount: number;
@@ -22,6 +26,8 @@ export interface ScheduleCallInput {
   orgId: string;
   sessionId: string;
   scheduledAt: string;
+  /** Defaults to "debrief"; a session may have one scheduled call per purpose. */
+  purpose?: ScheduledCallPurpose;
   scheduledCallId?: string;
 }
 
@@ -63,11 +69,20 @@ export interface CreateScheduledCallStoreOptions {
   createScheduledCallId?: () => string;
 }
 
+// `purpose` distinguishes the one-time prebrief call from the primary
+// debrief call; a session may have at most one scheduled call per purpose.
+// A database created before `purpose` existed still enforces the single
+// `session_id UNIQUE` constraint baked into its table definition (SQLite
+// cannot alter that away without recreating the table), so such a database
+// must be recreated before a second (prebrief) job can be scheduled for the
+// same session. Fresh databases, including every test run, get the
+// composite constraint directly.
 const CREATE_SCHEMA_SQL = `
   CREATE TABLE IF NOT EXISTS scheduled_calls (
     scheduled_call_id TEXT PRIMARY KEY,
     org_id TEXT NOT NULL,
-    session_id TEXT NOT NULL UNIQUE,
+    session_id TEXT NOT NULL,
+    purpose TEXT NOT NULL DEFAULT 'debrief' CHECK (purpose IN ('debrief', 'prebrief')),
     scheduled_at TEXT NOT NULL,
     status TEXT NOT NULL CHECK (status IN ('scheduled', 'starting', 'started', 'failed')),
     attempt_count INTEGER NOT NULL DEFAULT 0,
@@ -76,7 +91,8 @@ const CREATE_SCHEMA_SQL = `
     provider_call_id TEXT,
     error TEXT,
     created_at TEXT NOT NULL,
-    updated_at TEXT NOT NULL
+    updated_at TEXT NOT NULL,
+    UNIQUE (session_id, purpose)
   );
   CREATE INDEX IF NOT EXISTS scheduled_calls_due_idx
     ON scheduled_calls (org_id, status, scheduled_at, scheduled_call_id);
@@ -100,7 +116,16 @@ export class LibsqlScheduledCallStore implements ScheduledCallOperations {
   ) {
     this.now = options.now ?? (() => new Date().toISOString());
     this.createScheduledCallId = options.createScheduledCallId ?? (() => `scheduled-${crypto.randomUUID()}`);
-    this.initialized = client.executeMultiple(CREATE_SCHEMA_SQL).then(() => undefined);
+    this.initialized = client.executeMultiple(CREATE_SCHEMA_SQL).then(async () => {
+      // Idempotent catch-up for a database created before `purpose` existed.
+      // Its `session_id` column keeps enforcing a single-row-per-session
+      // UNIQUE constraint from its original table definition; scheduling a
+      // second (prebrief) job for the same session there still fails until
+      // that database is recreated.
+      const columns = await client.execute("PRAGMA table_info(scheduled_calls)");
+      const names = new Set(columns.rows.map((row) => String((row as Record<string, unknown>).name)));
+      if (!names.has("purpose")) await client.execute("ALTER TABLE scheduled_calls ADD COLUMN purpose TEXT NOT NULL DEFAULT 'debrief'");
+    });
   }
 
   async schedule(input: ScheduleCallInput): Promise<ScheduledCallRecord> {
@@ -108,20 +133,21 @@ export class LibsqlScheduledCallStore implements ScheduledCallOperations {
     assertNonEmpty(input.sessionId, "sessionId");
     assertTimestamp(input.scheduledAt);
     await this.initialized;
+    const purpose = input.purpose ?? "debrief";
     const timestamp = this.now();
     await this.client.execute({
       sql: `INSERT INTO scheduled_calls
-        (scheduled_call_id, org_id, session_id, scheduled_at, status, attempt_count,
+        (scheduled_call_id, org_id, session_id, purpose, scheduled_at, status, attempt_count,
          lease_owner, lease_expires_at, provider_call_id, error, created_at, updated_at)
-        VALUES (?, ?, ?, ?, 'scheduled', 0, NULL, NULL, NULL, NULL, ?, ?)
-        ON CONFLICT(session_id) DO UPDATE SET
+        VALUES (?, ?, ?, ?, ?, 'scheduled', 0, NULL, NULL, NULL, NULL, ?, ?)
+        ON CONFLICT(session_id, purpose) DO UPDATE SET
           scheduled_at = excluded.scheduled_at,
           updated_at = excluded.updated_at
         WHERE scheduled_calls.status = 'scheduled'`,
-      args: [input.scheduledCallId ?? this.createScheduledCallId(), input.orgId, input.sessionId, input.scheduledAt, timestamp, timestamp] as InValue[],
+      args: [input.scheduledCallId ?? this.createScheduledCallId(), input.orgId, input.sessionId, purpose, input.scheduledAt, timestamp, timestamp] as InValue[],
     });
-    const record = await this.findBySession(input.orgId, input.sessionId);
-    if (!record) throw new Error(`Scheduled call for session "${input.sessionId}" was not readable after schedule`);
+    const record = await this.findBySession(input.orgId, input.sessionId, purpose);
+    if (!record) throw new Error(`Scheduled call for session "${input.sessionId}" (${purpose}) was not readable after schedule`);
     return record;
   }
 
@@ -214,10 +240,10 @@ export class LibsqlScheduledCallStore implements ScheduledCallOperations {
     await this.client.execute({ sql: "DELETE FROM scheduled_calls WHERE org_id = ?", args: [orgId] });
   }
 
-  private async findBySession(orgId: string, sessionId: string): Promise<ScheduledCallRecord | null> {
+  private async findBySession(orgId: string, sessionId: string, purpose: ScheduledCallPurpose): Promise<ScheduledCallRecord | null> {
     const result = await this.client.execute({
-      sql: "SELECT * FROM scheduled_calls WHERE org_id = ? AND session_id = ? LIMIT 1",
-      args: [orgId, sessionId],
+      sql: "SELECT * FROM scheduled_calls WHERE org_id = ? AND session_id = ? AND purpose = ? LIMIT 1",
+      args: [orgId, sessionId, purpose],
     });
     return result.rows.length ? mapScheduledCall(result.rows[0] as Row) : null;
   }
@@ -369,6 +395,7 @@ function mapScheduledCall(row: Row): ScheduledCallRecord {
     scheduledCallId: String(row.scheduled_call_id),
     orgId: String(row.org_id),
     sessionId: String(row.session_id),
+    purpose: (row.purpose === "prebrief" ? "prebrief" : "debrief"),
     scheduledAt: String(row.scheduled_at),
     status: String(row.status) as ScheduledCallStatus,
     attemptCount: Number(row.attempt_count),

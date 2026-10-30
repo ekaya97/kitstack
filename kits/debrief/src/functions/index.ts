@@ -14,7 +14,7 @@ import type {
   DebriefDraftStatus,
   DebriefPersistence,
 } from "./persistence.js";
-import { normalizeDebriefSchedule } from "../timing.js";
+import { normalizeDebriefSchedule, normalizePrebriefCallAt } from "../timing.js";
 
 export type DebriefState = "prepared" | "calling" | "awaiting_confirmation" | "partial" | "confirmed" | "failed";
 
@@ -53,6 +53,8 @@ export interface DebriefPreparationInput extends CustomerIdentityInput {
   scheduledCallAt?: string;
   callbackTimezone?: string;
   bufferMinutes?: number;
+  /** Optional earlier call, before the sales meeting; must resolve before callbackAt. */
+  prebriefCallAt?: string;
 }
 
 export interface DebriefServiceOptions {
@@ -117,6 +119,8 @@ export type PreparedDebriefResult = DebriefSession & {
   readonly destination_masked: string;
   readonly kit_view: { readonly kit_id: "debrief"; readonly view: string; readonly reason: string };
   readonly prebrief_sections: PrebriefSections;
+  /** When set, the host also schedules an earlier prebrief call for this session. */
+  readonly prebrief_call_at?: string;
 };
 
 export class DebriefService {
@@ -153,6 +157,15 @@ export class DebriefService {
         callback_timezone: preparation.callbackTimezone!,
         buffer_minutes: preparation.bufferMinutes,
       }, new Date(this.now()))
+      : undefined;
+    const prebriefCallAt = preparation.prebriefCallAt?.trim()
+      ? (() => {
+        if (!schedule) throw new Error("prebrief_call_at requires callback_at and callback_timezone");
+        return normalizePrebriefCallAt({
+          prebrief_call_at: preparation.prebriefCallAt!,
+          callback_timezone: schedule.callback_timezone,
+        }, schedule.callback_at, new Date(this.now()));
+      })()
       : undefined;
     const customer = hasCustomerIdentity(preparation)
       ? await this.persistence?.upsertCustomer(this.context.orgId, preparation, { sessionId, traceId: sessionId })
@@ -193,6 +206,7 @@ export class DebriefService {
         contact_name: customer.contactName,
         location: customer.location,
         ...(schedule ? { prebrief_ends_at: schedule.prebrief_ends_at, scheduled_call_at: schedule.scheduled_call_at } : {}),
+        ...(prebriefCallAt ? { prebrief_call_at: prebriefCallAt } : {}),
       });
     }
     if (!schedule || !customer) {
@@ -232,6 +246,7 @@ export class DebriefService {
       scheduled_call_at: schedule.scheduled_call_at,
       destination_masked: this.context.destinationMasked ?? "configured demo destination",
       kit_view: { kit_id: "debrief", view: "prebrief", reason: "Review customer context before the scheduled call" },
+      ...(prebriefCallAt ? { prebrief_call_at: prebriefCallAt } : {}),
     };
   }
 
@@ -447,6 +462,32 @@ export class DebriefService {
     };
     await this.persistDraft(draft);
     return { ...draft, fields: { ...draft.fields } };
+  }
+
+  /**
+   * Save what the rep wants to achieve in the upcoming meeting, captured on
+   * an optional prebrief call. This is draft-independent: it never touches
+   * the debrief draft and never moves the session toward confirmation.
+   */
+  async saveMeetingPlan(sessionId: string, plan: string): Promise<{ sessionId: string; plan: string }> {
+    const session = this.require(sessionId);
+    const trimmed = plan.trim();
+    if (!trimmed) throw new Error("Meeting plan must not be empty");
+    await this.appendCustomerEvent(session, "meeting_plan", { plan: trimmed }, `meeting-plan-${this.id()}`);
+    await this.emit(session, "save_meeting_plan", "success");
+    return { sessionId, plan: trimmed };
+  }
+
+  /** The meeting plan saved for this exact session's prebrief call, if any. */
+  async getMeetingPlan(sessionId: string): Promise<string | null> {
+    const session = this.require(sessionId);
+    if (!session.customerId) return null;
+    const events = await this.listCustomerEvents(session.customerId);
+    const plan = events
+      .filter((event) => event.sessionId === sessionId && event.type === "meeting_plan")
+      .sort((a, b) => b.occurredAt.localeCompare(a.occurredAt))[0];
+    const value = plan?.payload.plan;
+    return typeof value === "string" && value.trim() ? value.trim() : null;
   }
 
   async setCallId(sessionId: string, callId: string): Promise<DebriefSession> {

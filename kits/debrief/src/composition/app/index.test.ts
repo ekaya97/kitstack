@@ -94,6 +94,68 @@ describe("DemoApp", () => {
     await restartedApp.close();
   });
 
+  it("schedules a debrief and a prebrief call when prepare_debrief is given a prebrief_call_at", async () => {
+    const app = await createDemoApp({ url: ":memory:" });
+    const callbackAt = new Date(Date.now() + 2 * 3600_000).toISOString();
+    const prebriefCallAt = new Date(Date.now() + 3600_000).toISOString();
+    const context = { orgId: app.orgId, appId: app.appId, sessionId: "prepare", traceId: "prepare", parentId: null, telemetry: app.telemetry };
+
+    const prepared = await app.plugins.dispatch<Record<string, unknown>, Record<string, unknown>>("kit:debrief", {
+      operation: "prepare",
+      goal: "Close the renewal",
+      company: "Acme Corp",
+      contactName: "John Doe",
+      location: "Köln Café",
+      callbackAt,
+      callbackTimezone: "Europe/Berlin",
+      prebriefCallAt,
+    }, context);
+    const sessionId = String(prepared.session_id);
+    expect(prepared.prebrief_call_at).toBe(prebriefCallAt);
+
+    const jobs = (await app.scheduler.list(app.orgId)).filter((job) => job.sessionId === sessionId);
+    expect(jobs).toHaveLength(2);
+    const byPurpose = Object.fromEntries(jobs.map((job) => [job.purpose, job]));
+    expect(byPurpose.debrief).toMatchObject({ scheduledAt: prepared.scheduled_call_at, status: "scheduled" });
+    expect(byPurpose.prebrief).toMatchObject({ scheduledAt: prebriefCallAt, status: "scheduled" });
+
+    // Without prebrief_call_at, exactly one (debrief) job is scheduled, unchanged from before.
+    const debriefOnly = await app.plugins.dispatch<Record<string, unknown>, Record<string, unknown>>("kit:debrief", {
+      operation: "prepare",
+      goal: "Follow up",
+      company: "Acme Corp",
+      contactName: "John Doe",
+      location: "Köln Café",
+      callbackAt,
+      callbackTimezone: "Europe/Berlin",
+    }, context);
+    const debriefOnlyJobs = (await app.scheduler.list(app.orgId)).filter((job) => job.sessionId === String(debriefOnly.session_id));
+    expect(debriefOnlyJobs.map((job) => job.purpose)).toEqual(["debrief"]);
+
+    await app.close();
+  });
+
+  it("rejects a prebrief_call_at that is not before callback_at", async () => {
+    const app = await createDemoApp({ url: ":memory:" });
+    const callbackAt = new Date(Date.now() + 2 * 3600_000).toISOString();
+    const afterCallback = new Date(Date.now() + 2.5 * 3600_000).toISOString();
+    const context = { orgId: app.orgId, appId: app.appId, sessionId: "prepare", traceId: "prepare", parentId: null, telemetry: app.telemetry };
+
+    await expect(app.plugins.dispatch("kit:debrief", {
+      operation: "prepare",
+      goal: "Close the renewal",
+      company: "Acme Corp",
+      contactName: "John Doe",
+      location: "Köln Café",
+      callbackAt,
+      callbackTimezone: "Europe/Berlin",
+      prebriefCallAt: afterCallback,
+    }, context)).rejects.toThrow("prebrief_call_at must be before callback_at");
+
+    expect(await app.scheduler.list(app.orgId)).toEqual([]);
+    await app.close();
+  });
+
   it("replays approved memories only within the customer and organization scope", async () => {
     const directory = mkdtempSync(join(tmpdir(), "kitstack-demo-customer-scope-"));
     temporaryDirectories.push(directory);

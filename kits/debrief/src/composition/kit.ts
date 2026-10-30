@@ -59,6 +59,7 @@ function createDebriefToolHandlers(app: DemoApp): Record<DebriefToolName, Debrie
       callbackAt: String(args.callback_at),
       callbackTimezone: String(args.callback_timezone),
       bufferMinutes: typeof args.buffer_minutes === "number" ? args.buffer_minutes : 0,
+      ...(typeof args.prebrief_call_at === "string" && args.prebrief_call_at.trim() ? { prebriefCallAt: args.prebrief_call_at } : {}),
       }, pluginContext(app, ctx));
       const sessionId = typeof prepared.sessionId === "string" ? prepared.sessionId : undefined;
       const account = sessionId ? await crmAccountFor(app, crm(ctx), sessionId) : null;
@@ -70,6 +71,7 @@ function createDebriefToolHandlers(app: DemoApp): Record<DebriefToolName, Debrie
     get_debrief_draft: withSession(async (sessionId) => ({ fields: (await app.debrief.getDraft(sessionId))?.fields ?? {} })),
     get_debrief_for_confirmation: withSession((sessionId) => app.debrief.getDebriefForConfirmation(sessionId)),
     update_debrief_draft: withSession((sessionId, args) => app.debrief.updateDebriefDraft(sessionId, draftUpdate(args))),
+    save_meeting_plan: withSession((sessionId, args) => app.debrief.saveMeetingPlan(sessionId, String(args.plan))),
     confirm_debrief_draft: withSession(async (sessionId, _args, ctx) => {
       const confirmation = await app.debrief.confirmDebriefDraft(sessionId);
       // Confirmation is the act boundary for external writes; a CRM failure

@@ -149,6 +149,43 @@ describe("persisted scheduled calls", () => {
     expect(failures).toEqual(["session-1:Error: provider unavailable"]);
   });
 
+  it("schedules a debrief and a prebrief job for the same session with different purposes", async () => {
+    const clock = new FakeClock("2026-09-15T18:00:00.000Z");
+    let n = 0;
+    const store = createScheduledCallStore(database(), { now: clock.now, createScheduledCallId: () => `scheduled-${++n}` });
+    const debrief = await store.schedule({ orgId: "org-demo", sessionId: "session-1", scheduledAt: "2026-09-15T20:00:00.000Z", purpose: "debrief" });
+    const prebrief = await store.schedule({ orgId: "org-demo", sessionId: "session-1", scheduledAt: "2026-09-15T19:00:00.000Z", purpose: "prebrief" });
+    expect(debrief.purpose).toBe("debrief");
+    expect(prebrief.purpose).toBe("prebrief");
+    expect(debrief.scheduledCallId).not.toBe(prebrief.scheduledCallId);
+
+    const jobs = await store.list("org-demo");
+    expect(jobs.map((job) => ({ purpose: job.purpose, scheduledAt: job.scheduledAt }))).toEqual([
+      { purpose: "prebrief", scheduledAt: "2026-09-15T19:00:00.000Z" },
+      { purpose: "debrief", scheduledAt: "2026-09-15T20:00:00.000Z" },
+    ]);
+
+    // Claiming due jobs in order carries the purpose through to the provider seam.
+    clock.advance(2 * 3600_000);
+    const claimedPurposes: string[] = [];
+    const poller = new ScheduledCallPoller({
+      operations: store,
+      orgId: "org-demo",
+      workerId: "worker-1",
+      now: clock.now,
+      startCall: async (job) => { claimedPurposes.push(job.purpose); return `CA-${job.purpose}`; },
+    });
+    expect(await poller.pollOnce()).toMatchObject({ purpose: "prebrief", providerCallId: "CA-prebrief" });
+    expect(await poller.pollOnce()).toMatchObject({ purpose: "debrief", providerCallId: "CA-debrief" });
+    expect(claimedPurposes).toEqual(["prebrief", "debrief"]);
+  });
+
+  it("schedules without a purpose as a debrief job, matching the pre-existing single-call behavior", async () => {
+    const store = createScheduledCallStore(database(), { createScheduledCallId: () => "scheduled-1" });
+    const scheduled = await store.schedule(input("2026-09-15T20:05:00.000Z"));
+    expect(scheduled.purpose).toBe("debrief");
+  });
+
   it("clears scheduled calls on reset", async () => {
     const store = createScheduledCallStore(database(), { createScheduledCallId: () => "scheduled-1" });
     await store.schedule(input("2026-09-15T20:00:00.000Z"));

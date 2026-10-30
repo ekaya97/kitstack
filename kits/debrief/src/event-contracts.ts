@@ -4,4 +4,5 @@ export type CustomerEventType =
   | "call_completed"
   | "note"
   | "address_discovered"
-  | "debrief_confirmed";
+  | "debrief_confirmed"
+  | "meeting_plan";

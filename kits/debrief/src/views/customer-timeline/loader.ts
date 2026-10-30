@@ -152,6 +152,12 @@ function projectEvent(event: CustomerTimelineEventSnapshot): CustomerTimelineEve
         summary: "Sales debrief prepared.",
         details: strings(payload, ["goal", "company", "contact_name", "location"]),
       };
+    case "meeting_plan":
+      return {
+        ...eventIdentity(event),
+        summary: "Meeting plan saved on the prebrief call.",
+        details: strings(payload, ["plan"]),
+      };
     default:
       throw new Error(`Unsupported customer timeline event: ${String(event.type)}`);
   }

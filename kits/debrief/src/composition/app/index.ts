@@ -170,6 +170,7 @@ export async function createDemoApp(options: CreateDemoAppOptions = {}): Promise
         callbackAt?: string;
         callbackTimezone?: string;
         bufferMinutes?: number;
+        prebriefCallAt?: string;
         correction?: string;
         outcome?: "confirmed" | "partial";
         memoryId?: string;
@@ -184,13 +185,23 @@ export async function createDemoApp(options: CreateDemoAppOptions = {}): Promise
             callbackAt: request.callbackAt,
             callbackTimezone: request.callbackTimezone,
             bufferMinutes: request.bufferMinutes,
+            prebriefCallAt: request.prebriefCallAt,
           });
           if ("scheduled_call_at" in prepared && "session_id" in prepared) {
             await scheduler.schedule({
               orgId,
               sessionId: String(prepared.session_id),
               scheduledAt: String(prepared.scheduled_call_at),
+              purpose: "debrief",
             });
+            if ("prebrief_call_at" in prepared && prepared.prebrief_call_at) {
+              await scheduler.schedule({
+                orgId,
+                sessionId: String(prepared.session_id),
+                scheduledAt: String(prepared.prebrief_call_at),
+                purpose: "prebrief",
+              });
+            }
           }
           return prepared;
         }

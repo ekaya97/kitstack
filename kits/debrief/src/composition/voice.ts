@@ -46,6 +46,9 @@ export async function createDebriefVoiceChannel(
 
   const baseInstructions = readFileSync(new URL("../instructions/debrief-baseline.md", import.meta.url), "utf8");
   const baseVersion = `sha256:${createHash("sha256").update(baseInstructions, "utf8").digest("hex")}`;
+  const prebriefCallInstructions = readFileSync(new URL("../instructions/prebrief-call-baseline.md", import.meta.url), "utf8");
+  const prebriefCallVersion = `sha256:${createHash("sha256").update(prebriefCallInstructions, "utf8").digest("hex")}`;
+  const voiceTools = createDebriefVoiceTools(kit, executor);
   const route = await app.modelRouter.resolve("conversation", { orgId: app.orgId, appId: app.appId, kitId: "kit:debrief", pluginId: "channel:voice" });
 
   return createVoiceChannel({
@@ -79,20 +82,37 @@ export async function createDebriefVoiceChannel(
     } : {}),
     localHarness: true,
     bargeInMs: optionalNumber(value("KITSTACK_VOICE_BARGE_IN_MS")),
-    tools: createDebriefVoiceTools(kit, executor),
-    briefing: (call) => debriefBriefing(app, call, baseInstructions, baseVersion, crm),
+    tools: (call) => voiceTools.forPurpose(call.purpose),
+    briefing: (call) => call.purpose === "prebrief"
+      ? prebriefCallBriefing(app, call, prebriefCallInstructions, prebriefCallVersion, crm)
+      : debriefBriefing(app, call, baseInstructions, baseVersion, crm),
     sessions: {
-      async startSession(sessionId, channel) {
+      async startSession(sessionId, channel, purpose) {
         const session = app.debrief.getSession(sessionId);
         if (channel === "local" && session.state !== "prepared") throw new Error(`Local voice session must be prepared, received ${session.state}`);
-        await app.debrief.markCalling(sessionId);
+        // A prebrief call never moves the session out of "prepared": the
+        // later debrief call must find it exactly as it was scheduled.
+        if (purpose !== "prebrief") await app.debrief.markCalling(sessionId);
         return { orgId: session.orgId, appId: app.appId };
       },
       onCallStarted: async (sessionId, callId) => { await app.debrief.setCallId(sessionId, callId); },
-      onStartFailed: async (sessionId, error) => { await app.debrief.markFailed(sessionId, error); },
-      onAgentFinished: async (sessionId) => { await app.debrief.awaitConfirmation(sessionId); },
+      onStartFailed: async (sessionId, error, purpose) => {
+        if (purpose === "prebrief") {
+          await emitPrebriefTelemetry(app, sessionId, "prebrief.start_failed", "error");
+          return;
+        }
+        await app.debrief.markFailed(sessionId, error);
+      },
+      onAgentFinished: async (sessionId, purpose) => {
+        if (purpose === "prebrief") return;
+        await app.debrief.awaitConfirmation(sessionId);
+      },
       onCallInterrupted: async (sessionId, reason) => { await app.debrief.endCallAfterInterruption(sessionId, reason); },
       onCallCompleted: async (call) => {
+        if (call.purpose === "prebrief") {
+          await emitPrebriefTelemetry(app, call.sessionId, "prebrief.call_completed", "success", call.provider, call.callId);
+          return;
+        }
         const session = app.debrief.getSession(call.sessionId);
         await app.debrief.recordCallCompleted(call);
         await app.telemetry.append({
@@ -110,8 +130,26 @@ export async function createDebriefVoiceChannel(
   });
 }
 
-/** The debrief agent's per-call instructions: goal, customer, history and approved feedback. */
-async function debriefBriefing(app: DemoApp, call: VoiceCall, baseInstructions: string, baseVersion: string, crm?: CrmClient) {
+/** Metadata-only telemetry for a prebrief call outcome; never changes session state. */
+async function emitPrebriefTelemetry(
+  app: DemoApp,
+  sessionId: string,
+  operation: string,
+  outcome: "success" | "error",
+  provider?: string,
+  callId?: string | null,
+): Promise<void> {
+  const session = app.debrief.getSession(sessionId);
+  await app.telemetry.append({
+    id: crypto.randomUUID(), timestamp: new Date().toISOString(), orgId: session.orgId, appId: app.appId,
+    customerId: session.customerId, sessionId, traceId: sessionId,
+    channel: "voice", pluginId: "kit:debrief", kitId: session.kitId, type: "voice.call",
+    operation, outcome, ...(provider ? { provider } : {}), ...(callId ? { callId } : {}),
+  });
+}
+
+/** Shared retrieval for both the debrief and prebrief call briefings. */
+async function briefingContext(app: DemoApp, call: VoiceCall, crm?: CrmClient) {
   const session = app.debrief.getSession(call.sessionId);
   const customer = session.customerId ? await app.debrief.getCustomer(session.customerId) : null;
   const history = session.customerId ? await app.debrief.recentDebriefSummaries(session.customerId) : [];
@@ -131,11 +169,19 @@ async function debriefBriefing(app: DemoApp, call: VoiceCall, baseInstructions: 
   });
   const selected = records.filter((record) => session.memoryIds.includes(record.memoryId));
   const crmLines = crmBriefingLines(await crmAccountFor(app, crm, session.sessionId));
+  return { session, customer, history, selected, crmLines };
+}
+
+/** The debrief agent's per-call instructions: goal, customer, history and approved feedback. */
+async function debriefBriefing(app: DemoApp, call: VoiceCall, baseInstructions: string, baseVersion: string, crm?: CrmClient) {
+  const { session, customer, history, selected, crmLines } = await briefingContext(app, call, crm);
+  const meetingPlan = await app.debrief.getMeetingPlan(session.sessionId);
   const content = [
     baseInstructions.trim(),
     "\nPrepared debrief context:",
     `Goal: ${session.goal}`,
     customer ? `Customer: ${customer.company}; contact ${customer.contactName}; location ${customer.location}` : "Customer: unavailable.",
+    ...(meetingPlan ? [`The rep planned before this meeting: ${meetingPlan}\nAsk how it went against that plan.`] : []),
     ...(crmLines.length ? [`CRM context (read-only; do not read it out verbatim):\n${crmLines.map((line) => `- ${line}`).join("\n")}`] : []),
     history.length
       ? `Previous confirmed debriefs with this customer (newest first). Refer to them and ask how the agreed next steps went:\n${history.map((entry) => `- ${entry}`).join("\n")}`
@@ -148,6 +194,33 @@ async function debriefBriefing(app: DemoApp, call: VoiceCall, baseInstructions: 
   return {
     content,
     version: `${baseVersion}:${call.channel}:${createHash("sha256").update(content, "utf8").digest("hex").slice(0, 16)}`,
+    memoryIds: selected.map((record) => record.memoryId),
+  };
+}
+
+/**
+ * The prebrief agent's per-call instructions: a short spoken summary of the
+ * customer, then collect the rep's plan for the meeting. It never mentions
+ * the debrief draft or confirmation, and saves only the meeting plan.
+ */
+async function prebriefCallBriefing(app: DemoApp, call: VoiceCall, baseInstructions: string, baseVersion: string, crm?: CrmClient) {
+  const { session, customer, history, selected, crmLines } = await briefingContext(app, call, crm);
+  const content = [
+    baseInstructions.trim(),
+    "\nUpcoming sales meeting:",
+    `Goal: ${session.goal}`,
+    customer ? `Customer: ${customer.company}; contact ${customer.contactName}; location ${customer.location}` : "Customer: unavailable.",
+    ...(crmLines.length ? [`CRM context (read-only; do not read it out verbatim):\n${crmLines.map((line) => `- ${line}`).join("\n")}`] : []),
+    history.length
+      ? `Previous confirmed debriefs with this customer (newest first):\n${history.map((entry) => `- ${entry}`).join("\n")}`
+      : "Previous confirmed debriefs with this customer: none.",
+    selected.length ? `Approved workflow feedback:\n${selected.map((record) => `- ${record.correction}`).join("\n")}` : "Approved workflow feedback: none.",
+    "Greet the rep, give a short spoken summary of the above, then ask what they want to achieve on this call and any concerns. When they answer, call save_meeting_plan with that as the plan. Do not mention or call update_debrief_draft, and do not ask for any confirmation in Claude on this call.",
+    "Once the plan is saved, wish the rep luck, say goodbye, then call end_call.",
+  ].join("\n");
+  return {
+    content,
+    version: `${baseVersion}:${call.channel}:prebrief:${createHash("sha256").update(content, "utf8").digest("hex").slice(0, 16)}`,
     memoryIds: selected.map((record) => record.memoryId),
   };
 }

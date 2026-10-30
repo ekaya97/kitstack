@@ -15,6 +15,7 @@ const badgeColors: Record<CustomerTimelineEvent["type"], { background: string; c
   note: { background: "#fef3c7", color: "#92400e" },
   address_discovered: { background: "#ecfdf5", color: "#166534" },
   debrief_confirmed: { background: "#dcfce7", color: "#166534" },
+  meeting_plan: { background: "#fdf4ff", color: "#86198f" },
 };
 
 export function CustomerTimelineView({ data: initialData, host }: ViewComponentProps<CustomerTimelineViewData>) {

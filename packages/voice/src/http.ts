@@ -12,6 +12,7 @@ import {
   type VoiceWebSocket,
   type SessionBinding,
   type VoiceTelemetrySink,
+  type RealtimeFunctionTool,
 } from "./realtime.js";
 
 export interface VoiceHttpRequest {
@@ -48,7 +49,7 @@ export interface LiveVoiceHttpOptions {
   /** Require an explicit confirmation flag at the protected action boundary. */
   requireConfirmation?: boolean;
   /** Lifecycle hooks keep the provider action tied to the kit's session state machine. */
-  beforeStart?: (sessionId: string) => Promise<void>;
+  beforeStart?: (sessionId: string, purpose?: string) => Promise<void>;
   onFailure?: (sessionId: string, error: unknown) => Promise<void>;
   onProviderStart?: (sessionId: string, callId: string) => Promise<void>;
   /** Signed Twilio status callbacks are accepted without dashboard/admin auth. */
@@ -75,6 +76,7 @@ export interface CompletedCallMetadata {
   reason: string;
   occurredAt: string;
   provider: string;
+  purpose?: string;
 }
 
 /** Framework-neutral action used by a protected dashboard/MCP layer. */
@@ -100,19 +102,24 @@ export async function handleLiveVoiceStart(
 export async function startScheduledLiveVoiceCall(
   sessionId: string,
   options: LiveVoiceHttpOptions,
+  purpose?: string,
 ): Promise<Awaited<ReturnType<typeof startRealtimeCall>>> {
   const destination = options.allowedDestinations?.[0];
   if (!destination) throw new Error("No allowlisted live voice destination is configured");
-  return startLiveVoiceCall(sessionId, destination, options);
+  return startLiveVoiceCall(sessionId, destination, options, purpose);
 }
 
 async function startLiveVoiceCall(
   sessionId: string,
   destination: string,
   options: LiveVoiceHttpOptions,
+  purpose?: string,
 ): Promise<Awaited<ReturnType<typeof startRealtimeCall>>> {
   try {
-    await options.beforeStart?.(sessionId);
+    // Omit the second argument entirely when there is no purpose, so a host
+    // that asserts on exact call arguments sees the same shape as before.
+    if (purpose === undefined) await options.beforeStart?.(sessionId);
+    else await options.beforeStart?.(sessionId, purpose);
     const sessionToken = await options.sessionTokenFor(sessionId);
     const identity = options.sessionIdentity?.(sessionId) ?? { orgId: options.orgId, appId: options.appId };
     const result = await startRealtimeCall({
@@ -171,9 +178,11 @@ export interface VoiceMediaBridgeOptions {
   signature?: { validator: TwilioSignatureValidator; url: string; params: Readonly<Record<string, string | string[] | undefined>>; value: string | undefined };
   verifier: SignedSessionTokenVerifier;
   openai: RealtimeSessionOptions;
+  /** Per-call function tools for the model, computed once the session binding is known; overrides `openai.tools`. */
+  toolsFor?: (binding: SessionBinding) => readonly RealtimeFunctionTool[];
   routingReason?: string | null;
   instructionsFor?: (binding: SessionBinding) => Promise<string>;
-  onCallCompleted?: (call: { sessionId: string; orgId: string; appId: string | null; callId: string | null; reason: string; occurredAt: string; provider: string }) => Promise<void>;
+  onCallCompleted?: (call: { sessionId: string; orgId: string; appId: string | null; callId: string | null; reason: string; occurredAt: string; provider: string; purpose?: string }) => Promise<void>;
   stopReason?: string;
   bargeInMs?: number;
   hangupTimeoutMs?: number;
@@ -186,7 +195,7 @@ export interface VoiceMediaBridgeOptions {
 export function attachVoiceMediaBridge(options: VoiceMediaBridgeOptions): TwilioOpenAIBridge {
   return bridgeTwilioToOpenAI({
     twilioSocket: options.socket, signature: options.signature, verifier: options.verifier,
-    openai: options.openai, provider: options.provider, routingReason: options.routingReason, telemetry: options.telemetry, agent: options.agent, instructionsFor: options.instructionsFor, stopReason: options.stopReason, bargeInMs: options.bargeInMs,
+    openai: options.openai, toolsFor: options.toolsFor, provider: options.provider, routingReason: options.routingReason, telemetry: options.telemetry, agent: options.agent, instructionsFor: options.instructionsFor, stopReason: options.stopReason, bargeInMs: options.bargeInMs,
     hangupTimeoutMs: options.hangupTimeoutMs, kitId: options.kitId,
     onCallCompleted: options.onCallCompleted,
   });
