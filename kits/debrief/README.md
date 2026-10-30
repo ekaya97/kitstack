@@ -23,32 +23,44 @@ prepared -> calling -> awaiting_confirmation -> confirmed
 any provider or start error -> failed
 ```
 
-1. **Prebrief.** `prepare_debrief` takes `goal`, `company`, `contact_name`,
-   `location`, `callback_at`, `callback_timezone`, and optional
-   `buffer_minutes`. It upserts the customer, retrieves prior events and
-   approved memories, resolves the instruction version, persists the session,
-   schedules the call, and returns a compact prebrief with `session_id`,
-   `customer_id`, `prebrief_ends_at`, `scheduled_call_at`, a masked
-   destination, and a `kit_view("debrief", "prebrief")` hint.
-2. **Wait.** The `prebrief` View shows customer, contact, location, last
+1. **Register phone.** `register_phone` takes an E.164 number from an allowed
+   country (DE, AT, CH). An SMS verification code is sent via Twilio Verify.
+   `verify_phone` confirms the code. The number is stored encrypted and is
+   never surfaced in a response. `get_phone` shows the masked number and
+   verification status. `remove_phone` deletes it. Limit: 3 registration
+   attempts per hour per user.
+2. **Prepare debrief.** `prepare_debrief` takes `goal`, `company`,
+   `contact_name`, `location`, `callback_at`, `callback_timezone`, optional
+   `buffer_minutes`, and optional `prebrief_call_at`. It upserts the customer,
+   retrieves prior events and approved memories, schedules the debrief call,
+   and optionally schedules an earlier prebrief call. Returns a compact
+   prebrief with `session_id`, `customer_id`, `scheduled_call_at`, and a
+   `kit_view("debrief", "prebrief")` hint.
+3. **Prebrief call (optional).** If `prebrief_call_at` is set, a voice call
+   happens before the meeting. The agent greets the rep, gives a spoken summary
+   of the customer and meeting, then asks the rep's plan and concerns.
+   `save_meeting_plan` captures the rep's answer. No confirmation is needed
+   after this call; it only prepares the rep for the meeting.
+4. **Wait.** The `prebrief` View shows customer, contact, location, last
    interaction, objective, countdown, and provider privacy status. No phone
    number, transcript, or audio.
-3. **Call.** The poller claims the due job once, marks it `starting`, places
-   the Twilio call with `Record=false`, and persists the call SID. A job stuck
-   past its lease is surfaced as failed for operator action and never retried.
-   The media stream is bridged to OpenAI Realtime under the `defineAgent`
-   supervisor.
-4. **Confirm.** `get_debrief_for_confirmation` opens the editable
-   `confirmation` View. `update_debrief_draft` edits outcome, next step,
-   customer update, discovered address, and follow-up date.
-   `confirm_debrief_draft` writes immutable customer events; a second confirm
-   returns the same event IDs.
-5. **Timeline.** `customer-timeline` shows `prebrief`, `call_completed`,
+5. **Debrief call.** After the meeting, the poller claims the due job once,
+   marks it `starting`, places the Twilio call with `Record=false`, and
+   persists the call SID. A job stuck past its lease is surfaced as failed for
+   operator action and never retried. The media stream is bridged to OpenAI
+   Realtime under the `defineAgent` supervisor. If a prebrief call happened,
+   the agent refers to the meeting plan.
+6. **Confirm.** `get_debrief_for_confirmation` opens the editable
+   `confirmation` View. The View shows previous debriefs for the same customer.
+   `update_debrief_draft` edits outcome, next step, customer update, discovered
+   address, and follow-up date. `confirm_debrief_draft` writes immutable
+   customer events; a second confirm returns the same event IDs.
+7. **Timeline.** `customer-timeline` shows `prebrief`, `call_completed`,
    `address_discovered`, and `debrief_confirmed`, newest first, scoped to the
    customer and organization.
-6. **Teach.** `teach_from_correction` creates a candidate memory linked to the
+8. **Teach.** `teach_from_correction` creates a candidate memory linked to the
    session and instruction version. Approval and publication make it
-   retrievable by the next prebrief for the same customer.
+   retrievable by the next debrief for the same customer.
 
 ### Timing rule
 
@@ -67,9 +79,67 @@ hours ahead fails with an actionable error.
 - `createMemoryPolicy()`, `createVoiceChannel()`, and the trigger factories
   define kit-facing policy boundaries.
 
-Tools: `prepare_debrief`, `get_session`, `get_debrief`,
-`get_debrief_for_confirmation`, `update_debrief_draft`,
+Tools: `register_phone`, `verify_phone`, `get_phone`, `remove_phone`,
+`prepare_debrief`, `get_session`, `get_debrief`, `get_debrief_draft`,
+`get_debrief_for_confirmation`, `update_debrief_draft`, `save_meeting_plan`,
 `confirm_debrief_draft`, `confirm_debrief`, `teach_from_correction`.
+
+## Guardrails
+
+- **Allowed countries:** DE (+49), AT (+43), CH (+41) only; enforced at
+  `register_phone` and re-checked at call time.
+- **Verification rate limit:** 3 registration attempts per hour per user.
+- **Daily call cap:** 5 scheduled calls per user in a rolling 24-hour window.
+- **Call duration:** Hard limit of 10 minutes (600 seconds); Twilio ends the
+  call automatically.
+- **Fallback:** Prospects with no verified number cannot place calls. The
+  operator org can use a legacy single-destination allowlist
+  (`KITSTACK_DEMO_ALLOWED_DESTINATION`) while numbers roll out; prospects never
+  fall back to it.
+
+## Access and data separation
+
+- Every debrief tool call and View load needs a `kit:use` grant on kit
+  `debrief` for the user. The router checks it before it calls this service;
+  without it the user is told to ask the KitStack team for access. The web app
+  never lets users activate this kit themselves.
+- Operators are users holding `kit:admin` on organization `org-demo` (directly
+  or through a team or role). They work in `org-demo`, the operator org.
+- Everyone else works in a personal organization, `org-user-<userId>`. Each
+  organization's customers, sessions, drafts, memories, phone numbers and
+  telemetry are separate.
+- This service accepts a router token for a personal org only for its own user.
+  `KITSTACK_DEMO_INTERNAL_USER_ORG_ALLOWLIST` (deployed as `*=org-demo`) admits
+  the router's operators to `org-demo`; an explicit `<userId>=<org>` entry
+  takes precedence over `*`.
+- Prebrief and debrief calls both ring the session owner's verified number.
+  Only sessions in the operator org fall back to
+  `KITSTACK_DEMO_ALLOWED_DESTINATION`; any other session without a usable
+  number fails instead of calling someone else.
+
+## Configuration
+
+- `TWILIO_VERIFY_SERVICE_SID` (SST secret `TwilioVerifyServiceSid`): the Twilio
+  Verify service used for SMS codes. When it is empty, `register_phone` and
+  `verify_phone` fail with a clear error.
+- Turn-taking overrides, read at deploy time by `infra/demo.ts`; unset values
+  use the defaults in `packages/voice`:
+  - `OPENAI_REALTIME_VAD_THRESHOLD`: how loud speech must be to count, 0–1.
+    Default 0.55.
+  - `OPENAI_REALTIME_SILENCE_MS`: the pause that ends the caller's turn before
+    the agent answers. Default 420.
+  - `OPENAI_REALTIME_PREFIX_PADDING_MS`: audio kept from just before speech was
+    detected. Default 300.
+  - `KITSTACK_VOICE_BARGE_IN_MS`: how long the caller must talk over the agent
+    before it stops. Default: the silence duration plus 100 ms.
+
+## Deploy prerequisites
+
+1. Create a Twilio Verify service (Twilio Console → Verify → Services) and set
+   the SST secret `TwilioVerifyServiceSid` to its SID (it starts with `VA`).
+2. Grant the operator `kit:use` on kit `debrief` and `kit:admin` on
+   organization `org-demo`. Without them the operator loses access to the demo.
+3. Grant each prospect `kit:use` on kit `debrief`.
 
 ## Host composition
 
