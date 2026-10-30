@@ -8,8 +8,7 @@ export type CustomerEventType =
   | "call_completed"
   | "note"
   | "address_discovered"
-  | "debrief_confirmed"
-  | "meeting_plan";
+  | "debrief_confirmed";
 
 export interface CustomerIdentityInput {
   company: string;
@@ -40,6 +39,17 @@ export interface CustomerEventRecord {
   payload: Record<string, unknown>;
 }
 
+/** A rep's stated plan for an upcoming meeting, saved on an optional prebrief call. */
+export interface MeetingPlanRecord {
+  orgId: string;
+  sessionId: string;
+  customerId: string | null;
+  kitId: string;
+  plan: string;
+  createdAt: string;
+  updatedAt: string;
+}
+
 export type DebriefDraftStatus = "draft" | "confirmed" | "partial";
 
 export interface DebriefDraftRecord {
@@ -62,6 +72,10 @@ export interface DebriefPersistence {
   appendCustomerEvent(event: CustomerEventRecord): Promise<void>;
   getDraft(orgId: string, sessionId: string): Promise<DebriefDraftRecord | null>;
   saveDraft(draft: DebriefDraftRecord): Promise<void>;
+  /** Draft-independent: a prebrief call's meeting plan lives in its own table, never in a customer event. */
+  saveMeetingPlan(record: MeetingPlanRecord): Promise<void>;
+  getMeetingPlan(orgId: string, sessionId: string): Promise<MeetingPlanRecord | null>;
+  listMeetingPlans(orgId: string, customerId: string, kitId?: string): Promise<MeetingPlanRecord[]>;
   reset(orgId: string, kitId: string): Promise<void>;
 }
 
@@ -93,7 +107,7 @@ const CREATE_SCHEMA_SQL = `
     customer_id TEXT NOT NULL,
     session_id TEXT NOT NULL,
     kit_id TEXT NOT NULL,
-    type TEXT NOT NULL CHECK (type IN ('prebrief', 'call_completed', 'note', 'address_discovered', 'debrief_confirmed', 'meeting_plan')),
+    type TEXT NOT NULL CHECK (type IN ('prebrief', 'call_completed', 'note', 'address_discovered', 'debrief_confirmed')),
     occurred_at TEXT NOT NULL,
     payload_json TEXT NOT NULL
   );
@@ -137,6 +151,25 @@ const CREATE_SCHEMA_SQL = `
   );
   CREATE INDEX IF NOT EXISTS demo_debrief_drafts_customer_idx
     ON demo_debrief_drafts (org_id, customer_id, updated_at, draft_id);
+
+  -- A prebrief call's meeting plan is draft-independent and is never a
+  -- customer event: the production demo_customer_events table already has
+  -- live rows under a CHECK constraint that only allows its original five
+  -- event types, and SQLite cannot widen that CHECK without rebuilding the
+  -- table (which would need a forbidden DROP). This table is new, so it
+  -- carries no such constraint.
+  CREATE TABLE IF NOT EXISTS debrief_meeting_plans (
+    org_id TEXT NOT NULL,
+    session_id TEXT NOT NULL,
+    customer_id TEXT,
+    kit_id TEXT NOT NULL,
+    plan TEXT NOT NULL,
+    created_at TEXT NOT NULL,
+    updated_at TEXT NOT NULL,
+    PRIMARY KEY (org_id, session_id)
+  );
+  CREATE INDEX IF NOT EXISTS debrief_meeting_plans_customer_idx
+    ON debrief_meeting_plans (org_id, customer_id, updated_at);
 `;
 
 type Row = Record<string, unknown>;
@@ -317,6 +350,43 @@ export class LibsqlDebriefPersistence implements DebriefPersistence {
     });
   }
 
+  async saveMeetingPlan(record: MeetingPlanRecord): Promise<void> {
+    await this.initialized;
+    await this.sql.execute({
+      sql: `INSERT INTO debrief_meeting_plans
+        (org_id, session_id, customer_id, kit_id, plan, created_at, updated_at)
+        VALUES (?, ?, ?, ?, ?, ?, ?)
+        ON CONFLICT(org_id, session_id) DO UPDATE SET
+          customer_id = excluded.customer_id,
+          plan = excluded.plan,
+          updated_at = excluded.updated_at`,
+      args: [record.orgId, record.sessionId, record.customerId, record.kitId, record.plan, record.createdAt, record.updatedAt],
+    });
+  }
+
+  async getMeetingPlan(orgId: string, sessionId: string): Promise<MeetingPlanRecord | null> {
+    await this.initialized;
+    const result = await this.sql.execute({
+      sql: "SELECT * FROM debrief_meeting_plans WHERE org_id = ? AND session_id = ? LIMIT 1",
+      args: [orgId, sessionId],
+    });
+    return result.rows.length ? mapMeetingPlan(result.rows[0] as Row) : null;
+  }
+
+  async listMeetingPlans(orgId: string, customerId: string, kitId?: string): Promise<MeetingPlanRecord[]> {
+    await this.initialized;
+    const args: StorageValue[] = [orgId, customerId];
+    const kitClause = kitId === undefined ? "" : " AND kit_id = ?";
+    if (kitId !== undefined) args.push(kitId);
+    const result = await this.sql.execute({
+      sql: `SELECT * FROM debrief_meeting_plans
+        WHERE org_id = ? AND customer_id = ?${kitClause}
+        ORDER BY updated_at ASC, session_id ASC`,
+      args,
+    });
+    return result.rows.map((row) => mapMeetingPlan(row as Row));
+  }
+
   /**
    * The organization that owns a session. Only the host's tenant registry
    * uses this, to route provider callbacks that carry a bare session id.
@@ -334,6 +404,7 @@ export class LibsqlDebriefPersistence implements DebriefPersistence {
     await this.initialized;
     // The demo owns these tables for one org. Delete dependent rows first so
     // this remains safe if foreign keys are enabled by a future host.
+    await this.sql.execute({ sql: "DELETE FROM debrief_meeting_plans WHERE org_id = ? AND kit_id = ?", args: [orgId, kitId] });
     await this.sql.execute({ sql: "DELETE FROM demo_debrief_drafts WHERE org_id = ? AND kit_id = ?", args: [orgId, kitId] });
     await this.sql.execute({ sql: "DELETE FROM demo_customer_events WHERE org_id = ? AND kit_id = ?", args: [orgId, kitId] });
     await this.sql.execute({ sql: "DELETE FROM demo_debrief_sessions WHERE org_id = ? AND kit_id = ?", args: [orgId, kitId] });
@@ -411,6 +482,18 @@ function mapEvent(row: Row): CustomerEventRecord {
     type: String(row.type) as CustomerEventType,
     occurredAt: String(row.occurred_at),
     payload: decodeObject(row.payload_json),
+  };
+}
+
+function mapMeetingPlan(row: Row): MeetingPlanRecord {
+  return {
+    orgId: String(row.org_id),
+    sessionId: String(row.session_id),
+    customerId: nullableString(row.customer_id),
+    kitId: String(row.kit_id),
+    plan: String(row.plan),
+    createdAt: String(row.created_at),
+    updatedAt: String(row.updated_at),
   };
 }
 

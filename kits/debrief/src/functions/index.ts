@@ -13,6 +13,7 @@ import type {
   DebriefDraftRecord,
   DebriefDraftStatus,
   DebriefPersistence,
+  MeetingPlanRecord,
 } from "./persistence.js";
 import { normalizeDebriefSchedule, normalizePrebriefCallAt } from "../timing.js";
 
@@ -493,7 +494,18 @@ export class DebriefService {
     const session = this.require(sessionId);
     const trimmed = plan.trim();
     if (!trimmed) throw new Error("Meeting plan must not be empty");
-    await this.appendCustomerEvent(session, "meeting_plan", { plan: trimmed }, `meeting-plan-${this.id()}`);
+    if (!this.persistence) throw new Error("Debrief persistence is not configured");
+    const existing = await this.persistence.getMeetingPlan(session.orgId, sessionId);
+    const timestamp = this.now();
+    await this.persistence.saveMeetingPlan({
+      orgId: session.orgId,
+      sessionId,
+      customerId: session.customerId,
+      kitId: session.kitId,
+      plan: trimmed,
+      createdAt: existing?.createdAt ?? timestamp,
+      updatedAt: timestamp,
+    });
     await this.emit(session, "save_meeting_plan", "success");
     return { sessionId, plan: trimmed };
   }
@@ -501,13 +513,14 @@ export class DebriefService {
   /** The meeting plan saved for this exact session's prebrief call, if any. */
   async getMeetingPlan(sessionId: string): Promise<string | null> {
     const session = this.require(sessionId);
-    if (!session.customerId) return null;
-    const events = await this.listCustomerEvents(session.customerId);
-    const plan = events
-      .filter((event) => event.sessionId === sessionId && event.type === "meeting_plan")
-      .sort((a, b) => b.occurredAt.localeCompare(a.occurredAt))[0];
-    const value = plan?.payload.plan;
-    return typeof value === "string" && value.trim() ? value.trim() : null;
+    const record = await this.persistence?.getMeetingPlan(session.orgId, sessionId) ?? null;
+    return record?.plan ?? null;
+  }
+
+  /** This customer's meeting plans across all of their sessions, newest first. */
+  async listMeetingPlansForCustomer(customerId: string): Promise<MeetingPlanRecord[]> {
+    const plans = await this.persistence?.listMeetingPlans(this.context.orgId, customerId, this.kitId) ?? [];
+    return [...plans].sort((a, b) => b.updatedAt.localeCompare(a.updatedAt));
   }
 
   async setCallId(sessionId: string, callId: string): Promise<DebriefSession> {

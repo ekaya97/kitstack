@@ -567,6 +567,12 @@ async function createWorkspace(shared: SharedResources, orgId: string): Promise<
       operation: "debrief.draft.save",
       run: () => debriefStore.saveDraft(draft),
     }, sessionPluginContext(draft, telemetry)),
+    saveMeetingPlan: (record) => plugins.dispatch("persistence:libsql", {
+      operation: "debrief.meeting_plan.save",
+      run: () => debriefStore.saveMeetingPlan(record),
+    }, sessionPluginContext(record, telemetry)),
+    getMeetingPlan: (scopeOrgId, sessionId) => debriefStore.getMeetingPlan(scopeOrgId, sessionId),
+    listMeetingPlans: (scopeOrgId, customerId, kitId) => debriefStore.listMeetingPlans(scopeOrgId, customerId, kitId),
     reset: (scopeOrgId, kitId) => plugins.dispatch("persistence:libsql", {
       operation: "debrief.reset",
       run: () => debriefStore.reset(scopeOrgId, kitId),

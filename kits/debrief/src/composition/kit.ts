@@ -209,8 +209,9 @@ async function customerTimelineData(app: DemoApp, ctx: KitContext) {
   }
   const customer = await app.debrief.getCustomer(session.customerId);
   if (!customer) throw new Error(`Customer "${session.customerId}" was not found`);
-  const [events, sessionTelemetry, customerTelemetry] = await Promise.all([
+  const [events, meetingPlans, sessionTelemetry, customerTelemetry] = await Promise.all([
     app.debrief.listCustomerEvents(session.customerId),
+    app.debrief.listMeetingPlansForCustomer(session.customerId),
     app.telemetry.query({ orgId: app.orgId, sessionId: session.sessionId }),
     app.telemetry.query({ orgId: app.orgId, customerId: session.customerId }),
   ]);
@@ -221,14 +222,26 @@ async function customerTimelineData(app: DemoApp, ctx: KitContext) {
     company: customer.company,
     contact_name: customer.contactName,
     location: customer.location,
-    events: events.map((event) => ({
-      event_id: event.eventId,
-      customer_id: event.customerId,
-      session_id: event.sessionId,
-      type: event.type,
-      occurred_at: event.occurredAt,
-      payload: event.payload,
-    })),
+    events: [
+      ...events.map((event) => ({
+        event_id: event.eventId,
+        customer_id: event.customerId,
+        session_id: event.sessionId,
+        type: event.type as CustomerTimelineLoaderSnapshot["events"][number]["type"],
+        occurred_at: event.occurredAt,
+        payload: event.payload,
+      })),
+      // A meeting plan lives in its own table (never a customer event); it is
+      // merged into the timeline's read model as a synthetic entry.
+      ...meetingPlans.map((plan) => ({
+        event_id: `meeting-plan-${plan.sessionId}`,
+        customer_id: plan.customerId ?? customer.customerId,
+        session_id: plan.sessionId,
+        type: "meeting_plan" as const,
+        occurred_at: plan.updatedAt,
+        payload: { plan: plan.plan },
+      })),
+    ],
     provider_metadata: {
       providers: metadataEvents.map((event) => event.provider),
       models: metadataEvents.map((event) => event.model),

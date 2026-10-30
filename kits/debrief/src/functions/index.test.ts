@@ -238,14 +238,18 @@ describe("DebriefService", () => {
       expect(saved.plan).toBe("Push for a 2-year contract and address the support SLA concern.");
       expect(await service.getMeetingPlan(prepared.sessionId)).toBe("Push for a 2-year contract and address the support SLA concern.");
 
-      // Saving the plan is draft-independent: the session is untouched.
+      // Saving the plan is draft-independent: the session is untouched, and
+      // it never becomes a customer event (the plan lives in its own table).
       expect(service.getSession(prepared.sessionId).state).toBe("prepared");
       await expect(service.getDraft(prepared.sessionId)).resolves.toBeNull();
-
       const events = (await service.listCustomerEvents(prepared.customerId!)).filter((event) => event.sessionId === prepared.sessionId);
-      expect(events).toEqual(expect.arrayContaining([
-        expect.objectContaining({ type: "meeting_plan", payload: { plan: "Push for a 2-year contract and address the support SLA concern." } }),
-      ]));
+      expect(events.some((event) => (event.type as string) === "meeting_plan")).toBe(false);
+
+      const plans = await service.listMeetingPlansForCustomer(prepared.customerId!);
+      expect(plans).toEqual([expect.objectContaining({
+        sessionId: prepared.sessionId,
+        plan: "Push for a 2-year contract and address the support SLA concern.",
+      })]);
 
       await expect(service.saveMeetingPlan(prepared.sessionId, "   ")).rejects.toThrow("Meeting plan must not be empty");
     } finally {
