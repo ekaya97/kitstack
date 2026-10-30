@@ -119,11 +119,17 @@ Tools: `register_phone`, `verify_phone`, `get_phone`, `remove_phone`,
 
 ## Configuration
 
-- `TWILIO_VERIFY_SERVICE_SID` (SST secret `TwilioVerifyServiceSid`): the Twilio
-  Verify service used for SMS codes. When it is empty, `register_phone` and
-  `verify_phone` fail with a clear error.
-- Turn-taking overrides, read at deploy time by `infra/demo.ts`; unset values
-  use the defaults in `packages/voice`:
+The service runs as a Docker container on a Hetzner box (Compose project
+`/opt/kitstack/voice`, behind the box's Traefik). `scripts/deploy-voice.sh`
+builds and restarts it for the current commit. Its environment is the
+root-only file `/opt/kitstack/voice/voice.env` on the box; change it there and
+run `docker compose up -d` in that directory. SST only owns the DNS records
+(`KITSTACK_DEMO_VOICE_DOMAIN`, `KITSTACK_DEMO_VOICE_IPV4`/`IPV6` in
+`.env.production`) and passes the URL to the router and the web app.
+
+- `TWILIO_VERIFY_SERVICE_SID`: the Twilio Verify service used for SMS codes.
+  When it is empty, `register_phone` and `verify_phone` fail with a clear error.
+- Turn-taking overrides; unset values use the defaults in `packages/voice`:
   - `OPENAI_REALTIME_VAD_THRESHOLD`: how loud speech must be to count, 0–1.
     Default 0.55.
   - `OPENAI_REALTIME_SILENCE_MS`: the pause that ends the caller's turn before
@@ -136,7 +142,7 @@ Tools: `register_phone`, `verify_phone`, `get_phone`, `remove_phone`,
 ## Deploy prerequisites
 
 1. Create a Twilio Verify service (Twilio Console → Verify → Services) and set
-   the SST secret `TwilioVerifyServiceSid` to its SID (it starts with `VA`).
+   `TWILIO_VERIFY_SERVICE_SID` in `voice.env` to its SID (it starts with `VA`).
 2. Grant the operator `kit:use` on kit `debrief` and `kit:admin` on
    organization `org-demo`. Without them the operator loses access to the demo.
 3. Grant each prospect `kit:use` on kit `debrief`.
