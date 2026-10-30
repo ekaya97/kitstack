@@ -16,6 +16,8 @@ export interface ScheduledCallRecord {
   error: string | null;
   createdAt: string;
   updatedAt: string;
+  /** The session owner (MCP user id) this call is placed for; used by the daily per-user cap. */
+  ownerId: string | null;
 }
 
 export interface ScheduleCallInput {
@@ -23,6 +25,7 @@ export interface ScheduleCallInput {
   sessionId: string;
   scheduledAt: string;
   scheduledCallId?: string;
+  ownerId?: string;
 }
 
 export interface ClaimDueInput {
@@ -60,6 +63,8 @@ export interface ScheduledCallOperations {
   get(orgId: string, scheduledCallId: string): Promise<ScheduledCallRecord | null>;
   list(orgId: string): Promise<ScheduledCallRecord[]>;
   reset(orgId: string): Promise<void>;
+  /** Count calls scheduled for this owner since a timestamp; backs the daily per-user call cap. */
+  countForOwnerSince(orgId: string, ownerId: string, sinceIso: string): Promise<number>;
 }
 
 export interface CreateScheduledCallStoreOptions {
@@ -80,7 +85,8 @@ const CREATE_SCHEMA_SQL = `
     provider_call_id TEXT,
     error TEXT,
     created_at TEXT NOT NULL,
-    updated_at TEXT NOT NULL
+    updated_at TEXT NOT NULL,
+    owner_id TEXT
   );
   CREATE INDEX IF NOT EXISTS scheduled_calls_due_idx
     ON scheduled_calls (org_id, status, scheduled_at, scheduled_call_id);
@@ -110,7 +116,14 @@ export class LibsqlScheduledCallStore implements ScheduledCallOperations {
   ) {
     this.now = options.now ?? (() => new Date().toISOString());
     this.createScheduledCallId = options.createScheduledCallId ?? (() => `scheduled-${crypto.randomUUID()}`);
-    this.initialized = client.executeMultiple(CREATE_SCHEMA_SQL).then(() => undefined);
+    this.initialized = client.executeMultiple(CREATE_SCHEMA_SQL).then(async () => {
+      // Compatibility migration for databases created before the owner column existed.
+      const columns = await client.execute("PRAGMA table_info(scheduled_calls)");
+      const names = new Set(columns.rows.map((row) => String((row as Row).name)));
+      if (!names.has("owner_id")) await client.execute("ALTER TABLE scheduled_calls ADD COLUMN owner_id TEXT");
+      await client.execute(`CREATE INDEX IF NOT EXISTS scheduled_calls_owner_idx
+        ON scheduled_calls (org_id, owner_id, created_at)`);
+    });
   }
 
   async schedule(input: ScheduleCallInput): Promise<ScheduledCallRecord> {
@@ -122,13 +135,16 @@ export class LibsqlScheduledCallStore implements ScheduledCallOperations {
     await this.client.execute({
       sql: `INSERT INTO scheduled_calls
         (scheduled_call_id, org_id, session_id, scheduled_at, status, attempt_count,
-         lease_owner, lease_expires_at, provider_call_id, error, created_at, updated_at)
-        VALUES (?, ?, ?, ?, 'scheduled', 0, NULL, NULL, NULL, NULL, ?, ?)
+         lease_owner, lease_expires_at, provider_call_id, error, created_at, updated_at, owner_id)
+        VALUES (?, ?, ?, ?, 'scheduled', 0, NULL, NULL, NULL, NULL, ?, ?, ?)
         ON CONFLICT(session_id) DO UPDATE SET
           scheduled_at = excluded.scheduled_at,
           updated_at = excluded.updated_at
         WHERE scheduled_calls.status = 'scheduled'`,
-      args: [input.scheduledCallId ?? this.createScheduledCallId(), input.orgId, input.sessionId, input.scheduledAt, timestamp, timestamp] as InValue[],
+      args: [
+        input.scheduledCallId ?? this.createScheduledCallId(), input.orgId, input.sessionId, input.scheduledAt,
+        timestamp, timestamp, input.ownerId ?? null,
+      ] as InValue[],
     });
     const record = await this.findBySession(input.orgId, input.sessionId);
     if (!record) throw new Error(`Scheduled call for session "${input.sessionId}" was not readable after schedule`);
@@ -237,6 +253,15 @@ export class LibsqlScheduledCallStore implements ScheduledCallOperations {
       args: [providerCallId],
     });
     return result.rows.length ? String((result.rows[0] as Row).session_id) : null;
+  }
+
+  async countForOwnerSince(orgId: string, ownerId: string, sinceIso: string): Promise<number> {
+    await this.initialized;
+    const result = await this.client.execute({
+      sql: "SELECT COUNT(*) AS count FROM scheduled_calls WHERE org_id = ? AND owner_id = ? AND created_at >= ?",
+      args: [orgId, ownerId, sinceIso],
+    });
+    return Number((result.rows[0] as Row | undefined)?.count ?? 0);
   }
 
   private async findBySession(orgId: string, sessionId: string): Promise<ScheduledCallRecord | null> {
@@ -413,6 +438,7 @@ function mapScheduledCall(row: Row): ScheduledCallRecord {
     error: nullableString(row.error),
     createdAt: String(row.created_at),
     updatedAt: String(row.updated_at),
+    ownerId: nullableString(row.owner_id),
   };
 }
 

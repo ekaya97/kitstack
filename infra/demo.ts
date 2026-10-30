@@ -5,6 +5,7 @@ import {
   twilioAccountSid,
   twilioAuthToken,
   twilioFromNumber,
+  twilioVerifyServiceSid,
   tursoAuthToken,
   tursoDbUrl,
   demoInternalSecret,
@@ -57,6 +58,9 @@ export const demoVoice = new sst.aws.Service("DemoVoice", {
     TWILIO_ACCOUNT_SID: twilioAccountSid.value,
     TWILIO_AUTH_TOKEN: twilioAuthToken.value,
     TWILIO_FROM_NUMBER: twilioFromNumber.value,
+    // Self-service callback numbers (register_phone/verify_phone): empty
+    // disables the feature with a clear error at call time.
+    TWILIO_VERIFY_SERVICE_SID: twilioVerifyServiceSid.value,
     OPENAI_API_KEY: openAiApiKey.value,
     OPENAI_REALTIME_MODEL: process.env.OPENAI_REALTIME_MODEL?.trim() || "gpt-realtime",
     OPENAI_REALTIME_VOICE: process.env.OPENAI_REALTIME_VOICE?.trim() || "marin",

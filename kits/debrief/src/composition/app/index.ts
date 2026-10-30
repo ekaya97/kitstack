@@ -1,8 +1,9 @@
 import { createClient, type Client } from "@libsql/client";
 import { createAppRegistry, type AppRegistry } from "../../adapters/auth/index.js";
 import type { McpAuthMode } from "../../adapters/auth/mcp.js";
-import { DebriefService, type DebriefSession, type MemoryStoreLike, type TextInference } from "../../functions/index.js";
+import { DebriefService, type DebriefSession, type MemoryStoreLike, type PhoneDirectory, type TextInference } from "../../functions/index.js";
 import { createDebriefPersistence, type DebriefPersistence, type LibsqlDebriefPersistence } from "../../functions/persistence.js";
+import { LibsqlVoiceDestinationStore, VoiceDestinationService } from "../../functions/voice-destinations.js";
 import { createInstructionPlugin, type InstructionPlugin } from "../../instructions/plugin.js";
 import { createMemoryStore, type MemoryContext, type MemoryReadQuery, type MemoryStore, type MemoryWriteInput } from "../../memory/plugin.js";
 import { createDemoPluginRegistry, type DemoPluginContext, type PluginContextInput, type PluginRegistry } from "../../plugins/registry/index.js";
@@ -13,6 +14,10 @@ import { createTelemetryStore, type TelemetryStore } from "../../telemetry/index
 import { VoiceSimulator } from "../../adapters/voice/index.js";
 import { createLibsqlStorageAdapter } from "../../storage/libsql.js";
 import { createDeclarativeModelRouter, createTelemetryExporter, type StorageAdapter, type TelemetryExportConfig } from "@kitstackco/sdk";
+import { createTwilioVerifyClient } from "@kitstackco/voice";
+
+/** Guardrail: at most this many calls may be placed for one user in a rolling 24h window. */
+const DAILY_SCHEDULED_CALL_LIMIT = 5;
 
 export interface DemoApp {
   readonly client: Client;
@@ -25,6 +30,8 @@ export interface DemoApp {
   readonly instructions: InstructionPlugin;
   readonly debrief: DebriefService;
   readonly voice: VoiceSimulator;
+  /** Self-service callback-number registration and verification (Twilio Verify). */
+  readonly phone: VoiceDestinationService;
   /** Registry-backed scheduled-call operations. The provider seam is owned by the poller. */
   readonly scheduler: ScheduledCallOperations;
   /** Scoped SDK storage (sql + objects) for this org and kit. */
@@ -83,6 +90,10 @@ export interface CreateDemoAppOptions {
   onTelemetryExportError?: (error: Error) => void | Promise<void>;
   /** Declarative model policy used by text inference in the debrief host. */
   models?: { conversation?: string; extraction?: string; fallback?: string };
+  /** Keeps the existing operator demo dialable while self-service numbers roll out. */
+  operatorFallback?: { orgId?: string; destination?: string } | null;
+  /** Twilio Verify config for self-service phone verification; an empty serviceSid disables the feature. */
+  twilioVerify?: { accountSid?: string; authToken?: string; serviceSid?: string; fetch?: (input: string, init?: RequestInit) => Promise<Response> };
 }
 
 const KIT_ID = "kit:debrief";
@@ -100,6 +111,8 @@ interface SharedResources {
   readonly mcpAuthMode: McpAuthMode;
   readonly adminToken: string;
   readonly tenants: DebriefTenants;
+  readonly operatorFallback: CreateDemoAppOptions["operatorFallback"];
+  readonly twilioVerify: CreateDemoAppOptions["twilioVerify"];
   close(): Promise<void>;
 }
 
@@ -185,6 +198,8 @@ export async function createDemoApp(options: CreateDemoAppOptions = {}): Promise
 
   const shared: SharedResources = {
     client, appId, telemetry, modelRouter, apps, memory, debriefStore, scheduledCallStore, mcpAuthMode, adminToken, tenants,
+    operatorFallback: options.operatorFallback,
+    twilioVerify: options.twilioVerify,
     async close() {
       if (closed) return;
       closed = true;
@@ -199,9 +214,30 @@ export async function createDemoApp(options: CreateDemoAppOptions = {}): Promise
 /** One organization's debrief workspace on the shared resources. */
 async function createWorkspace(shared: SharedResources, orgId: string): Promise<DemoApp> {
   const { client, appId, telemetry, modelRouter, apps, memory, debriefStore, scheduledCallStore, mcpAuthMode, adminToken, tenants } = shared;
+  const options = { operatorFallback: shared.operatorFallback, twilioVerify: shared.twilioVerify };
   const storage = createLibsqlStorageAdapter(client, { scope: { orgId, kitId: KIT_ID } });
   const initialSessions = await debriefStore.loadSessions(orgId, KIT_ID);
   const instructions = createInstructionPlugin({ kitId: "kit:debrief", context: "prebrief" });
+  const voiceDestinationStore = new LibsqlVoiceDestinationStore(client);
+  const twilioVerifyConfig = options.twilioVerify ?? {};
+  const verifyServiceSid = twilioVerifyConfig.serviceSid?.trim() ?? "";
+  const phone = new VoiceDestinationService({
+    store: voiceDestinationStore,
+    ...(verifyServiceSid
+      ? {
+        verify: createTwilioVerifyClient({
+          accountSid: twilioVerifyConfig.accountSid ?? "",
+          authToken: twilioVerifyConfig.authToken ?? "",
+          serviceSid: verifyServiceSid,
+          ...(twilioVerifyConfig.fetch ? { fetch: twilioVerifyConfig.fetch } : {}),
+        }),
+      }
+      : {}),
+  });
+  const phoneDirectory: PhoneDirectory = { hasVerifiedNumber: (scopeOrgId, userId) => phone.hasVerifiedNumber(scopeOrgId, userId) };
+  const operatorFallback = options.operatorFallback?.destination?.trim()
+    ? { orgId: options.operatorFallback.orgId?.trim() || "org-demo", destination: options.operatorFallback.destination.trim() }
+    : null;
   let plugins!: PluginRegistry;
   let debrief!: DebriefService;
   let voice!: VoiceSimulator;
@@ -286,9 +322,19 @@ async function createWorkspace(shared: SharedResources, orgId: string): Promise<
         correction?: string;
         outcome?: "confirmed" | "partial";
         memoryId?: string;
+        ownerId?: string;
+        phone?: string;
+        code?: string;
       };
       if (request.operation === "prepare") {
         if (request.company && request.contactName && request.location && request.callbackAt && request.callbackTimezone) {
+          if (request.ownerId) {
+            const since = new Date(Date.now() - 24 * 60 * 60 * 1000).toISOString();
+            const placedToday = await scheduler.countForOwnerSince(orgId, request.ownerId, since);
+            if (placedToday >= DAILY_SCHEDULED_CALL_LIMIT) {
+              throw new Error(`Daily call limit reached (${DAILY_SCHEDULED_CALL_LIMIT} per day). Try scheduling again tomorrow.`);
+            }
+          }
           const prepared = await debrief.prepareDebrief({
             goal: request.goal ?? "",
             company: request.company,
@@ -297,17 +343,19 @@ async function createWorkspace(shared: SharedResources, orgId: string): Promise<
             callbackAt: request.callbackAt,
             callbackTimezone: request.callbackTimezone,
             bufferMinutes: request.bufferMinutes,
+            ownerId: request.ownerId,
           });
           if ("scheduled_call_at" in prepared && "session_id" in prepared) {
             await scheduler.schedule({
               orgId,
               sessionId: String(prepared.session_id),
               scheduledAt: String(prepared.scheduled_call_at),
+              ownerId: request.ownerId,
             });
           }
           return prepared;
         }
-        return debrief.prepareDebrief(request.goal ?? "");
+        return debrief.prepareDebrief({ goal: request.goal ?? "", ownerId: request.ownerId });
       }
       if (request.operation === "get_session" && request.sessionId) return debrief.getSession(request.sessionId);
       if (request.operation === "get_debrief" && request.sessionId) return debrief.getDebrief(request.sessionId);
@@ -315,6 +363,10 @@ async function createWorkspace(shared: SharedResources, orgId: string): Promise<
       if (request.operation === "teach" && request.sessionId && request.correction) return debrief.teachFromCorrection(request.sessionId, request.correction);
       if (request.operation === "approve" && request.sessionId && request.memoryId) return debrief.approve(request.sessionId, request.memoryId);
       if (request.operation === "publish" && request.sessionId && request.memoryId) return debrief.publish(request.sessionId, request.memoryId);
+      if (request.operation === "register_phone" && request.ownerId && request.phone) return phone.register(orgId, request.ownerId, request.phone);
+      if (request.operation === "verify_phone" && request.ownerId && request.phone && request.code) return phone.verifyCode(orgId, request.ownerId, request.phone, request.code);
+      if (request.operation === "get_phone" && request.ownerId) return phone.status(orgId, request.ownerId);
+      if (request.operation === "remove_phone" && request.ownerId) { await phone.remove(orgId, request.ownerId); return { removed: true }; }
       throw new Error(`Unknown debrief kit operation: ${request.operation}`);
     },
     "ai:demo-compatible": async (input: unknown) => {
@@ -514,6 +566,8 @@ async function createWorkspace(shared: SharedResources, orgId: string): Promise<
   debrief = new DebriefService(memoryBoundary, instructionBoundary, telemetry, { orgId, appId }, inferPrebrief, {
     persistence: persistenceBoundary,
     initialSessions,
+    phoneDirectory,
+    operatorFallback,
   });
   voice = new VoiceSimulator({ debrief, telemetry, orgId, appId });
   const scheduler: ScheduledCallOperations = {
@@ -524,13 +578,14 @@ async function createWorkspace(shared: SharedResources, orgId: string): Promise<
     fail: (input) => plugins.dispatch("scheduler:scheduled-calls", { operation: "fail", input }, schedulerPluginContext(input.orgId, input.scheduledCallId, appId, telemetry)),
     get: (scopeOrgId, scheduledCallId) => scheduledCallStore.get(scopeOrgId, scheduledCallId),
     list: (scopeOrgId) => scheduledCallStore.list(scopeOrgId),
+    countForOwnerSince: (scopeOrgId, ownerId, sinceIso) => scheduledCallStore.countForOwnerSince(scopeOrgId, ownerId, sinceIso),
     reset: async (scopeOrgId) => {
       await plugins.dispatch("scheduler:scheduled-calls", { operation: "reset", input: { orgId: scopeOrgId } }, schedulerPluginContext(scopeOrgId, "demo-reset", appId, telemetry));
     },
   };
 
   return {
-    client, orgId, appId, telemetry, modelRouter, apps, memory, instructions, debrief, voice, scheduler, storage, plugins, mcpAuthMode, adminToken, tenants,
+    client, orgId, appId, telemetry, modelRouter, apps, memory, instructions, debrief, voice, phone, scheduler, storage, plugins, mcpAuthMode, adminToken, tenants,
     async reset() {
       debrief.clearSessions();
       await plugins.dispatch("memory:default", {

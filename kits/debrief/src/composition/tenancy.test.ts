@@ -6,6 +6,7 @@ import { handleDemoAppRequest } from "../transports/http/app.js";
 import { createTenantScheduledCallPoller } from "../transports/server.js";
 import { kitCall, kitView, mcpRequest } from "../transports/test-support.js";
 import { personalOrgId, VOICE_AGENT_PRINCIPAL } from "../tenancy.js";
+import { LibsqlVoiceDestinationStore } from "../functions/voice-destinations.js";
 
 const SECRET = "a-router-to-voice-internal-secret-of-32-bytes";
 const ENV = {
@@ -52,6 +53,14 @@ async function callAs(userId: string, org: string, params: ReturnType<typeof kit
   return { status: response.status, isError: Boolean(body?.error || body?.result?.isError), text, data };
 }
 
+/** A verified phone for `userId`, as if they had completed register_phone/verify_phone. */
+async function verifiedPhone(userId: string, org: string, e164 = "+491701234567") {
+  const store = new LibsqlVoiceDestinationStore(app!.client);
+  const now = new Date().toISOString();
+  await store.upsertStart({ orgId: org, userId, e164, startCount: 1, startWindowAt: now, now });
+  await store.markVerified(org, userId, now);
+}
+
 function prepareParams(company: string) {
   return kitCall("prepare_debrief", {
     goal: "Prepare the next sales conversation",
@@ -72,6 +81,8 @@ describe("per-user debrief tenancy", () => {
   it("keeps one user's sessions, customers, memories and telemetry away from another", async () => {
     app = await createDemoApp({ url: ":memory:", mcpAuthMode: "internal-signed" });
 
+    await verifiedPhone(USER_A, ORG_A);
+    await verifiedPhone(USER_B, ORG_B);
     const preparedA = await callAs(USER_A, ORG_A, prepareParams("Acme Corp"));
     expect(preparedA.isError).toBe(false);
     const sessionA = preparedA.data!.session_id as string;
@@ -151,6 +162,7 @@ describe("per-user debrief tenancy", () => {
     const read = await callAs("operator-1", "org-demo", kitCall("get_session", { session_id: existing.sessionId }));
     expect(read.isError).toBe(false);
     expect(read.data).toMatchObject({ sessionId: existing.sessionId, orgId: "org-demo" });
+    await verifiedPhone("operator-1", "org-demo");
     const prepared = await callAs("operator-1", "org-demo", prepareParams("Second Corp"));
     expect(app.debrief.getSession(prepared.data!.session_id).orgId).toBe("org-demo");
     expect(await app.scheduler.list("org-demo")).toEqual([expect.objectContaining({ sessionId: prepared.data!.session_id })]);

@@ -116,7 +116,8 @@ const CREATE_SCHEMA_SQL = `
     memory_ids_json TEXT NOT NULL,
     created_at TEXT NOT NULL,
     updated_at TEXT NOT NULL,
-    error TEXT
+    error TEXT,
+    owner_id TEXT
   );
   CREATE INDEX IF NOT EXISTS demo_debrief_sessions_scope_idx
     ON demo_debrief_sessions (org_id, kit_id, updated_at, session_id);
@@ -153,7 +154,12 @@ export class LibsqlDebriefPersistence implements DebriefPersistence {
     this.sql = options.storage?.sql ?? createLibsqlStorageAdapter(client, {
       scope: { orgId: "compat", kitId: "kit:debrief" },
     }).sql;
-    this.initialized = this.sql.batch(schemaStatements(CREATE_SCHEMA_SQL)).then(() => undefined);
+    this.initialized = this.sql.batch(schemaStatements(CREATE_SCHEMA_SQL)).then(async () => {
+      // Compatibility migration for databases created before the owner column existed.
+      const columns = await this.sql.execute({ sql: "PRAGMA table_info(demo_debrief_sessions)", args: [] });
+      const names = new Set(columns.rows.map((row) => String((row as Row).name)));
+      if (!names.has("owner_id")) await this.sql.execute({ sql: "ALTER TABLE demo_debrief_sessions ADD COLUMN owner_id TEXT", args: [] });
+    });
   }
 
   private readonly sql: StorageSqlAdapter;
@@ -174,8 +180,8 @@ export class LibsqlDebriefPersistence implements DebriefPersistence {
       sql: `INSERT INTO demo_debrief_sessions (
         session_id, org_id, kit_id, customer_id, state, goal, callback_at,
         scheduled_call_at, callback_timezone, call_id, instruction_version,
-        memory_ids_json, created_at, updated_at, error
-      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        memory_ids_json, created_at, updated_at, error, owner_id
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
       ON CONFLICT(session_id) DO UPDATE SET
         customer_id = excluded.customer_id,
         state = excluded.state,
@@ -187,7 +193,8 @@ export class LibsqlDebriefPersistence implements DebriefPersistence {
         instruction_version = excluded.instruction_version,
         memory_ids_json = excluded.memory_ids_json,
         updated_at = excluded.updated_at,
-        error = excluded.error`,
+        error = excluded.error,
+        owner_id = excluded.owner_id`,
       args: [
         session.sessionId,
         session.orgId,
@@ -204,6 +211,7 @@ export class LibsqlDebriefPersistence implements DebriefPersistence {
         session.createdAt,
         session.updatedAt,
         session.error ?? null,
+        session.ownerId ?? null,
       ],
     });
   }
@@ -375,6 +383,7 @@ function mapSession(row: Row): DebriefSession {
     memoryIds: decodeStringArray(row.memory_ids_json),
     createdAt: String(row.created_at),
     updatedAt: String(row.updated_at),
+    ownerId: nullableString(row.owner_id),
     ...(row.error === null || row.error === undefined ? {} : { error: String(row.error) }),
   };
 }

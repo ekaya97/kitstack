@@ -19,6 +19,9 @@ export interface RealtimeFunctionTool {
 
 const DEFAULT_KIT_ID = "kit:voice";
 
+/** Hard upper bound on a placed call's length; Twilio drops the line itself. */
+export const MAX_CALL_DURATION_SECONDS = 600 as const;
+
 export const REALTIME_AUDIO_FORMAT = "g711_ulaw" as const;
 export const REALTIME_SAMPLE_RATE_HZ = 8_000 as const;
 export const REALTIME_PROVIDER = "twilio-openai-realtime" as const;
@@ -90,6 +93,9 @@ export function createTwilioCallsClient(options: TwilioClientOptions): TwilioCal
         From: request.from,
         Twiml: request.twiml,
         Record: "false",
+        // Hard cap on call length: Twilio ends the call itself after this
+        // many seconds, independent of the agent's own end_call tool.
+        TimeLimit: String(MAX_CALL_DURATION_SECONDS),
       });
       if (request.statusCallbackUrl) body.set("StatusCallback", request.statusCallbackUrl);
       const response = await fetcher(endpoint, {

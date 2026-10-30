@@ -14,4 +14,5 @@ export {
 } from "./channel.js";
 export * from "./realtime.js";
 export * from "./http.js";
+export * from "./verify.js";
 export { localVoicePage } from "./local-page.js";
