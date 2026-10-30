@@ -132,6 +132,7 @@ describe("platform debrief adapter", () => {
       "get_debrief_draft",
       "get_debrief_for_confirmation",
       "update_debrief_draft",
+      "save_meeting_plan",
       "confirm_debrief_draft",
       "confirm_debrief",
       "teach_from_correction",
@@ -141,6 +142,10 @@ describe("platform debrief adapter", () => {
       "get_voice_status",
       "get_crm_context",
       "sync_debrief_to_crm",
+      "register_phone",
+      "verify_phone",
+      "get_phone",
+      "remove_phone",
     ]);
     expect(debrief?.tools[0].inputSchema).toMatchObject({
       type: "object",
