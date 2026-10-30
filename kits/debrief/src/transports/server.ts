@@ -66,6 +66,15 @@ export async function createDemoServer(options: DemoServerOptions = {}): Promise
     authToken: options.appOptions?.authToken ?? readDatabaseAuthToken(),
     mcpAuthMode: options.appOptions?.mcpAuthMode ?? readMcpAuthMode(process.env.KITSTACK_DEMO_MCP_AUTH),
     adminToken: options.appOptions?.adminToken ?? process.env.KITSTACK_DEMO_ADMIN_TOKEN,
+    operatorFallback: options.appOptions?.operatorFallback ?? {
+      orgId: process.env.KITSTACK_DEMO_ORG_ID,
+      destination: process.env.KITSTACK_DEMO_ALLOWED_DESTINATION,
+    },
+    twilioVerify: options.appOptions?.twilioVerify ?? {
+      accountSid: process.env.TWILIO_ACCOUNT_SID,
+      authToken: process.env.TWILIO_AUTH_TOKEN,
+      serviceSid: process.env.TWILIO_VERIFY_SERVICE_SID,
+    },
   });
   const ownsApp = options.app === undefined;
   const maxBodyBytes = options.maxBodyBytes ?? DEFAULT_MAX_BODY_BYTES;

@@ -35,4 +35,7 @@ export const demoAllowedDestination = new sst.Secret("DemoAllowedDestination", "
 export const twilioAccountSid = new sst.Secret("TwilioAccountSid", "");
 export const twilioAuthToken = new sst.Secret("TwilioAuthToken", "");
 export const twilioFromNumber = new sst.Secret("TwilioFromNumber", "");
+// Empty disables self-service phone verification; create a Twilio Verify
+// service and set this to enable register_phone/verify_phone.
+export const twilioVerifyServiceSid = new sst.Secret("TwilioVerifyServiceSid", "");
 export const openAiApiKey = new sst.Secret("OpenAiApiKey", "");

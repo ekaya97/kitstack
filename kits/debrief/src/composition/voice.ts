@@ -19,8 +19,10 @@ const PHONE_ENV = [
   "TWILIO_AUTH_TOKEN",
   "TWILIO_FROM_NUMBER",
   "KITSTACK_DEMO_PUBLIC_HTTPS_URL",
-  "KITSTACK_DEMO_ALLOWED_DESTINATION",
 ] as const;
+
+/** Countries the self-service callback number may belong to: DE, AT, CH. */
+const ALLOWED_DESTINATION_COUNTRY_CODES = ["+49", "+43", "+41"] as const;
 
 /**
  * The debrief's voice channel: phone calls when Twilio is configured, and the
@@ -71,7 +73,10 @@ export async function createDebriefVoiceChannel(
         authToken: value("TWILIO_AUTH_TOKEN"),
         fromNumber: value("TWILIO_FROM_NUMBER"),
         publicUrl: value("KITSTACK_DEMO_PUBLIC_HTTPS_URL"),
-        allowedDestinations: [value("KITSTACK_DEMO_ALLOWED_DESTINATION")],
+        // The session owner's verified number, preferred over the legacy
+        // single-destination allowlist below.
+        resolveDestination: (sessionId: string) => resolveScheduledCallDestination(app, sessionId, env),
+        ...(value("KITSTACK_DEMO_ALLOWED_DESTINATION") ? { allowedDestinations: [value("KITSTACK_DEMO_ALLOWED_DESTINATION")] } : {}),
         // Real phone calls always need the operator token, even in loopback auth-none mode.
         authorizeStart: (request) => Boolean(app.adminToken) && request.headers["x-demo-admin-token"] === app.adminToken,
         ...(providers.twilioFetch ? { fetch: providers.twilioFetch } : {}),
@@ -150,6 +155,31 @@ async function debriefBriefing(app: DemoApp, call: VoiceCall, baseInstructions: 
     version: `${baseVersion}:${call.channel}:${createHash("sha256").update(content, "utf8").digest("hex").slice(0, 16)}`,
     memoryIds: selected.map((record) => record.memoryId),
   };
+}
+
+/**
+ * Resolve a scheduled call's destination from the session owner's verified
+ * number, re-checking the country allowlist (defence in depth: register_phone
+ * already enforces it, but a destination is never dialed on trust alone).
+ * Falls back to the operator demo's single configured destination only for
+ * the operator org, so today's demo keeps working while numbers roll out.
+ */
+async function resolveScheduledCallDestination(
+  app: DemoApp,
+  sessionId: string,
+  env: NodeJS.ProcessEnv,
+): Promise<string | null> {
+  const session = app.debrief.getSession(sessionId);
+  let destination: string | null = session.ownerId
+    ? await app.phone.getVerifiedNumber(session.orgId, session.ownerId)
+    : null;
+  if (!destination) {
+    const operatorOrgId = env.KITSTACK_DEMO_ORG_ID?.trim() || "org-demo";
+    const fallback = env.KITSTACK_DEMO_ALLOWED_DESTINATION?.trim();
+    if (fallback && session.orgId === operatorOrgId) destination = fallback;
+  }
+  if (destination && !ALLOWED_DESTINATION_COUNTRY_CODES.some((code) => destination!.startsWith(code))) return null;
+  return destination;
 }
 
 function optionalNumber(value: string | undefined): number | undefined {

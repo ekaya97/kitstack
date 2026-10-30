@@ -22,6 +22,10 @@ describe("debrief kit boundary", () => {
       "get_voice_status",
       "get_crm_context",
       "sync_debrief_to_crm",
+      "register_phone",
+      "verify_phone",
+      "get_phone",
+      "remove_phone",
     ]);
   });
 

@@ -45,6 +45,8 @@ export interface LiveVoiceHttpOptions {
   statusCallbackUrl?: string;
   /** A demo-only allowlist prevents accidental calls to arbitrary numbers. */
   allowedDestinations?: readonly string[];
+  /** Resolve a scheduled call's destination from the session owner's verified number. Preferred over allowedDestinations[0]. */
+  resolveDestination?: (sessionId: string) => Promise<string | null>;
   /** Require an explicit confirmation flag at the protected action boundary. */
   requireConfirmation?: boolean;
   /** Lifecycle hooks keep the provider action tied to the kit's session state machine. */
@@ -89,7 +91,7 @@ export async function handleLiveVoiceStart(
   if (options.requireConfirmation && body.confirmation !== true) {
     return json(400, { error: "confirmation_required" });
   }
-  if (options.allowedDestinations && !options.allowedDestinations.includes(destination)) {
+  if (options.allowedDestinations?.length && !options.allowedDestinations.includes(destination)) {
     return json(403, { error: "destination_not_allowed" });
   }
   const result = await startLiveVoiceCall(sessionId, destination, options);
@@ -101,8 +103,9 @@ export async function startScheduledLiveVoiceCall(
   sessionId: string,
   options: LiveVoiceHttpOptions,
 ): Promise<Awaited<ReturnType<typeof startRealtimeCall>>> {
-  const destination = options.allowedDestinations?.[0];
-  if (!destination) throw new Error("No allowlisted live voice destination is configured");
+  const resolved = (await options.resolveDestination?.(sessionId)) ?? null;
+  const destination = resolved ?? options.allowedDestinations?.[0];
+  if (!destination) throw new Error("No destination is configured for this scheduled call");
   return startLiveVoiceCall(sessionId, destination, options);
 }
 

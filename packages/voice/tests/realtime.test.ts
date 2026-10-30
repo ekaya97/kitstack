@@ -109,10 +109,11 @@ describe("Twilio and OpenAI Realtime boundary", () => {
     expect(() => generateBidirectionalStreamTwiml({ mediaStreamUrl: "wss://demo.example/media", sessionToken: "" })).toThrow(/session token/);
   });
 
-  it("places an outbound call through the injected Twilio client and sends Record=false", async () => {
+  it("places an outbound call through the injected Twilio client, sends Record=false, and caps the call at 10 minutes", async () => {
     const fetcher = vi.fn(async (_input: string, init?: RequestInit) => {
       expect(init?.headers).toMatchObject({ authorization: expect.stringContaining("Basic ") });
       expect(String(init?.body)).toContain("Record=false");
+      expect(String(init?.body)).toContain("TimeLimit=600");
       return new Response(JSON.stringify({ sid: "CA123", status: "queued" }), { status: 201 });
     });
     const twilio = createTwilioCallsClient({ accountSid: "AC123", authToken: "secret", fetch: fetcher });

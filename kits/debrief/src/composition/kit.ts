@@ -59,12 +59,13 @@ function createDebriefToolHandlers(app: DemoApp): Record<DebriefToolName, Debrie
       callbackAt: String(args.callback_at),
       callbackTimezone: String(args.callback_timezone),
       bufferMinutes: typeof args.buffer_minutes === "number" ? args.buffer_minutes : 0,
+      ownerId: ctx.identity.principal,
       }, pluginContext(app, ctx));
       const sessionId = typeof prepared.sessionId === "string" ? prepared.sessionId : undefined;
       const account = sessionId ? await crmAccountFor(app, crm(ctx), sessionId) : null;
       return result.json({ ...prepared, crm_context: crmBriefingLines(account) });
     },
-    prepare_rehearsal: (ctx, args) => viaKit({ operation: "prepare", goal: String(args.goal) })(ctx, args),
+    prepare_rehearsal: (ctx, args) => viaKit({ operation: "prepare", goal: String(args.goal), ownerId: ctx.identity.principal })(ctx, args),
     get_session: (ctx, args) => viaKit({ operation: "get_session", sessionId: String(args.session_id) })(ctx, args),
     get_debrief: (ctx, args) => viaKit({ operation: "get_debrief", sessionId: String(args.session_id) })(ctx, args),
     get_debrief_draft: withSession(async (sessionId) => ({ fields: (await app.debrief.getDraft(sessionId))?.fields ?? {} })),
@@ -101,6 +102,18 @@ function createDebriefToolHandlers(app: DemoApp): Record<DebriefToolName, Debrie
         sessionId,
         outcome: args.outcome === "partial" ? "partial" : "confirmed",
       }, pluginContext(app, ctx, sessionId))),
+    register_phone: async (ctx, args) => result.json(await app.plugins.dispatch("kit:debrief", {
+      operation: "register_phone", ownerId: ctx.identity.principal, phone: String(args.phone),
+    }, pluginContext(app, ctx))),
+    verify_phone: async (ctx, args) => result.json(await app.plugins.dispatch("kit:debrief", {
+      operation: "verify_phone", ownerId: ctx.identity.principal, phone: String(args.phone), code: String(args.code),
+    }, pluginContext(app, ctx))),
+    get_phone: async (ctx) => result.json(await app.plugins.dispatch("kit:debrief", {
+      operation: "get_phone", ownerId: ctx.identity.principal,
+    }, pluginContext(app, ctx))),
+    remove_phone: async (ctx) => result.json(await app.plugins.dispatch("kit:debrief", {
+      operation: "remove_phone", ownerId: ctx.identity.principal,
+    }, pluginContext(app, ctx))),
   };
 }
 

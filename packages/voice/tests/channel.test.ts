@@ -120,6 +120,31 @@ describe("voice channel on a KitStack server", () => {
     expect((await fetch(`${base}/t/voice/live/start`, { method: "POST", headers: { "content-type": "application/json" }, body: "{}" })).status).toBe(404);
   });
 
+  it("accepts a phone channel configured with only resolveDestination (no static allowlist)", () => {
+    expect(() => createVoiceChannel({
+      kitId: "kit:notes", telemetry: { append: vi.fn() }, sessionSecret: "a-voice-channel-test-secret-of-32+bytes",
+      realtime: { apiKey: "sk-test" },
+      phone: {
+        accountSid: "AC1", authToken: "t", fromNumber: "+4915100000000", publicUrl: "https://example.test",
+        resolveDestination: async () => "+4917600000000",
+      },
+      briefing: async () => ({ content: "", version: "v" }),
+      tools: { realtime: [], agent: [] },
+      sessions: { startSession: vi.fn(), onAgentFinished: vi.fn(), onCallInterrupted: vi.fn() },
+    })).not.toThrow();
+  });
+
+  it("refuses a phone channel with neither resolveDestination nor allowedDestinations", () => {
+    expect(() => createVoiceChannel({
+      kitId: "kit:notes", telemetry: { append: vi.fn() }, sessionSecret: "a-voice-channel-test-secret-of-32+bytes",
+      realtime: { apiKey: "sk-test" },
+      phone: { accountSid: "AC1", authToken: "t", fromNumber: "+4915100000000", publicUrl: "https://example.test" },
+      briefing: async () => ({ content: "", version: "v" }),
+      tools: { realtime: [], agent: [] },
+      sessions: { startSession: vi.fn(), onAgentFinished: vi.fn(), onCallInterrupted: vi.fn() },
+    })).toThrow("phone requires resolveDestination or a non-empty allowedDestinations list");
+  });
+
   it("denies phone starts unless the kit authorizes them", () => {
     const channel = createVoiceChannel({
       kitId: "kit:notes", telemetry: { append: vi.fn() }, sessionSecret: "a-voice-channel-test-secret-of-32+bytes",

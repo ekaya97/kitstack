@@ -47,6 +47,36 @@ describe("live voice HTTP adapters", () => {
     expect(onProviderStart).toHaveBeenCalledWith("session-1", "CA-scheduled");
   });
 
+  it("resolves a scheduled call's destination from the owner's verified number ahead of the static allowlist", async () => {
+    const createCall = vi.fn(async (request) => { expect(request.to).toBe("+491234567899"); return { sid: "CA-owner" }; });
+    const resolveDestination = vi.fn(async (sessionId: string) => sessionId === "session-1" ? "+491234567899" : null);
+    const result = await startScheduledLiveVoiceCall("session-1", {
+      twilio: { createCall }, telemetry: { append: vi.fn(async (event: any) => event) },
+      orgId: "org-demo", appId: null, mediaStreamUrl: "wss://demo.example/media", fromNumber: "+491234567891",
+      allowedDestinations: ["+491234567890"], resolveDestination, sessionTokenFor: async () => "signed-session",
+    });
+    expect(result.callId).toBe("CA-owner");
+    expect(resolveDestination).toHaveBeenCalledWith("session-1");
+  });
+
+  it("falls back to the static allowlist when the destination resolver returns null", async () => {
+    const createCall = vi.fn(async (request) => { expect(request.to).toBe("+491234567890"); return { sid: "CA-fallback" }; });
+    const result = await startScheduledLiveVoiceCall("session-1", {
+      twilio: { createCall }, telemetry: { append: vi.fn(async (event: any) => event) },
+      orgId: "org-demo", appId: null, mediaStreamUrl: "wss://demo.example/media", fromNumber: "+491234567891",
+      allowedDestinations: ["+491234567890"], resolveDestination: async () => null, sessionTokenFor: async () => "signed-session",
+    });
+    expect(result.callId).toBe("CA-fallback");
+  });
+
+  it("refuses a scheduled call when neither the resolver nor the allowlist has a destination", async () => {
+    await expect(startScheduledLiveVoiceCall("session-1", {
+      twilio: { createCall: vi.fn() }, telemetry: { append: vi.fn(async (event: any) => event) },
+      orgId: "org-demo", appId: null, mediaStreamUrl: "wss://demo.example/media", fromNumber: "+491234567891",
+      sessionTokenFor: async () => "signed-session",
+    })).rejects.toThrow("No destination is configured for this scheduled call");
+  });
+
   it("validates signed provider status callbacks and resolves the persisted session", async () => {
     const validator = { validate: vi.fn(() => true) };
     const onProviderStatus = vi.fn(async () => undefined);
