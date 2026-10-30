@@ -26,7 +26,11 @@ export interface ScheduleCallInput {
 }
 
 export interface ClaimDueInput {
-  orgId: string;
+  /**
+   * Restrict the claim to one organization. Omit it to claim the next due
+   * call of any organization: one shared poller serves every tenant.
+   */
+  orgId?: string;
   now: string;
   workerId: string;
   leaseMs?: number;
@@ -84,6 +88,12 @@ const CREATE_SCHEMA_SQL = `
     ON scheduled_calls (org_id, status, lease_expires_at, scheduled_call_id);
   CREATE INDEX IF NOT EXISTS scheduled_calls_session_idx
     ON scheduled_calls (org_id, session_id);
+  CREATE INDEX IF NOT EXISTS scheduled_calls_due_any_org_idx
+    ON scheduled_calls (status, scheduled_at, scheduled_call_id);
+  CREATE INDEX IF NOT EXISTS scheduled_calls_lease_any_org_idx
+    ON scheduled_calls (status, lease_expires_at);
+  CREATE INDEX IF NOT EXISTS scheduled_calls_provider_call_idx
+    ON scheduled_calls (provider_call_id);
 `;
 
 type Row = Record<string, unknown>;
@@ -126,20 +136,24 @@ export class LibsqlScheduledCallStore implements ScheduledCallOperations {
   }
 
   async claimDue(input: ClaimDueInput): Promise<ScheduledCallRecord | null> {
-    assertNonEmpty(input.orgId, "orgId");
+    if (input.orgId !== undefined) assertNonEmpty(input.orgId, "orgId");
     assertNonEmpty(input.workerId, "workerId");
     assertTimestamp(input.now);
     const leaseMs = input.leaseMs ?? 30_000;
     if (!Number.isInteger(leaseMs) || leaseMs <= 0) throw new Error("leaseMs must be a positive integer");
     await this.initialized;
     const leaseExpiresAt = new Date(Date.parse(input.now) + leaseMs).toISOString();
+    // Without an organization the same two statements run across all
+    // organizations, so the per-tick read cost does not grow with tenants.
+    const orgFilter = input.orgId === undefined ? "" : "org_id = ? AND ";
+    const orgArgs: InValue[] = input.orgId === undefined ? [] : [input.orgId];
     // A process restart must not retry an uncertain provider call. Surface it
     // as an operator-visible failure before considering new scheduled work.
     await this.client.execute({
       sql: `UPDATE scheduled_calls
         SET status = 'failed', error = ?, lease_owner = NULL, lease_expires_at = NULL, updated_at = ?
-        WHERE org_id = ? AND status = 'starting' AND lease_expires_at IS NOT NULL AND lease_expires_at <= ?`,
-      args: ["Lease expired while starting call; operator action required", input.now, input.orgId, input.now] as InValue[],
+        WHERE ${orgFilter}status = 'starting' AND lease_expires_at IS NOT NULL AND lease_expires_at <= ?`,
+      args: ["Lease expired while starting call; operator action required", input.now, ...orgArgs, input.now] as InValue[],
     });
     // The subquery and update are one SQLite write statement. This keeps the
     // claim idempotent when two tasks poll at the same time and works with
@@ -147,12 +161,12 @@ export class LibsqlScheduledCallStore implements ScheduledCallOperations {
     const result = await this.client.execute({
       sql: `UPDATE scheduled_calls SET status = 'starting', attempt_count = attempt_count + 1,
         lease_owner = ?, lease_expires_at = ?, updated_at = ?
-        WHERE org_id = ? AND status = 'scheduled' AND scheduled_call_id = (
+        WHERE ${orgFilter}status = 'scheduled' AND scheduled_call_id = (
           SELECT scheduled_call_id FROM scheduled_calls
-          WHERE org_id = ? AND status = 'scheduled' AND scheduled_at <= ?
+          WHERE ${orgFilter}status = 'scheduled' AND scheduled_at <= ?
           ORDER BY scheduled_at ASC, scheduled_call_id ASC LIMIT 1
         ) RETURNING *`,
-      args: [input.workerId, leaseExpiresAt, input.now, input.orgId, input.orgId, input.now] as InValue[],
+      args: [input.workerId, leaseExpiresAt, input.now, ...orgArgs, ...orgArgs, input.now] as InValue[],
     });
     return result.rows.length ? mapScheduledCall(result.rows[0] as Row) : null;
   }
@@ -214,6 +228,17 @@ export class LibsqlScheduledCallStore implements ScheduledCallOperations {
     await this.client.execute({ sql: "DELETE FROM scheduled_calls WHERE org_id = ?", args: [orgId] });
   }
 
+  /** The session a provider call belongs to, in any organization (webhook routing). */
+  async findSessionIdByProviderCallId(providerCallId: string): Promise<string | null> {
+    if (!providerCallId.trim()) return null;
+    await this.initialized;
+    const result = await this.client.execute({
+      sql: "SELECT session_id FROM scheduled_calls WHERE provider_call_id = ? LIMIT 1",
+      args: [providerCallId],
+    });
+    return result.rows.length ? String((result.rows[0] as Row).session_id) : null;
+  }
+
   private async findBySession(orgId: string, sessionId: string): Promise<ScheduledCallRecord | null> {
     const result = await this.client.execute({
       sql: "SELECT * FROM scheduled_calls WHERE org_id = ? AND session_id = ? LIMIT 1",
@@ -232,7 +257,8 @@ export function createScheduledCallStore(
 
 export interface ScheduledCallPollerOptions {
   operations: ScheduledCallOperations;
-  orgId: string;
+  /** One organization, or omit it for a single poller that serves every organization. */
+  orgId?: string;
   workerId: string;
   now?: () => string;
   leaseMs?: number;
@@ -249,7 +275,11 @@ export interface ScheduledCallPollerOptions {
   onProviderFailure?: (job: ScheduledCallRecord, error: unknown) => Promise<void>;
 }
 
-/** Single-task poller; provider invocation is deliberately an injected seam. */
+/**
+ * Single-task poller; provider invocation is deliberately an injected seam.
+ * Each tick claims at most one due call with one claim query, whatever the
+ * number of organizations; claimed records carry their own `orgId`.
+ */
 export class ScheduledCallPoller {
   private readonly now: () => string;
   private readonly leaseMs: number;
@@ -267,7 +297,12 @@ export class ScheduledCallPoller {
   }
 
   async pollOnce(): Promise<ScheduledCallRecord | null> {
-    const job = await this.options.operations.claimDue({ orgId: this.options.orgId, workerId: this.options.workerId, now: this.now(), leaseMs: this.leaseMs });
+    const job = await this.options.operations.claimDue({
+      ...(this.options.orgId === undefined ? {} : { orgId: this.options.orgId }),
+      workerId: this.options.workerId,
+      now: this.now(),
+      leaseMs: this.leaseMs,
+    });
     if (!job) return null;
     try {
       const providerCallId = this.options.job

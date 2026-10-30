@@ -1,6 +1,7 @@
 import type { AppRegistry, AppTokenClaims } from "./index.js";
 import { bearerToken } from "./index.js";
 import { jwtVerify, SignJWT } from "jose";
+import { personalOrgId, VOICE_AGENT_PRINCIPAL } from "../../tenancy.js";
 
 /** Authentication modes supported by the unreleased demo MCP boundary. */
 export type McpAuthMode = "none" | "app-token" | "internal-signed";
@@ -49,7 +50,12 @@ export interface McpAuthOptions {
   registry?: AppRegistry;
   /** Required when `mode` is `internal-signed`; defaults to the service env. */
   internalSecret?: Uint8Array | string;
-  /** Trusted user → organization mapping for router-to-demo calls. */
+  /**
+   * Shared organizations a router-signed subject may also claim, besides its
+   * personal `org-user-<sub>` organization. `<userId>=<org>` names one user;
+   * `*=<org>` lets the router decide (it only signs the operator organization
+   * for users holding the operator grant).
+   */
   internalUserOrgAllowlist?: Readonly<Record<string, string>>;
   /** Injectable clock for deterministic auth tests. */
   now?: () => number;
@@ -107,9 +113,11 @@ export async function authenticateMcpRequest(
       secret: options.internalSecret ?? process.env.KITSTACK_DEMO_INTERNAL_SECRET,
       now: options.now,
     });
+    if (claims.sub === VOICE_AGENT_PRINCIPAL) {
+      throw new McpAuthError("forbidden_identity", "MCP internal identity uses a reserved principal");
+    }
     const allowlist = options.internalUserOrgAllowlist ?? readInternalUserOrgAllowlist();
-    const expectedOrg = allowlist[claims.sub] ?? allowlist["*"];
-    if (!expectedOrg || expectedOrg !== claims.org) {
+    if (!internalOrgAllowed(claims, allowlist)) {
       throw new McpAuthError(
         "forbidden_identity",
         "MCP internal identity is not allowlisted for this demo organization",
@@ -253,6 +261,18 @@ function internalSecret(value: Uint8Array | string | undefined): Uint8Array {
     throw new McpAuthError("misconfigured", "MCP internal signing secret must be at least 32 bytes");
   }
   return secret;
+}
+
+/**
+ * A router-signed identity may act in its personal organization, or in a
+ * shared organization the allowlist grants it. An explicit `<userId>=<org>`
+ * entry takes precedence over the `*` entry for that user.
+ */
+function internalOrgAllowed(claims: InternalSignedMcpClaims, allowlist: Readonly<Record<string, string>>): boolean {
+  if (!claims.sub.trim()) return false;
+  if (claims.org === personalOrgId(claims.sub)) return true;
+  const sharedOrg = allowlist[claims.sub] ?? allowlist["*"];
+  return Boolean(sharedOrg) && sharedOrg === claims.org;
 }
 
 function readInternalUserOrgAllowlist(): Readonly<Record<string, string>> {
