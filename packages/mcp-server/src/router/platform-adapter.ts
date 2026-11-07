@@ -17,7 +17,7 @@ import { withMcpServers, type McpServerRegistration } from "../../../sdk/src/ser
 import type { KitRegistryItem, UserKitDbItem, KitToolResult } from "./types";
 import { dispatchToolCall } from "./tool-dispatcher";
 import { getKitApps, getKitShellS3Key, readAppResource } from "./app-resources";
-import { kitCdnUrl, demoInternalSecret, demoOrgId, demoVoiceServiceUrl } from "../config";
+import { kitCdnUrl, debriefOpenAccess, demoInternalSecret, demoOrgId, demoVoiceServiceUrl } from "../config";
 import { SignJWT } from "jose";
 import { createDebriefTools } from "../../../../kits/debrief/src/tools";
 import { personalOrgId } from "../../../../kits/debrief/src/tenancy";
@@ -351,7 +351,10 @@ export type DebriefAccess =
  *
  * Access: the user needs `kit:use` on kit `debrief` (the same tuple check as
  * every other kit call, including delegated-identity rules). Without it the
- * voice service is never called.
+ * voice service is never called. With open access
+ * (`KITSTACK_DEBRIEF_OPEN_ACCESS=true`) a signed-in user acting for themself
+ * needs no grant; the voice service's phone verification and daily call caps
+ * bound what they can spend.
  *
  * Organization: operators work in the shared operator organization
  * (`KITSTACK_DEMO_ORG_ID`, default `org-demo`). A user is an operator when
@@ -364,10 +367,14 @@ export async function resolveDebriefAccess(
   identity: McpRequestIdentity,
   checkTuple: TupleChecker,
   operatorOrgId: string = demoOrgId(),
+  openAccess: boolean = debriefOpenAccess(),
 ): Promise<DebriefAccess> {
   try {
-    const authorization = await authorizeToolInvocation({ identity, mode: "assist", kitSlug: DEBRIEF_KIT_ID }, checkTuple);
-    if (!authorization.allowed) return { allowed: false, message: DEBRIEF_ACCESS_DENIED_MESSAGE };
+    const selfService = openAccess && identity.kind === "interactive" && identity.principal === identity.actor;
+    if (!selfService) {
+      const authorization = await authorizeToolInvocation({ identity, mode: "assist", kitSlug: DEBRIEF_KIT_ID }, checkTuple);
+      if (!authorization.allowed) return { allowed: false, message: DEBRIEF_ACCESS_DENIED_MESSAGE };
+    }
     const operator = await checkTuple(identity.principal, "kit:admin", "organization", operatorOrgId, "user");
     return { allowed: true, orgId: operator ? operatorOrgId : personalOrgId(identity.principal) };
   } catch {

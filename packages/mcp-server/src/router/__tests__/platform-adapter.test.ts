@@ -3,7 +3,7 @@ import { jwtVerify } from "jose";
 import { platformAdapter } from "../platform-adapter";
 import { createRouterPlatformDataSource } from "../platform-host";
 import { readAppResource } from "../app-resources";
-import { DEBRIEF_SHELL_S3_KEY } from "../platform-adapter";
+import { DEBRIEF_SHELL_S3_KEY, resolveDebriefAccess } from "../platform-adapter";
 import type { KitRegistryItem, UserKitDbItem } from "../types";
 import type { KitContext } from "../../../../sdk/src/types";
 import { parseMcpServerManifest } from "../../../../sdk/src/server/manifest";
@@ -248,6 +248,14 @@ describe("platform debrief adapter", () => {
     await expect(adapter.executeLoader("debrief", "prebrief", "prospect-1")).rejects.toThrow("Ask the KitStack team for access");
     expect(fetcher).not.toHaveBeenCalled();
     expect(checkTuple).toHaveBeenCalledWith("prospect-1", "kit:use", "kit", "debrief", "user");
+  });
+
+  it("opens the debrief to any signed-in user in a personal organization with open access", async () => {
+    const checkTuple = debriefGrants({ use: false });
+    const self = { kind: "interactive", principal: "prospect-1", actor: "prospect-1" } as const;
+    await expect(resolveDebriefAccess(self, checkTuple, "org-demo", true)).resolves.toEqual({ allowed: true, orgId: "org-user-prospect-1" });
+    await expect(resolveDebriefAccess(self, checkTuple, "org-demo", false)).resolves.toMatchObject({ allowed: false });
+    await expect(resolveDebriefAccess(self, debriefGrants({ use: false, operator: true }), "org-demo", true)).resolves.toEqual({ allowed: true, orgId: "org-demo" });
   });
 
   it("fails closed when the grant store cannot be read", async () => {

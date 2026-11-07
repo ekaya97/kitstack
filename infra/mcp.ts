@@ -240,6 +240,8 @@ export const mcpRouter = new sst.aws.Function("McpRouter", {
   ],
   environment: {
     KITSTACK_DEMO_VOICE_URL: demoVoiceUrl,
+    // Prospects sign in and use the debrief without a manual grant.
+    KITSTACK_DEBRIEF_OPEN_ACCESS: "true",
   },
   permissions: [
     {

@@ -76,6 +76,7 @@ export async function createDemoServer(options: DemoServerOptions = {}): Promise
       authToken: process.env.TWILIO_AUTH_TOKEN,
       serviceSid: process.env.TWILIO_VERIFY_SERVICE_SID,
     },
+    selfServiceDailyCallLimit: options.appOptions?.selfServiceDailyCallLimit ?? readPositiveInteger(process.env.KITSTACK_VOICE_SELF_SERVICE_DAILY_CALLS),
   });
   const ownsApp = options.app === undefined;
   const maxBodyBytes = options.maxBodyBytes ?? DEFAULT_MAX_BODY_BYTES;
@@ -223,6 +224,11 @@ export function createTenantScheduledCallPoller(
 function parsePort(value: string | undefined): number | undefined {
   if (value === undefined || !/^\d+$/.test(value)) return undefined;
   return Number(value);
+}
+
+function readPositiveInteger(value: string | undefined): number | undefined {
+  if (value === undefined || !/^[1-9]\d*$/.test(value.trim())) return undefined;
+  return Number(value.trim());
 }
 
 function readDatabaseUrl(): string | undefined {

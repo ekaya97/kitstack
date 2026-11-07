@@ -72,6 +72,8 @@ export interface ScheduledCallOperations {
   reset(orgId: string): Promise<void>;
   /** Count calls scheduled for this owner since a timestamp; backs the daily per-user call cap. */
   countForOwnerSince(orgId: string, ownerId: string, sinceIso: string): Promise<number>;
+  /** Count calls scheduled in every organization except one since a timestamp; backs the global self-service call cap. */
+  countOutsideOrgSince(excludedOrgId: string, sinceIso: string): Promise<number>;
 }
 
 export interface CreateScheduledCallStoreOptions {
@@ -303,6 +305,15 @@ export class LibsqlScheduledCallStore implements ScheduledCallOperations {
     const result = await this.client.execute({
       sql: "SELECT COUNT(*) AS count FROM scheduled_calls WHERE org_id = ? AND owner_id = ? AND created_at >= ?",
       args: [orgId, ownerId, sinceIso],
+    });
+    return Number((result.rows[0] as Row | undefined)?.count ?? 0);
+  }
+
+  async countOutsideOrgSince(excludedOrgId: string, sinceIso: string): Promise<number> {
+    await this.initialized;
+    const result = await this.client.execute({
+      sql: "SELECT COUNT(*) AS count FROM scheduled_calls WHERE org_id <> ? AND created_at >= ?",
+      args: [excludedOrgId, sinceIso],
     });
     return Number((result.rows[0] as Row | undefined)?.count ?? 0);
   }

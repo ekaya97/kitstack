@@ -18,6 +18,8 @@ import { createTwilioVerifyClient } from "@kitstackco/voice";
 
 /** Guardrail: at most this many calls may be placed for one user in a rolling 24h window. */
 const DAILY_SCHEDULED_CALL_LIMIT = 5;
+/** Calls per day across every self-service organization; caps Twilio and OpenAI spend now that anyone signed in can schedule. */
+const DEFAULT_SELF_SERVICE_DAILY_CALL_LIMIT = 20;
 
 export interface DemoApp {
   readonly client: Client;
@@ -94,6 +96,8 @@ export interface CreateDemoAppOptions {
   operatorFallback?: { orgId?: string; destination?: string } | null;
   /** Twilio Verify config for self-service phone verification; an empty serviceSid disables the feature. */
   twilioVerify?: { accountSid?: string; authToken?: string; serviceSid?: string; fetch?: (input: string, init?: RequestInit) => Promise<Response> };
+  /** Calls per day across every organization except the operator's (default 20). */
+  selfServiceDailyCallLimit?: number;
 }
 
 const KIT_ID = "kit:debrief";
@@ -113,6 +117,7 @@ interface SharedResources {
   readonly tenants: DebriefTenants;
   readonly operatorFallback: CreateDemoAppOptions["operatorFallback"];
   readonly twilioVerify: CreateDemoAppOptions["twilioVerify"];
+  readonly selfServiceDailyCallLimit: number;
   close(): Promise<void>;
 }
 
@@ -200,6 +205,7 @@ export async function createDemoApp(options: CreateDemoAppOptions = {}): Promise
     client, appId, telemetry, modelRouter, apps, memory, debriefStore, scheduledCallStore, mcpAuthMode, adminToken, tenants,
     operatorFallback: options.operatorFallback,
     twilioVerify: options.twilioVerify,
+    selfServiceDailyCallLimit: options.selfServiceDailyCallLimit ?? DEFAULT_SELF_SERVICE_DAILY_CALL_LIMIT,
     async close() {
       if (closed) return;
       closed = true;
@@ -337,6 +343,13 @@ async function createWorkspace(shared: SharedResources, orgId: string): Promise<
             const placedToday = await scheduler.countForOwnerSince(orgId, request.ownerId, since);
             if (placedToday + callsToPlace > DAILY_SCHEDULED_CALL_LIMIT) {
               throw new Error(`Daily call limit reached (${DAILY_SCHEDULED_CALL_LIMIT} per day). Try scheduling again tomorrow.`);
+            }
+          }
+          if (orgId !== tenants.operatorOrgId) {
+            const since = new Date(Date.now() - 24 * 60 * 60 * 1000).toISOString();
+            const placedByEveryone = await scheduler.countOutsideOrgSince(tenants.operatorOrgId, since);
+            if (placedByEveryone + callsToPlace > shared.selfServiceDailyCallLimit) {
+              throw new Error("The demo has reached today's call capacity. Try scheduling again tomorrow.");
             }
           }
           const prepared = await debrief.prepareDebrief({
@@ -600,6 +613,7 @@ async function createWorkspace(shared: SharedResources, orgId: string): Promise<
     get: (scopeOrgId, scheduledCallId) => scheduledCallStore.get(scopeOrgId, scheduledCallId),
     list: (scopeOrgId) => scheduledCallStore.list(scopeOrgId),
     countForOwnerSince: (scopeOrgId, ownerId, sinceIso) => scheduledCallStore.countForOwnerSince(scopeOrgId, ownerId, sinceIso),
+    countOutsideOrgSince: (excludedOrgId, sinceIso) => scheduledCallStore.countOutsideOrgSince(excludedOrgId, sinceIso),
     reset: async (scopeOrgId) => {
       await plugins.dispatch("scheduler:scheduled-calls", { operation: "reset", input: { orgId: scopeOrgId } }, schedulerPluginContext(scopeOrgId, "demo-reset", appId, telemetry));
     },

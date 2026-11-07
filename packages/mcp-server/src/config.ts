@@ -46,6 +46,9 @@ export const demoInternalSecret = (): Uint8Array => new TextEncoder().encode(
 /** The unreleased demo has one synthetic organization. */
 export const demoOrgId = (): string => process.env.KITSTACK_DEMO_ORG_ID?.trim() || "org-demo";
 
+/** Lets every signed-in user use the debrief in a personal organization, without a `kit:use` grant. */
+export const debriefOpenAccess = (): boolean => process.env.KITSTACK_DEBRIEF_OPEN_ACCESS?.trim() === "true";
+
 // --- Relay ---
 
 export const devRelayUrl = (): string => (Resource as any).DevRelay?.url?.replace(/\/$/, "") || "";

@@ -22,8 +22,8 @@ function fakeTwilioVerifyFetch(code = FAKE_CODE) {
   }) as unknown as (input: string, init?: RequestInit) => Promise<Response>;
 }
 
-async function call<T = any>(name: string, args: Record<string, unknown> = {}): Promise<T> {
-  const response = await mcpRequest(app!, { body: { id: 1, method: "tools/call", params: kitCall(name, args) } });
+async function call<T = any>(name: string, args: Record<string, unknown> = {}, workspace: DemoApp = app!): Promise<T> {
+  const response = await mcpRequest(workspace, { body: { id: 1, method: "tools/call", params: kitCall(name, args) } });
   const result = (response.body as any).result;
   if (result.isError) throw new Error(result.content[0].text);
   return JSON.parse(result.content[0].text) as T;
@@ -84,5 +84,27 @@ describe("self-service phone verification", () => {
     await expect(call("prepare_debrief", {
       goal: "Debrief the call", company: "Customer 6", contact_name: "Jane Doe", location: "Köln", ...callback(),
     })).rejects.toThrow("Daily call limit reached");
+  });
+
+  it("caps calls across every self-service organization, but not the operator's", async () => {
+    app = await createDemoApp({
+      url: ":memory:",
+      operatorFallback: { destination: "+491234567890" },
+      twilioVerify: { accountSid: "AC1", authToken: "t", serviceSid: "VA1", fetch: fakeTwilioVerifyFetch() },
+      selfServiceDailyCallLimit: 2,
+    });
+    const debriefFor = async (workspace: DemoApp, company: string) => call("prepare_debrief", {
+      goal: "Debrief the call", company, contact_name: "Jane Doe", location: "Köln", ...callback(),
+    }, workspace);
+    const prospects = [await app.tenants.forOrg("org-user-a"), await app.tenants.forOrg("org-user-b")];
+    for (const prospect of prospects) {
+      await call("register_phone", { phone: "+491701234567" }, prospect);
+      await call("verify_phone", { phone: "+491701234567", code: FAKE_CODE }, prospect);
+    }
+
+    await expect(debriefFor(prospects[0]!, "Customer A")).resolves.toMatchObject({ state: "prepared" });
+    await expect(debriefFor(prospects[1]!, "Customer B")).resolves.toMatchObject({ state: "prepared" });
+    await expect(debriefFor(prospects[1]!, "Customer C")).rejects.toThrow("today's call capacity");
+    await expect(debriefFor(app, "Operator customer")).resolves.toMatchObject({ state: "prepared" });
   });
 });
