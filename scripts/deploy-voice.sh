@@ -15,7 +15,7 @@ HOST="${KITSTACK_VOICE_SSH:-root@insai-qa-box}"
 DIR=/opt/kitstack/voice
 cd "$(dirname "$0")/.."
 
-if [ -n "$(git status --porcelain -- packages/sdk packages/voice packages/crm kits/debrief)" ]; then
+if [ -n "$(git status --porcelain --untracked-files=no -- packages/sdk packages/voice packages/crm kits/debrief)" ]; then
   echo "Commit the voice service changes first; the image is tagged with the commit." >&2
   exit 1
 fi
