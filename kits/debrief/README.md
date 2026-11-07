@@ -99,10 +99,14 @@ Tools: `register_phone`, `verify_phone`, `get_phone`, `remove_phone`,
 
 ## Access and data separation
 
-- Every debrief tool call and View load needs a `kit:use` grant on kit
-  `debrief` for the user. The router checks it before it calls this service;
-  without it the user is told to ask the KitStack team for access. The web app
-  never lets users activate this kit themselves.
+- Every signed-in user can use the debrief: the router runs with
+  `KITSTACK_DEBRIEF_OPEN_ACCESS=true` (set in `infra/mcp.ts`). Without that
+  flag, a tool call or View load needs a `kit:use` grant on kit `debrief`, and
+  the user is told to ask the KitStack team for access. The web app never lets
+  users activate this kit themselves.
+- Spend is bounded by phone verification, 5 calls a day per user, and 20 calls
+  a day across all organizations except `org-demo`
+  (`KITSTACK_VOICE_SELF_SERVICE_DAILY_CALLS` in `voice.env` changes it).
 - Operators are users holding `kit:admin` on organization `org-demo` (directly
   or through a team or role). They work in `org-demo`, the operator org.
 - Everyone else works in a personal organization, `org-user-<userId>`. Each
@@ -143,9 +147,8 @@ run `docker compose up -d` in that directory. SST only owns the DNS records
 
 1. Create a Twilio Verify service (Twilio Console → Verify → Services) and set
    `TWILIO_VERIFY_SERVICE_SID` in `voice.env` to its SID (it starts with `VA`).
-2. Grant the operator `kit:use` on kit `debrief` and `kit:admin` on
-   organization `org-demo`. Without them the operator loses access to the demo.
-3. Grant each prospect `kit:use` on kit `debrief`.
+2. Grant the operator `kit:admin` on organization `org-demo`. Without it the
+   operator works in a personal organization and does not see the demo data.
 
 ## Host composition
 
