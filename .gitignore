@@ -55,13 +55,18 @@ packages/sdk/views/dist-views/
 packages/sdk/views/dist/
 .kitstack/
 
-# tracking
-.track/
+# tracking: .track/ is tracked in full since 2026-11-12 (see .track/KNOWLEDGE.md)
+.track/**/.DS_Store
+# lists unfixed security gaps; stays out of the public repo until they are fixed
+.track/docs/audit-2026-11-12-docs.md
 
 # next.js (in web/)
 web/.next/
 web/.open-next/
 
-.claude
+# claude code: skills and shared settings are tracked; worktrees and personal settings are not
+.claude/worktrees/
+.claude/settings.local.json
+.claude/skills/*-workspace/
 
 deprecated/

@@ -1,0 +1,48 @@
+{
+  "skill_name": "dev-docs",
+  "evals": [
+    {
+      "id": 0,
+      "prompt": "Write a getting started guide for KitStack. I want a developer to go from zero to having a working kit with one tool and one view running locally. Target someone who knows TypeScript but has never seen KitStack before.",
+      "expected_output": "A complete .mdx getting-started tutorial with prerequisites, step-by-step instructions, code blocks with filenames, and working inline examples derived from the actual SDK API.",
+      "files": [],
+      "assertions": [
+        {"id": "prereqs", "text": "Has a Prerequisites section", "type": "contains_pattern", "pattern": "(?i)prerequisit"},
+        {"id": "filename-labels", "text": "Code blocks have filename labels", "type": "contains_pattern", "pattern": "filename="},
+        {"id": "sdk-functions", "text": "References defineKit, defineTool, and defineView", "type": "contains_all", "values": ["defineKit", "defineTool", "defineView"]},
+        {"id": "cli-commands", "text": "Includes terminal/CLI commands for running locally", "type": "contains_pattern", "pattern": "kitstack (dev|init)"},
+        {"id": "next-steps", "text": "Has a Next Steps section at the end", "type": "contains_pattern", "pattern": "(?i)next.?steps"},
+        {"id": "action-headings", "text": "Step headings use action verbs", "type": "custom", "description": "At least 3 headings start with action verbs (Create, Install, Configure, Add, Define, Run, Build, Set)"}
+      ]
+    },
+    {
+      "id": 1,
+      "prompt": "Write the API reference page for defineTool(). Cover the full signature, all parameters including load/handler/authorize, return type, and show examples of read-only tools vs write tools. Make sure the gotchas around naming conventions and description length are in there.",
+      "expected_output": "A complete .mdx API reference page with accurate type signature from source, parameter table, return type docs, multiple code examples, and warning callouts for naming/validation constraints.",
+      "files": [],
+      "assertions": [
+        {"id": "signature", "text": "Has a TypeScript function signature block", "type": "contains_pattern", "pattern": "```ts"},
+        {"id": "param-table", "text": "Has a parameter table with columns", "type": "contains_pattern", "pattern": "\\|.*\\|.*\\|"},
+        {"id": "load-example", "text": "Shows a load() example for read-only tools", "type": "contains_pattern", "pattern": "load[:(]"},
+        {"id": "handler-example", "text": "Shows a handler() example for write tools", "type": "contains_pattern", "pattern": "handler[:(]"},
+        {"id": "snake-case", "text": "Mentions snake_case naming requirement", "type": "contains_pattern", "pattern": "snake.?case"},
+        {"id": "desc-length", "text": "Mentions minimum description length constraint", "type": "contains_pattern", "pattern": "10.?(char|character)"},
+        {"id": "warning-callout", "text": "Uses Warning or similar callout for gotchas", "type": "contains_pattern", "pattern": "<(Warning|Caution|Note|Danger)>"}
+      ]
+    },
+    {
+      "id": 2,
+      "prompt": "Write a guide on how to add views to a kit. Cover the loader pattern, the View component, useKit hook, and how views respond to tool mutations. Show a realistic example like a contacts table view.",
+      "expected_output": "A complete .mdx how-to guide covering the full view lifecycle (loader → component → interactivity), with realistic code examples based on existing kits, proper MDX callouts for gotchas, and links to related concepts.",
+      "files": [],
+      "assertions": [
+        {"id": "define-view", "text": "Covers defineView() function", "type": "contains_pattern", "pattern": "defineView"},
+        {"id": "loader-pattern", "text": "Shows a loader function", "type": "contains_pattern", "pattern": "loader"},
+        {"id": "react-component", "text": "Shows a React View component", "type": "contains_pattern", "pattern": "View\\.tsx|export (default |const )"},
+        {"id": "usekit-hook", "text": "Mentions useKit hook", "type": "contains_pattern", "pattern": "useKit"},
+        {"id": "reload-pattern", "text": "Shows mutation/reload response pattern", "type": "contains_pattern", "pattern": "reload|refetch|mutation"},
+        {"id": "filename-labels", "text": "Code blocks have filename labels", "type": "contains_pattern", "pattern": "filename="}
+      ]
+    }
+  ]
+}

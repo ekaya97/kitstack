@@ -1,0 +1,21 @@
+---
+id: T-0070
+title: "DevKit: integrate Vite dev server for view module HMR"
+status: done
+priority: high
+created: "2026-04-25T18:41:57Z"
+created_by: human
+claimed_by: null
+claimed_at: null
+labels:
+  - devkit
+branch: null
+files: []
+depends_on: []
+---
+
+## Description
+
+
+
+## Work Log

@@ -28,9 +28,16 @@ Two product invariants drive the design:
 
 ## Source of truth documents
 
-- **Tracking:** `.track/` (board, conventions, docs). It is git-ignored and lives only in the
-  root checkout at `~/dev/kitstack`, so a worktree session does not have it. Read and write it
-  there by absolute path.
+- **Tracking:** `.track/` is tracked in git in full since 2026-11-12, modeled on the insai repo.
+  `.track/KNOWLEDGE.md` says what goes where. The repository is public, so nothing in `.track/`
+  may carry a secret or a person's phone number or email (KNOWLEDGE.md, "The one rule").
+- **Decisions:** `.track/adr/`, numbered, never rewritten. Read before re-deriving one. Write one
+  when a decision is hard to reverse, surprising without context and the result of a real
+  trade-off. Format and index in `.track/adr/README.md`.
+- **Specs, plans, findings:** `.track/specs/` (intended behavior), `.track/plans/` (approved
+  plans), `.track/findings/` (dated measurements, including the wrong ones).
+- **Tickets and board:** `.track/tickets/` and `.track/BOARD.md`, run by the `track` CLI
+  (`.track/CONVENTIONS.md`).
 - **Roadmap:** `web/content/docs/roadmap.mdx`. The core steps in dependency order, what comes
   after them, and what will not be built. When code and roadmap disagree on intent, the roadmap
   wins; update it in the same change if intent changed.
@@ -149,7 +156,11 @@ integrations/
 web/            # site, docs (content/docs), blog, /demo observability screens
 infra/          # SST: secrets, storage, mcp (router), demo (voice DNS), web; operations/
 scripts/        # deploy-voice.sh, run-evals.ts, seeds, typecheck-maintained-kits.mjs
-.claude/skills/ # kit-builder, tool-iterator, dev-docs, frontend-design, skill-creator
+.claude/skills/ # kit work: kit-builder, tool-iterator, dev-docs, frontend-design, skill-creator
+                # engineering (from insai, see VENDORED.md): grilling, grill-with-docs,
+                # domain-modeling, codebase-design, improve-codebase-architecture,
+                # fault-injection, write-ticket, writing-for-agents, unslop
+.track/         # TRACKED IN FULL: adr/ specs/ plans/ findings/ releases/ tickets/ BOARD.md
 ```
 
 ## Branches and releases

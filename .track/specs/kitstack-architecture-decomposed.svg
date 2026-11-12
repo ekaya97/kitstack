@@ -1,0 +1,350 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 2560 1780" font-family="Inter, -apple-system, 'Segoe UI', sans-serif" xmlns:c2pa="http://c2pa.org/manifest"><metadata><c2pa:manifest>AAAWgmp1bWIAAAAeanVtZGMycGEAEQAQgAAAqgA4m3EDYzJwYQAAABZcanVtYgAAAEdqdW1kYzJtYQARABCAAACqADibcQN1cm46YzJwYTo5NjkwMjVjMy05ODA5LTQzODEtYmU3OC0wMTM3MzM3MDE4MjIAAAADl2p1bWIAAAApanVtZGMyYXMAEQAQgAAAqgA4m3EDYzJwYS5hc3NlcnRpb25zAAAAALxqdW1iAAAARGp1bWRjYm9yABEAEIAAAKoAOJtxE2MycGEuaW5ncmVkaWVudC52MwAAAAAYYzJzaJAPc3XRh2rQkIRDM3fb3N0AAABwY2JvcqNpZGM6Zm9ybWF0bWltYWdlL3N2Zyt4bWxqaW5zdGFuY2VJRHgseG1wOmlpZDpmMTA1YTNlOC02Mjk5LTQ5NjgtODMzMC0xNjdjZTg2Y2U2OTBscmVsYXRpb25zaGlwaHBhcmVudE9mAAAB4mp1bWIAAABBanVtZGNib3IAEQAQgAAAqgA4m3ETYzJwYS5hY3Rpb25zLnYyAAAAABhjMnNosx5Z+9aty8UWRWPg3b76PwAAAZljYm9yomdhY3Rpb25zgqJmYWN0aW9ua2MycGEub3BlbmVkanBhcmFtZXRlcnOha2luZ3JlZGllbnRzgaJjdXJseC1zZWxmI2p1bWJmPWMycGEuYXNzZXJ0aW9ucy9jMnBhLmluZ3JlZGllbnQudjNkaGFzaFgg2nx+DhIgyMIvBUnO07i1oyOoligYKaDPF1YYCpTJA9WkZmFjdGlvbngdY29tLmFudGhyb3BpYy5jbGF1ZGUucHJvdmlkZWRqcGFyYW1ldGVyc6F4H2NvbS5hbnRocm9waWMub3JpZ2luLWNvbmZpZGVuY2VndW5rbm93bmtkZXNjcmlwdGlvbnhmQ2xhdWRlIHByb3ZpZGVkIHRoaXMgZmlsZSBhdCB0aGUgcmVxdWVzdCBvZiBhIHVzZXIgYW5kIG1heSBoYXZlIGNyZWF0ZWQgb3IgbW9kaWZpZWQgdGhlIGZpbGUgY29udGVudHMubXNvZnR3YXJlQWdlbnShZG5hbWVmQ2xhdWRlcmFsbEFjdGlvbnNJbmNsdWRlZPUAAADIanVtYgAAAEBqdW1kY2JvcgARABCAAACqADibcRNjMnBhLmhhc2guZGF0YQAAAAAYYzJzaLDOVIAE/O+RM1R4g+wgw6MAAACAY2JvcqVjYWxnZnNoYTI1NmNwYWRNAAAAAAAAAAAAAAAAAGRoYXNoWCDTLR8UC8CaStK4yrToDYFPAcKmIoXUuxpStBBYN3+gF2RuYW1lbmp1bWJmIG1hbmlmZXN0amV4Y2x1c2lvbnOBomVzdGFydBi6Zmxlbmd0aBkeBAAAAj5qdW1iAAAAJ2p1bWRjMmNsABEAEIAAAKoAOJtxA2MycGEuY2xhaW0udjIAAAACD2Nib3KlY2FsZ2ZzaGEyNTZpc2lnbmF0dXJleE1zZWxmI2p1bWJmPS9jMnBhL3VybjpjMnBhOjk2OTAyNWMzLTk4MDktNDM4MS1iZTc4LTAxMzczMzcwMTgyMi9jMnBhLnNpZ25hdHVyZWppbnN0YW5jZUlEeCx4bXA6aWlkOjE2N2E1ZDFiLTIxY2YtNGNiMS1iMDdlLTdjMDA3ZjA0ZmZmNXJjcmVhdGVkX2Fzc2VydGlvbnODomN1cmx4LXNlbGYjanVtYmY9YzJwYS5hc3NlcnRpb25zL2MycGEuaW5ncmVkaWVudC52M2RoYXNoWCDafH4OEiDIwi8FSc7TuLWjI6iWKBgpoM8XVhgKlMkD1aJjdXJseCpzZWxmI2p1bWJmPWMycGEuYXNzZXJ0aW9ucy9jMnBhLmFjdGlvbnMudjJkaGFzaFggcM2eM73keIM/rsNzlrmc74vH2UAZAU9vGWDd6ZPMuCGiY3VybHgpc2VsZiNqdW1iZj1jMnBhLmFzc2VydGlvbnMvYzJwYS5oYXNoLmRhdGFkaGFzaFggIcytpuOpalTP5r5aIcTP19UVOSgYaWJXN0ApTTd1xbJ0Y2xhaW1fZ2VuZXJhdG9yX2luZm+jZG5hbWVvQW50aHJvcGljIEZpbGVzZ3ZlcnNpb25lMS4wLjBrc3BlY1ZlcnNpb25lMi40LjAAABA4anVtYgAAAChqdW1kYzJjcwARABCAAACqADibcQNjMnBhLnNpZ25hdHVyZQAAABAIY2JvctKEWQISogEmGCFZAgowggIGMIIBjaADAgECAhRA5aAK7sI50L64g/oGQgU9Z1UTADAKBggqhkjOPQQDAzBJMRcwFQYDVQQKEw5BbnRocm9waWMsIFBCQzEuMCwGA1UEAxMlQW50aHJvcGljIENvbnRlbnQgQ3JlZGVudGlhbHMgUm9vdCBDQTAeFw0yNjA4MDcxODQzNTZaFw0yODA4MDYxOTQzNTZaMEQxFzAVBgNVBAoTDkFudGhyb3BpYywgUEJDMSkwJwYDVQQDEyBBbnRocm9waWMgQ2xhdWRlIENvbnRlbnQgU2lnbmluZzBZMBMGByqGSM49AgEGCCqGSM49AwEHA0IABJh6CmvLUBgFFNU0vUKlOVtE6djd17L5SuwX0LemFisBM3dkd/3cyjxFA3Qo5S46fX0/ihY0VZ7mfb9KF703t5OjWDBWMA4GA1UdDwEB/wQEAwIHgDAVBgNVHSUEDjAMBgorBgEEAYPoXgIBMAwGA1UdEwEB/wQCMAAwHwYDVR0jBBgwFoAUzlHiBIFOZFsj+OPEz5o+nMHXXMIwCgYIKoZIzj0EAwMDZwAwZAIwMXMdFJ4BetLLVY7ORuE9noqbbAZOZn/aArXyTwFAZfKrPzxF2vPoJNf1+UCdg1XGAjBwX1zd9WGqYkqmL5SFqw1QySjr1zJfpJM9+1rdDwSPLMOPOjKuiXjoU/pUUeG9RwmhY3BhZFkNngAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAPZYQBSNun9qSegz9oJiEoMFGxqNIe37nd/1/CBOKN4JRmCPPy2FlvehqFfqmby7hkDTIm1bMVsBpP1hMTbxxpUHC5s=</c2pa:manifest></metadata>
+<rect width="2560" height="1780" fill="#EDF1F5"/>
+
+<!-- title -->
+<text x="56" y="66" font-size="32" font-weight="700" fill="#16233A">kitstack — system architecture, decomposed</text>
+<text x="56" y="102" font-size="16" fill="#5B6B80">Patterns are labeled where they live. Orange markers pin a problem to the exact place it is solved — legend right. Ink lines: request path. Slate lines: data / background flow. Dashed borders: trust boundaries.</text>
+
+<!-- ===================== TRUST BOUNDARIES ===================== -->
+<rect x="420" y="150" width="1560" height="200" rx="14" fill="none" stroke="#5B6B80" stroke-width="1.5" stroke-dasharray="10 8"/>
+<text x="436" y="174" font-size="13" font-weight="700" fill="#5B6B80">AGENT SURFACES  (clients — anything that speaks MCP)</text>
+
+<rect x="420" y="420" width="1560" height="1060" rx="14" fill="none" stroke="#5B6B80" stroke-width="1.5" stroke-dasharray="10 8"/>
+<text x="436" y="444" font-size="13" font-weight="700" fill="#5B6B80">CUSTOMER INFRASTRUCTURE  (your AWS account · eu-central-1 · everything here deploys via kit deploy)</text>
+
+<!-- ===================== SURFACES ===================== -->
+<g>
+  <rect x="450" y="196" width="350" height="120" rx="10" fill="#F8FAFC" stroke="#16233A" stroke-width="1.5"/>
+  <text x="464" y="222" font-size="17" font-weight="600" fill="#16233A">Claude — chat client</text>
+  <text x="464" y="246" font-size="12.5" fill="#5B6B80">MCP over streamable HTTP. Prep interviews,</text>
+  <text x="464" y="264" font-size="12.5" fill="#5B6B80">entry review, any kit. No kit-specific client code.</text>
+
+  <rect x="830" y="196" width="350" height="120" rx="10" fill="#F8FAFC" stroke="#16233A" stroke-width="1.5"/>
+  <text x="844" y="222" font-size="17" font-weight="600" fill="#16233A">Voice agent runtime</text>
+  <text x="844" y="246" font-size="12.5" fill="#5B6B80">Twilio media ⇄ STT ⇄ LLM ⇄ TTS loop. Calls the</text>
+  <text x="844" y="264" font-size="12.5" fill="#5B6B80">same kit tools as chat — same session object.</text>
+
+  <rect x="1210" y="196" width="350" height="120" rx="10" fill="#F8FAFC" stroke="#16233A" stroke-width="1.5"/>
+  <text x="1224" y="222" font-size="17" font-weight="600" fill="#16233A">Scheduler</text>
+  <text x="1224" y="246" font-size="12.5" fill="#5B6B80">EventBridge one-off schedules. Invokes kit tools</text>
+  <text x="1224" y="264" font-size="12.5" fill="#5B6B80">with the same validated contract as any client.</text>
+
+  <rect x="1590" y="196" width="350" height="120" rx="10" fill="#F8FAFC" stroke="#16233A" stroke-width="1.5"/>
+  <text x="1604" y="222" font-size="17" font-weight="600" fill="#16233A">Agent kits as clients</text>
+  <text x="1604" y="246" font-size="12.5" fill="#5B6B80">defineAgent() loops (lambda / microVM). A kit</text>
+  <text x="1604" y="264" font-size="12.5" fill="#5B6B80">calling another kit is still a routed MCP call.</text>
+</g>
+
+<!-- ===================== EXTERNALS ===================== -->
+<g>
+  <rect x="64" y="740" width="300" height="210" rx="10" fill="#F8FAFC" stroke="#16233A" stroke-width="1.5"/>
+  <text x="78" y="766" font-size="16" font-weight="600" fill="#16233A">Webhook &amp; SaaS providers</text>
+  <text x="78" y="792" font-size="12.5" fill="#5B6B80">Twilio (voice + SMS)</text>
+  <text x="78" y="810" font-size="12.5" fill="#5B6B80">Google / MS calendar</text>
+  <text x="78" y="828" font-size="12.5" fill="#5B6B80">CRM APIs (HubSpot, Salesforce)</text>
+  <text x="78" y="856" font-size="12.5" fill="#5B6B80">Outside the trust boundary.</text>
+  <text x="78" y="874" font-size="12.5" fill="#5B6B80">Signature-validated at the edge.</text>
+
+  <rect x="64" y="1240" width="300" height="210" rx="10" fill="#F8FAFC" stroke="#16233A" stroke-width="1.5"/>
+  <text x="78" y="1266" font-size="16" font-weight="600" fill="#16233A">Repo + CI</text>
+  <text x="78" y="1292" font-size="12.5" fill="#5B6B80">kit repo: tools/ + skills/ side by side,</text>
+  <text x="78" y="1310" font-size="12.5" fill="#5B6B80">reviewed in one PR.</text>
+  <text x="78" y="1338" font-size="12.5" fill="#5B6B80">$ kit deploy → bundle → lambda →</text>
+  <text x="78" y="1356" font-size="12.5" fill="#5B6B80">register at router → keys in dashboard.</text>
+
+  <rect x="2060" y="470" width="300" height="180" rx="10" fill="#F8FAFC" stroke="#16233A" stroke-width="1.5"/>
+  <text x="2074" y="496" font-size="16" font-weight="600" fill="#16233A">LLM providers</text>
+  <text x="2074" y="522" font-size="12.5" fill="#5B6B80">Anthropic API et al. Reached only</text>
+  <text x="2074" y="540" font-size="12.5" fill="#5B6B80">through the router's proxy egress —</text>
+  <text x="2074" y="558" font-size="12.5" fill="#5B6B80">no direct provider keys inside kits.</text>
+</g>
+
+<!-- ===================== ROUTER ===================== -->
+<rect x="460" y="470" width="1480" height="200" rx="12" fill="#16233A"/>
+<text x="478" y="502" font-size="24" font-weight="700" fill="#FFFFFF">ROUTER</text>
+<text x="592" y="500" font-size="14" fill="#DCE4EF">single MCP entrypoint · stateless · N replicas behind LB · hop cost: microseconds vs LLM seconds</text>
+<rect x="1848" y="484" width="74" height="26" rx="5" fill="#E8590C"/>
+<text x="1885" y="502" font-size="13" font-weight="700" fill="#FFFFFF" text-anchor="middle">STAR</text>
+
+<!-- router modules -->
+<g font-size="12" fill="#DCE4EF">
+  <rect x="476" y="528" width="199" height="126" rx="8" fill="#0E1A2C" stroke="#3D4D66"/>
+  <text x="488" y="551" font-size="15" font-weight="600" fill="#FFFFFF">authN / IAM</text>
+  <text x="488" y="572">identity per agent AND per</text>
+  <text x="488" y="588">tool; audit chain = one query</text>
+
+  <rect x="685" y="528" width="199" height="126" rx="8" fill="#0E1A2C" stroke="#3D4D66"/>
+  <text x="697" y="551" font-size="15" font-weight="600" fill="#FFFFFF">metering</text>
+  <text x="697" y="572">tokens + cost attributed to</text>
+  <text x="697" y="588">the single tool call</text>
+
+  <rect x="894" y="528" width="199" height="126" rx="8" fill="#0E1A2C" stroke="#3D4D66"/>
+  <text x="906" y="551" font-size="15" font-weight="600" fill="#FFFFFF">skill resolver</text>
+  <text x="906" y="572">baseline from bundle; live</text>
+  <text x="906" y="588">overrides, staged %; pinned</text>
+  <text x="906" y="604">to tool contract</text>
+
+  <rect x="1103" y="528" width="199" height="126" rx="8" fill="#0E1A2C" stroke="#3D4D66"/>
+  <text x="1115" y="551" font-size="15" font-weight="600" fill="#FFFFFF">memory ACL</text>
+  <text x="1115" y="572">scoped reads/writes;</text>
+  <text x="1115" y="588">inherits the same IAM</text>
+
+  <rect x="1312" y="528" width="199" height="126" rx="8" fill="#0E1A2C" stroke="#3D4D66"/>
+  <text x="1324" y="551" font-size="15" font-weight="600" fill="#FFFFFF">LLM proxy</text>
+  <text x="1324" y="572">all model egress;</text>
+  <text x="1324" y="588">providers swappable</text>
+
+  <rect x="1521" y="528" width="199" height="126" rx="8" fill="#0E1A2C" stroke="#3D4D66"/>
+  <text x="1533" y="551" font-size="15" font-weight="600" fill="#FFFFFF">message bus</text>
+  <text x="1533" y="572">kit ↔ kit calls,</text>
+  <text x="1533" y="588">governed + metered</text>
+
+  <rect x="1730" y="528" width="199" height="126" rx="8" fill="#0E1A2C" stroke="#3D4D66"/>
+  <text x="1742" y="551" font-size="15" font-weight="600" fill="#FFFFFF">registry</text>
+  <text x="1742" y="572">kits register on deploy;</text>
+  <text x="1742" y="588">health + keys</text>
+</g>
+
+<!-- ===================== KITS ===================== -->
+<rect x="460" y="740" width="660" height="430" rx="12" fill="#FBE3D4" stroke="#E8590C" stroke-width="2"/>
+<text x="476" y="768" font-size="19" font-weight="700" fill="#16233A">sales-crm kit  (lambda)</text>
+<rect x="1024" y="752" width="80" height="26" rx="5" fill="#E8590C"/>
+<text x="1064" y="770" font-size="13" font-weight="700" fill="#FFFFFF" text-anchor="middle">ONION</text>
+
+<g>
+  <rect x="476" y="790" width="628" height="62" rx="8" fill="#F8FAFC" stroke="#16233A" stroke-width="1.5"/>
+  <text x="488" y="810" font-size="14.5" font-weight="600" fill="#16233A">entry tool — PROGRESSIVE DISCLOSURE</text>
+  <text x="488" y="830" font-size="12" fill="#5B6B80">call with missing params → returns resolution instructions, not an error. Discovery = state machine, not catalog search.</text>
+
+  <rect x="476" y="860" width="628" height="62" rx="8" fill="#F8FAFC" stroke="#16233A" stroke-width="1.5"/>
+  <text x="488" y="880" font-size="14.5" font-weight="600" fill="#16233A">workflow tools — job-shaped, not CRUD</text>
+  <text x="488" y="900" font-size="12" fill="#5B6B80">typed returns chain by ID; one action → one output. No intermediate calls to re-bill next turn.</text>
+
+  <rect x="476" y="930" width="628" height="62" rx="8" fill="#F8FAFC" stroke="#16233A" stroke-width="1.5"/>
+  <text x="488" y="950" font-size="14.5" font-weight="600" fill="#16233A">skills/ — guidance files beside tools/</text>
+  <text x="488" y="970" font-size="12" fill="#5B6B80">served in-band by the router's skill resolver; version logged per session; override-able without redeploy.</text>
+
+  <rect x="476" y="1000" width="628" height="56" rx="8" fill="#F8FAFC" stroke="#B9C4D2" stroke-width="1.5"/>
+  <text x="488" y="1020" font-size="14.5" font-weight="600" fill="#16233A">MCP views — shell + lazy data</text>
+  <text x="488" y="1040" font-size="12" fill="#5B6B80">SDK keeps state client-side; clicks cost zero tokens; only committed actions reach the model.</text>
+
+  <rect x="476" y="1064" width="628" height="56" rx="8" fill="#F8FAFC" stroke="#B9C4D2" stroke-width="1.5"/>
+  <text x="488" y="1084" font-size="14.5" font-weight="600" fill="#16233A">kit memory namespace</text>
+  <text x="488" y="1104" font-size="12" fill="#5B6B80">runtime-learned facts; writes land here; reads may climb the hierarchy via router ACL.</text>
+
+  <rect x="476" y="1128" width="628" height="30" rx="8" fill="#F8FAFC" stroke="#B9C4D2" stroke-width="1.5"/>
+  <text x="488" y="1148" font-size="13" font-weight="600" fill="#16233A">trigger plugin — transport only <tspan font-weight="400" fill="#5B6B80">(webhooks in, events out, zero logic)</tspan></text>
+</g>
+
+<rect x="1160" y="740" width="360" height="200" rx="12" fill="#F8FAFC" stroke="#16233A" stroke-width="1.5"/>
+<text x="1174" y="766" font-size="17" font-weight="600" fill="#16233A">ads kit  (lambda)</text>
+<text x="1174" y="790" font-size="12.5" fill="#5B6B80">same onion, your workflow. Business logic</text>
+<text x="1174" y="808" font-size="12.5" fill="#5B6B80">only — router + SDK carry everything else.</text>
+
+<rect x="1160" y="970" width="360" height="200" rx="12" fill="#F8FAFC" stroke="#16233A" stroke-width="1.5"/>
+<text x="1174" y="996" font-size="17" font-weight="600" fill="#16233A">docs kit  (lambda)</text>
+<text x="1174" y="1020" font-size="12.5" fill="#5B6B80">one CLI command from repo to registered,</text>
+<text x="1174" y="1038" font-size="12.5" fill="#5B6B80">keyed, metered production.</text>
+
+<!-- ===================== CONTROL PLANE ===================== -->
+<rect x="1560" y="740" width="380" height="430" rx="12" fill="#EAF6F0" stroke="#2F9E68" stroke-width="1.5"/>
+<text x="1576" y="768" font-size="17" font-weight="700" fill="#16233A">CONTROL PLANE</text>
+<rect x="1828" y="752" width="96" height="26" rx="5" fill="#2F9E68"/>
+<text x="1876" y="770" font-size="13" font-weight="700" fill="#FFFFFF" text-anchor="middle">FLYWHEEL</text>
+
+<g>
+  <rect x="1576" y="790" width="348" height="86" rx="8" fill="#F8FAFC" stroke="#2F9E68"/>
+  <text x="1588" y="812" font-size="14.5" font-weight="600" fill="#16233A">ops dashboard</text>
+  <text x="1588" y="832" font-size="12" fill="#5B6B80">one surface: spend per team/agent/tool,</text>
+  <text x="1588" y="848" font-size="12" fill="#5B6B80">traces, health, keys</text>
+
+  <rect x="1576" y="884" width="348" height="86" rx="8" fill="#F8FAFC" stroke="#2F9E68"/>
+  <text x="1588" y="906" font-size="14.5" font-weight="600" fill="#16233A">eval runner</text>
+  <text x="1588" y="926" font-size="12" fill="#5B6B80">offline suite per skill version;</text>
+  <text x="1588" y="942" font-size="12" fill="#5B6B80">runs on every change</text>
+
+  <rect x="1576" y="978" width="348" height="86" rx="8" fill="#F8FAFC" stroke="#2F9E68"/>
+  <text x="1588" y="1000" font-size="14.5" font-weight="600" fill="#16233A">flywheel scorer</text>
+  <text x="1588" y="1020" font-size="12" fill="#5B6B80">joins telemetry + corrections →</text>
+  <text x="1588" y="1036" font-size="12" fill="#5B6B80">score per skill version</text>
+
+  <rect x="1576" y="1072" width="348" height="86" rx="8" fill="#F8FAFC" stroke="#2F9E68"/>
+  <text x="1588" y="1094" font-size="14.5" font-weight="600" fill="#16233A">rollout controller</text>
+  <text x="1588" y="1114" font-size="12" fill="#5B6B80">staged overrides; promote if evals pass AND</text>
+  <text x="1588" y="1130" font-size="12" fill="#5B6B80">live ≥ baseline; promoted → PR back to repo</text>
+</g>
+
+<!-- ===================== DATA STORES ===================== -->
+<g>
+  <rect x="460" y="1280" width="280" height="120" rx="14" fill="#F8FAFC" stroke="#5B6B80" stroke-width="1.5"/>
+  <rect x="460" y="1280" width="280" height="10" rx="5" fill="#5B6B80"/>
+  <text x="474" y="1316" font-size="15" font-weight="600" fill="#16233A">session state</text>
+  <text x="474" y="1338" font-size="12" fill="#5B6B80">DynamoDB — CallSession,</text>
+  <text x="474" y="1354" font-size="12" fill="#5B6B80">drafts, meetings</text>
+
+  <rect x="760" y="1280" width="280" height="120" rx="14" fill="#F8FAFC" stroke="#5B6B80" stroke-width="1.5"/>
+  <rect x="760" y="1280" width="280" height="10" rx="5" fill="#5B6B80"/>
+  <text x="774" y="1316" font-size="15" font-weight="600" fill="#16233A">transcripts</text>
+  <text x="774" y="1338" font-size="12" fill="#5B6B80">S3 · EU · 30-day lifecycle ·</text>
+  <text x="774" y="1354" font-size="12" fill="#5B6B80">no audio ever</text>
+
+  <rect x="1060" y="1280" width="280" height="120" rx="14" fill="#F8FAFC" stroke="#5B6B80" stroke-width="1.5"/>
+  <rect x="1060" y="1280" width="280" height="10" rx="5" fill="#5B6B80"/>
+  <text x="1074" y="1316" font-size="15" font-weight="600" fill="#16233A">skill store</text>
+  <text x="1074" y="1338" font-size="12" fill="#5B6B80">baselines + overrides +</text>
+  <text x="1074" y="1354" font-size="12" fill="#5B6B80">versions + scores</text>
+
+  <rect x="1360" y="1280" width="280" height="120" rx="14" fill="#F8FAFC" stroke="#5B6B80" stroke-width="1.5"/>
+  <rect x="1360" y="1280" width="280" height="10" rx="5" fill="#5B6B80"/>
+  <text x="1374" y="1316" font-size="15" font-weight="600" fill="#16233A">memory store</text>
+  <text x="1374" y="1338" font-size="12" fill="#5B6B80">namespaces org → domain → kit ·</text>
+  <text x="1374" y="1354" font-size="12" fill="#5B6B80">provenance, TTL, score · promotion path</text>
+
+  <rect x="1660" y="1280" width="280" height="120" rx="14" fill="#F8FAFC" stroke="#5B6B80" stroke-width="1.5"/>
+  <rect x="1660" y="1280" width="280" height="10" rx="5" fill="#5B6B80"/>
+  <text x="1674" y="1316" font-size="15" font-weight="600" fill="#16233A">telemetry &amp; traces</text>
+  <text x="1674" y="1338" font-size="12" fill="#5B6B80">per-tool-call tokens, cost,</text>
+  <text x="1674" y="1354" font-size="12" fill="#5B6B80">outcome signals</text>
+</g>
+
+
+<!-- ===================== FLOWS ===================== -->
+<!-- surfaces -> router (request path, ink) -->
+<g stroke="#16233A" stroke-width="2">
+  <line x1="625" y1="316" x2="625" y2="460"/>
+  <line x1="1005" y1="316" x2="1005" y2="460"/>
+  <line x1="1385" y1="316" x2="1385" y2="460"/>
+  <line x1="1765" y1="316" x2="1765" y2="460"/>
+</g>
+<g fill="#16233A">
+  <path d="M619,460 L631,460 L625,470 Z"/><path d="M999,460 L1011,460 L1005,470 Z"/>
+  <path d="M1379,460 L1391,460 L1385,470 Z"/><path d="M1759,460 L1771,460 L1765,470 Z"/>
+</g>
+<text x="645" y="368" font-size="13" fill="#5B6B80">MCP · streamable HTTP · authN per agent · every call metered</text>
+
+<!-- router -> kits (ink) -->
+<line x1="790" y1="670" x2="790" y2="730" stroke="#16233A" stroke-width="2"/>
+<path d="M784,730 L796,730 L790,740 Z" fill="#16233A"/>
+<line x1="1340" y1="670" x2="1340" y2="730" stroke="#16233A" stroke-width="2"/>
+<path d="M1334,730 L1346,730 L1340,740 Z" fill="#16233A"/>
+<text x="806" y="712" font-size="13" fill="#5B6B80">tool call in → result + next-move guidance out (in-band skills)</text>
+
+<!-- rollout controller -> router skill resolver (slate, up) -->
+<line x1="1750" y1="740" x2="1750" y2="680" stroke="#5B6B80" stroke-width="2"/>
+<path d="M1744,680 L1756,680 L1750,670 Z" fill="#5B6B80"/>
+<text x="1762" y="712" font-size="12" fill="#5B6B80">publish override</text>
+
+<!-- router -> LLM providers (ink, right) -->
+<line x1="1940" y1="560" x2="2050" y2="560" stroke="#16233A" stroke-width="2"/>
+<path d="M2050,554 L2050,566 L2060,560 Z" fill="#16233A"/>
+<text x="1944" y="586" font-size="12" fill="#5B6B80">proxy egress — metered</text>
+
+<!-- webhooks -> trigger plugin (ink, right) -->
+<line x1="364" y1="1143" x2="466" y2="1143" stroke="#16233A" stroke-width="2"/>
+<path d="M466,1137 L466,1149 L476,1143 Z" fill="#16233A"/>
+<text x="330" y="1128" font-size="12" fill="#5B6B80" text-anchor="end">signed webhooks</text>
+
+<!-- repo -> router (deploy elbow, slate) -->
+<line x1="364" y1="1345" x2="402" y2="1345" stroke="#5B6B80" stroke-width="2"/>
+<line x1="402" y1="1345" x2="402" y2="560" stroke="#5B6B80" stroke-width="2"/>
+<line x1="402" y1="560" x2="450" y2="560" stroke="#5B6B80" stroke-width="2"/>
+<path d="M450,554 L450,566 L460,560 Z" fill="#5B6B80"/>
+<text x="394" y="960" font-size="12" fill="#5B6B80" transform="rotate(-90 394 960)">kit deploy — bundle → lambda → register</text>
+
+<!-- kits -> stores (slate, down) -->
+<line x1="700" y1="1170" x2="700" y2="1270" stroke="#5B6B80" stroke-width="2"/>
+<path d="M694,1270 L706,1270 L700,1280 Z" fill="#5B6B80"/>
+<text x="710" y="1230" font-size="12" fill="#5B6B80">state</text>
+<line x1="900" y1="1170" x2="900" y2="1270" stroke="#5B6B80" stroke-width="2"/>
+<path d="M894,1270 L906,1270 L900,1280 Z" fill="#5B6B80"/>
+<text x="910" y="1230" font-size="12" fill="#5B6B80">transcripts</text>
+
+<!-- skill store -> router skill resolver (slate corridor, up) -->
+<line x1="1140" y1="1280" x2="1140" y2="680" stroke="#5B6B80" stroke-width="2"/>
+<path d="M1134,680 L1146,680 L1140,670 Z" fill="#5B6B80"/>
+<text x="1132" y="1240" font-size="12" fill="#5B6B80" transform="rotate(-90 1132 1240)">skills served (baseline + override)</text>
+
+<!-- memory store <-> router memory ACL (slate corridor, both ends) -->
+<line x1="1540" y1="1280" x2="1540" y2="680" stroke="#5B6B80" stroke-width="2"/>
+<path d="M1534,680 L1546,680 L1540,670 Z" fill="#5B6B80"/>
+<path d="M1534,1270 L1546,1270 L1540,1280 Z" fill="#5B6B80"/>
+<text x="1532" y="1250" font-size="12" fill="#5B6B80" transform="rotate(-90 1532 1250)">memory read/write — via ACL only</text>
+
+<!-- control plane <-> telemetry + skill store (slate) -->
+<line x1="1720" y1="1280" x2="1720" y2="1180" stroke="#5B6B80" stroke-width="2"/>
+<path d="M1714,1180 L1726,1180 L1720,1170 Z" fill="#5B6B80"/>
+<text x="1704" y="1252" font-size="12" fill="#5B6B80" transform="rotate(-90 1704 1252)">reads traces</text>
+<line x1="1880" y1="1170" x2="1880" y2="1270" stroke="#5B6B80" stroke-width="2"/>
+<path d="M1874,1270 L1886,1270 L1880,1280 Z" fill="#5B6B80"/>
+<text x="1892" y="1230" font-size="12" fill="#5B6B80">writes scores</text>
+<line x1="1620" y1="1170" x2="1620" y2="1222" stroke="#5B6B80" stroke-width="2" stroke-dasharray="6 5"/>
+<line x1="1620" y1="1222" x2="1200" y2="1222" stroke="#5B6B80" stroke-width="2" stroke-dasharray="6 5"/>
+<line x1="1200" y1="1222" x2="1200" y2="1270" stroke="#5B6B80" stroke-width="2" stroke-dasharray="6 5"/>
+<path d="M1194,1270 L1206,1270 L1200,1280 Z" fill="#5B6B80"/>
+<text x="1250" y="1214" font-size="12" fill="#5B6B80">staged override versions</text>
+
+<!-- ===================== PROBLEM MARKERS ===================== -->
+<g font-size="13" font-weight="700" fill="#FFFFFF" text-anchor="middle">
+  <rect x="1078" y="856" width="24" height="24" rx="6" fill="#E8590C"/><text x="1090" y="873">1</text>
+  <rect x="854" y="516" width="24" height="24" rx="6" fill="#E8590C"/><text x="866" y="533">2</text>
+  <rect x="1078" y="786" width="24" height="24" rx="6" fill="#E8590C"/><text x="1090" y="803">3</text>
+  <rect x="1078" y="996" width="24" height="24" rx="6" fill="#E8590C"/><text x="1090" y="1013">4</text>
+  <rect x="334" y="1228" width="24" height="24" rx="6" fill="#E8590C"/><text x="346" y="1245">5</text>
+  <rect x="1898" y="516" width="24" height="24" rx="6" fill="#E8590C"/><text x="1910" y="533">5</text>
+  <rect x="1078" y="926" width="24" height="24" rx="6" fill="#E8590C"/><text x="1090" y="943">6</text>
+  <rect x="1310" y="1268" width="24" height="24" rx="6" fill="#E8590C"/><text x="1322" y="1285">6</text>
+  <rect x="646" y="516" width="24" height="24" rx="6" fill="#E8590C"/><text x="658" y="533">7</text>
+  <rect x="1610" y="1268" width="24" height="24" rx="6" fill="#E8590C"/><text x="1622" y="1285">7</text>
+</g>
+
+<!-- ===================== PROBLEM LEGEND ===================== -->
+<rect x="2040" y="700" width="456" height="1000" rx="12" fill="#F8FAFC" stroke="#16233A" stroke-width="1.5"/>
+<text x="2060" y="736" font-size="19" font-weight="700" fill="#16233A">Problems, located</text>
+<g font-size="12.5">
+  <rect x="2060" y="758" width="24" height="24" rx="6" fill="#E8590C"/><text x="2072" y="775" font-weight="700" fill="#FFFFFF" text-anchor="middle" font-size="13">1</text>
+  <text x="2094" y="775" font-weight="600" fill="#16233A">Token economics</text>
+  <text x="2094" y="795" fill="#5B6B80">Output ≈5× input; chained CRUD re-bills grown context</text>
+  <text x="2094" y="811" fill="#5B6B80">every turn. → workflow tools: one action, one output.</text>
+
+  <rect x="2060" y="838" width="24" height="24" rx="6" fill="#E8590C"/><text x="2072" y="855" font-weight="700" fill="#FFFFFF" text-anchor="middle" font-size="13">2</text>
+  <text x="2094" y="855" font-weight="600" fill="#16233A">Untraceable spend</text>
+  <text x="2094" y="875" fill="#5B6B80">No attribution per team / agent / call. → meter at the one</text>
+  <text x="2094" y="891" fill="#5B6B80">place every call must pass: the router.</text>
+
+  <rect x="2060" y="918" width="24" height="24" rx="6" fill="#E8590C"/><text x="2072" y="935" font-weight="700" fill="#FFFFFF" text-anchor="middle" font-size="13">3</text>
+  <text x="2094" y="935" font-weight="600" fill="#16233A">Discovery as search</text>
+  <text x="2094" y="955" fill="#5B6B80">Lazy-loaded catalogs vary run to run; p95 blows up on</text>
+  <text x="2094" y="971" fill="#5B6B80">wrong turns. → progressive disclosure: the response</text>
+  <text x="2094" y="987" fill="#5B6B80">names the next legal move. Deterministic path.</text>
+
+  <rect x="2060" y="1014" width="24" height="24" rx="6" fill="#E8590C"/><text x="2072" y="1031" font-weight="700" fill="#FFFFFF" text-anchor="middle" font-size="13">4</text>
+  <text x="2094" y="1031" font-weight="600" fill="#16233A">Views burn context</text>
+  <text x="2094" y="1051" fill="#5B6B80">Full-HTML re-render per click. → shell + lazy data, state</text>
+  <text x="2094" y="1067" fill="#5B6B80">client-side; interaction is tokenless.</text>
+
+  <rect x="2060" y="1094" width="24" height="24" rx="6" fill="#E8590C"/><text x="2072" y="1111" font-weight="700" fill="#FFFFFF" text-anchor="middle" font-size="13">5</text>
+  <text x="2094" y="1111" font-weight="600" fill="#16233A">Per-server infra rebuild</text>
+  <text x="2094" y="1131" fill="#5B6B80">TLS, auth, secrets, logging, limits, pipeline, registration —</text>
+  <text x="2094" y="1147" fill="#5B6B80">rebuilt and re-audited per MCP server. → solved once;</text>
+  <text x="2094" y="1163" fill="#5B6B80">a kit is business logic + one command.</text>
+
+  <rect x="2060" y="1190" width="24" height="24" rx="6" fill="#E8590C"/><text x="2072" y="1207" font-weight="700" fill="#FFFFFF" text-anchor="middle" font-size="13">6</text>
+  <text x="2094" y="1207" font-weight="600" fill="#16233A">Drift</text>
+  <text x="2094" y="1227" fill="#5B6B80">Guidance drifts from APIs; definitions drift across teams.</text>
+  <text x="2094" y="1243" fill="#5B6B80">→ skills versioned beside tools, overrides pinned to</text>
+  <text x="2094" y="1259" fill="#5B6B80">contract; memory promoted (curated), never copied.</text>
+
+  <rect x="2060" y="1286" width="24" height="24" rx="6" fill="#E8590C"/><text x="2072" y="1303" font-weight="700" fill="#FFFFFF" text-anchor="middle" font-size="13">7</text>
+  <text x="2094" y="1303" font-weight="600" fill="#16233A">Governance bolted on late</text>
+  <text x="2094" y="1323" fill="#5B6B80">IAM, audit, DSGVO, AI Act, Betriebsrat as afterthoughts.</text>
+  <text x="2094" y="1339" fill="#5B6B80">→ identity per agent + tool at the hub; memory inherits</text>
+  <text x="2094" y="1355" fill="#5B6B80">ACL; audit chain is one query; no per-person metrics.</text>
+
+  <text x="2060" y="1420" font-size="13" font-weight="600" fill="#16233A">Reading the diagram</text>
+  <text x="2060" y="1442" fill="#5B6B80">Request path (ink): surface → router → kit → response with</text>
+  <text x="2060" y="1458" fill="#5B6B80">guidance. Background (slate): deploy, skills, memory, scores.</text>
+  <text x="2060" y="1482" fill="#5B6B80">Nothing crosses a boundary except through the router —</text>
+  <text x="2060" y="1498" fill="#5B6B80">that single fact is what makes 2, 6 and 7 solvable at all.</text>
+</g>
+
+</svg>
