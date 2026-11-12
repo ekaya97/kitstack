@@ -154,7 +154,41 @@ scripts/        # deploy-voice.sh, run-evals.ts, seeds, typecheck-maintained-kit
 
 ## Branches and releases
 
-<!-- TODO(human): describe how main and dev relate and how a change reaches production. -->
+Two long-lived branches, modeled on the insai repo on 2026-11-12. `dev` is the integration line.
+Working branches (`claude/...`, `feat/...`, `fix/...`, `t-NNNN-...`) start from it and merge back
+into it. `main` holds exactly what runs on the `production` stage. Changes move from `dev` to
+`main` by fast-forward only, never by a commit made on `main`:
+
+```bash
+git push origin dev:main         # promote, then deploy production from a checkout of main
+```
+
+Production deploys run by hand from a clean checkout at the tip of `origin/main`.
+`npx sst deploy --stage production` ships the router, web and infra, and
+`scripts/deploy-voice.sh` ships the voice service to the Hetzner box. No script enforces the
+branch yet, so compare `git rev-parse HEAD` with `git rev-parse origin/main` before either
+deploy. `deploy-voice.sh` only checks that the voice workspaces are clean and tags the image with
+the short commit hash. Roll back with `infra/operations/rollback-stage.sh` and a known-good commit
+or tag. Personal stages (`.env.<name>`) deploy from any branch. The `Kit evals` workflow runs on
+every pull request and on pushes to `dev` and `main`.
+
+Releases are three-part SemVer. The released unit today is `@kitstackco/sdk`, whose version lives
+in `packages/sdk/package.json` (0.2.0, tagged `v0.2.0` on 2026-10-13). Root `package.json` reads
+0.1.0 and is not a release number. The version is bumped on `dev` ahead of the release it names,
+and the annotated tag goes on the `main` commit that ships it. A version is never reused. A fix
+after a failed release gets the next patch number.
+
+A fix that cannot wait for the next promotion takes the hotfix path. It is the only way a commit
+reaches `main` without passing `dev` first.
+
+1. Cut `hotfix/vX.Y.Z-<slug>` from `origin/main`. It holds only what the fix needs.
+2. `git push origin hotfix/vX.Y.Z-<slug>:main` fast-forwards `main`, then deploy as above.
+3. The same day, merge `origin/main` into `dev` and push `dev`. This merge commit on `dev` is
+   allowed. It keeps the next `dev:main` a fast-forward.
+
+Agents work on a working branch or on `dev`, and push `dev` only when the user asks. An agent
+never pushes to `main` and never deploys `production` without the user's explicit go-ahead in
+the same session.
 
 ## Commands
 
